@@ -3,17 +3,17 @@
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+        "command": "python scripts/log_hook.py --tool qwen"
       }
     ],
     "afterResponse": [
       {
-        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+        "command": "python scripts/log_hook.py --tool qwen"
       }
     ],
     "stop": [
       {
-        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+        "command": "python scripts/log_hook.py --tool qwen"
       }
     ]
   }
