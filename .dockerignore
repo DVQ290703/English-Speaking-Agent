@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+.git
+.ai-log
+.cursor
+.codex
+.claude
+.gemini
+venv/
+.conda/
