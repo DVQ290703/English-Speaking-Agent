@@ -4,18 +4,16 @@
     "userPromptSubmitted": [
       {
         "type": "command",
-        "bash": "python scripts/log_hook.py",
-        "powershell": "python scripts/log_hook.py",
-        "env": { "AI_TOOL_NAME": "copilot" },
+        "bash": "python scripts/log_hook.py --tool copilot",
+        "powershell": "python scripts/log_hook.py --tool copilot",
         "timeoutSec": 10
       }
     ],
     "sessionEnd": [
       {
         "type": "command",
-        "bash": "python scripts/log_hook.py",
-        "powershell": "python scripts/log_hook.py",
-        "env": { "AI_TOOL_NAME": "copilot" },
+        "bash": "python scripts/log_hook.py --tool copilot",
+        "powershell": "python scripts/log_hook.py --tool copilot",
         "timeoutSec": 10
       }
     ]
