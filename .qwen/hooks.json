@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+      }
+    ],
+    "afterResponse": [
+      {
+        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+      }
+    ],
+    "stop": [
+      {
+        "command": "AI_TOOL_NAME=qwen python scripts/log_hook.py"
+      }
+    ]
+  }
+}
