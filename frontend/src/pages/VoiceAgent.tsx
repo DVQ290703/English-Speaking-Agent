@@ -1,21 +1,23 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
-import { Mic, MicOff, Settings, Github, ChevronDown, Circle, Bot, User, 
-  SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, 
-  LogIn, UserPlus, X, Eye, EyeOff, LogOut } from "lucide-react";
+import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut } from "lucide-react";
 import { SiOpenai } from "react-icons/si";
+
+import { chatRespond } from "../api/chat";
+import { getAuthSession } from "../auth/tokenStorage";
+import {
+  AgentWaveform,
+  AuthModal,
+  DeviceSelect,
+  MessageBubble,
+  MicWaveform,
+  SelectDropdown,
+} from "../components/voice-agent";
+import type { AuthUser, Message } from "../components/voice-agent";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
 type Gender = "Male" | "Female";
 type Language = "English" | "Vietnamese";
 type Model = "OpenAI GPT 5" | "OpenAI GPT 4o" | "Claude 3.5 Sonnet" | "Gemini 1.5 Pro";
-
-interface Message {
-  id: number;
-  role: "agent" | "user";
-  text: string;
-  timestamp: Date;
-  typing?: boolean;
-}
 
 type FeedbackType = "grammar" | "vocabulary" | "pronunciation" | "fluency";
 
@@ -113,18 +115,6 @@ const TOPICS = [
 ];
 type TopicId = typeof TOPICS[number]["id"];
 
-const TOPIC_GREETINGS: Record<string, string> = {
-  daily:       "Hi there! I'm your IELTS Speaking Coach. Today we'll practice everyday conversation. Feel free to talk about anything — your day, hobbies, or whatever's on your mind. Shall we get started?",
-  ielts1:      "Hello! I'm your IELTS Speaking Coach. We're going to work on Part 1 today — personal questions about yourself, your life, and your interests. It's the warm-up round, so relax and speak naturally. Ready to begin?",
-  ielts2:      "Welcome! I'm your IELTS Speaking Coach. In Part 2 you'll be given a cue card and asked to speak for 1–2 minutes on a topic. I'll give you a topic in a moment. Take a breath and get ready!",
-  ielts3:      "Hello! Ready for Part 3? This is the discussion round — I'll ask abstract, opinion-based questions related to a broader theme. Try to give extended, well-reasoned answers. Let's dive in!",
-  travel:      "Hi! I'm your IELTS Speaking Coach. Today's theme is Travel & Tourism. We'll talk about your travel experiences, dream destinations, and more. Where have you been lately?",
-  career:      "Hey! I'm your IELTS Speaking Coach. Today we'll chat about Work & Career — your current job, ambitions, workplace challenges, and future goals. Tell me a bit about what you do!",
-  education:   "Hello! I'm your IELTS Speaking Coach. Our topic today is Education — school experiences, learning styles, the value of higher education, and so on. What was your favourite subject growing up?",
-  environment: "Hi there! I'm your IELTS Speaking Coach. Today we're talking about the Environment — climate change, conservation, sustainable living, and our responsibilities. What environmental issue concerns you most?",
-  technology:  "Hello! I'm your IELTS Speaking Coach. Today's focus is Technology — how it shapes our lives, its benefits and drawbacks, and where it's heading. Are you a tech enthusiast?",
-  health:      "Hi! I'm your IELTS Speaking Coach. Today's theme is Health & Lifestyle — diet, exercise, mental well-being, and healthy habits. How do you try to keep healthy in your daily life?",
-};
 
 const MICROPHONES = [
   "Microphone Array (AMD Audio Device)",
@@ -169,328 +159,13 @@ const AGENT_REPLIES = [
   "Of course! Let me break that down for you step by step so it's easy to follow and understand.",
 ];
 
-const DEMO_CONVERSATION: { role: "agent" | "user"; text: string; delay: number }[] = [
-  { role: "agent", text: "Hello! I'm your AI voice assistant powered by TEN. How can I help you today?", delay: 1200 },
-  { role: "user", text: "Hi! Can you tell me about yourself?", delay: 4500 },
-  { role: "agent", text: "Of course! I'm a multi-purpose voice assistant built on TEN framework. I can help you with questions, conversations, analysis, creative writing, and much more. I support multiple languages and can adapt my voice to be either male or female. What would you like to explore?", delay: 7000 },
-  { role: "user", text: "That's impressive. What languages do you support?", delay: 12000 },
-  { role: "agent", text: "I currently support English, Vietnamese, Chinese, Japanese, Korean, Spanish, and French. You can switch the language anytime from the dropdown in the top right corner. Would you like me to respond in a different language?", delay: 15500 },
-  { role: "user", text: "English is fine. Can you help me write a short poem?", delay: 21000 },
-  { role: "agent", text: "I'd love to! Here's a short poem for you:\n\nIn circuits deep and data streams,\nA voice emerges, soft it seems,\nThrough waveforms light and language bright,\nI speak with you from day to night.\nAsk me anything, near or far,\nYour AI friend — that's what we are.", delay: 24000 },
-];
-
-function AgentWaveform({ active }: { active: boolean }) {
-  return (
-    <div className="flex items-center justify-center gap-[2px] h-8">
-      {Array.from({ length: 30 }).map((_, i) => (
-        <div
-          key={i}
-          className="w-[2px] rounded-full bg-blue-400"
-          style={{
-            height: active ? `${4 + Math.sin(i * 0.5) * 12}px` : "3px",
-            animation: active
-              ? `agentWave ${0.7 + Math.random() * 0.6}s ease-in-out ${i * 35}ms infinite`
-              : "none",
-            opacity: active ? 0.8 : 0.25,
-            transition: "height 0.3s ease",
-          }}
-        />
-      ))}
-    </div>
-  );
+interface VoiceAgentProps {
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
 }
 
-function MicWaveform({ active }: { active: boolean }) {
-  return (
-    <div className="flex items-center justify-center gap-[2px] h-16 w-full">
-      {Array.from({ length: 28 }).map((_, i) => (
-        <div
-          key={i}
-          className="w-[3px] rounded-full bg-blue-400"
-          style={{
-            height: active ? `${12 + Math.sin(i * 0.5) * 16 + Math.random() * 10}px` : "4px",
-            animation: active
-              ? `agentWave ${0.6 + Math.random() * 0.8}s ease-in-out ${i * 40}ms infinite`
-              : "none",
-            opacity: active ? 0.85 : 0.3,
-            transition: "height 0.3s ease",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SelectDropdown<T extends string>({
-  value,
-  options,
-  onChange,
-  className = "",
-}: {
-  value: T;
-  options: T[];
-  onChange: (v: T) => void;
-  className?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  return (
-    <div ref={ref} className={`relative ${className}`}>
-      <button
-        data-testid={`select-${value}`}
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-300 hover:bg-white/5 transition-colors border border-white/10"
-      >
-        <span>{value}</span>
-        <ChevronDown className="w-3 h-3 opacity-60" />
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 right-0 z-50 bg-[#1a1f2e] border border-white/15 rounded-md shadow-xl min-w-[160px] overflow-hidden">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              data-testid={`option-${opt}`}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                opt === value
-                  ? "bg-blue-600/30 text-blue-300"
-                  : "text-gray-300 hover:bg-white/8"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DeviceSelect({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const shortVal = value.length > 24 ? value.slice(0, 24) + "…" : value;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        data-testid="device-select"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors max-w-[160px]"
-      >
-        <span className="truncate">{shortVal}</span>
-        <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 bg-[#1a1f2e] border border-white/15 rounded-md shadow-xl min-w-[220px] overflow-hidden">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              data-testid={`device-option-${opt}`}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                opt === value
-                  ? "bg-blue-600/30 text-blue-300"
-                  : "text-gray-300 hover:bg-white/8"
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1 px-1 py-0.5">
-      {[0, 150, 300].map((delay) => (
-        <div
-          key={delay}
-          className="w-1.5 h-1.5 rounded-full bg-blue-400"
-          style={{ animation: `dotPulse 1.2s ease-in-out ${delay}ms infinite` }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function MessageBubble({ message }: { message: Message }) {
-  const isAgent = message.role === "agent";
-  const timeStr = message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  return (
-    <div
-      data-testid={`message-${message.id}`}
-      className={`flex gap-2.5 ${isAgent ? "flex-row" : "flex-row-reverse"} items-end`}
-      style={{ animation: "fadeSlideIn 0.3s ease-out" }}
-    >
-      {/* Avatar */}
-      <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center mb-0.5 ${
-        isAgent
-          ? "bg-blue-600/25 border border-blue-500/40"
-          : "bg-purple-600/25 border border-purple-500/40"
-      }`}>
-        {isAgent
-          ? <Bot className="w-3.5 h-3.5 text-blue-400" />
-          : <User className="w-3.5 h-3.5 text-purple-400" />
-        }
-      </div>
-
-      {/* Bubble */}
-      <div className={`max-w-[75%] flex flex-col gap-1 ${isAgent ? "items-start" : "items-end"}`}>
-        <div className={`flex items-center gap-1.5 ${isAgent ? "" : "flex-row-reverse"}`}>
-          <span className="text-[10px] font-medium text-gray-500">
-            {isAgent ? "Agent" : "You"}
-          </span>
-          <span className="text-[10px] text-gray-700">{timeStr}</span>
-        </div>
-        <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-          isAgent
-            ? "bg-[#161d2e] border border-blue-900/40 text-gray-200 rounded-tl-sm"
-            : "bg-[#1e1630] border border-purple-900/40 text-gray-200 rounded-tr-sm"
-        }`}>
-          {message.typing ? <TypingIndicator /> : message.text}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface AuthUser { name: string; email: string; }
-
-function AuthModal({
-  mode,
-  onClose,
-  onSuccess,
-}: {
-  mode: "login" | "register";
-  onClose: () => void;
-  onSuccess: (user: AuthUser) => void;
-}) {
-  const [tab, setTab] = useState<"login" | "register">(mode);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = () => {
-    setError("");
-    if (tab === "register" && !name.trim()) { setError("Vui lòng nhập tên của bạn."); return; }
-    if (!email.includes("@")) { setError("Email không hợp lệ."); return; }
-    if (password.length < 6) { setError("Mật khẩu phải có ít nhất 6 ký tự."); return; }
-    onSuccess({ name: name.trim() || email.split("@")[0], email });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-[#13171f] border border-white/10 rounded-xl w-full max-w-sm mx-4 shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-white/8">
-          <div className="flex gap-1 bg-white/5 rounded-lg p-1">
-            <button
-              onClick={() => { setTab("login"); setError(""); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${tab === "login" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
-            >
-              <LogIn className="w-3 h-3" /> Đăng nhập
-            </button>
-            <button
-              onClick={() => { setTab("register"); setError(""); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${tab === "register" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
-            >
-              <UserPlus className="w-3 h-3" /> Đăng ký
-            </button>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded hover:bg-white/8 text-gray-500 hover:text-gray-200 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <div className="p-5 space-y-3">
-          {tab === "register" && (
-            <div>
-              <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Tên hiển thị</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nguyễn Văn A"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/60 transition-colors"
-              />
-            </div>
-          )}
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/60 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-[10px] text-gray-500 mb-1 uppercase tracking-wider">Mật khẩu</label>
-            <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                placeholder="••••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 pr-9 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500/60 transition-colors"
-              />
-              <button
-                onClick={() => setShowPw((v) => !v)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400"
-              >
-                {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-
-          {error && <p className="text-xs text-red-400">{error}</p>}
-
-          <button
-            onClick={handleSubmit}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2.5 rounded-lg transition-colors mt-1"
-          >
-            {tab === "login" ? "Đăng nhập" : "Tạo tài khoản"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function VoiceAgent() {
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser);
   const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
   const [topic, setTopic] = useState<TopicId>("daily");
 
@@ -522,6 +197,7 @@ export default function VoiceAgent() {
 
   useEffect(() => { genderRef.current = gender; }, [gender]);
   useEffect(() => { languageRef.current = language; }, [language]);
+  useEffect(() => { setCurrentUser(initialUser); }, [initialUser]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -536,106 +212,165 @@ export default function VoiceAgent() {
     timersRef.current = [];
   }, []);
 
-  const sendChatMessage = useCallback((text: string) => {
+  const speakText = useCallback((text: string) => {
+    if (!text) return;
+
+    setAgentSpeaking(true);
+
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      const currentLanguage = languageRef.current;
+      const currentGender = genderRef.current;
+      utt.lang = LANGUAGE_CODES[currentLanguage];
+      utt.rate = 1;
+      utt.pitch = currentGender === "Female" ? 1.15 : 0.9;
+
+      const applyVoiceAndSpeak = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const langPrefix = LANGUAGE_CODES[currentLanguage].split("-")[0];
+        const filtered = voices.filter((v) => v.lang.startsWith(langPrefix));
+        if (filtered.length > 0) {
+          const femaleKeywords = /female|woman|zira|samantha|nữ/i;
+          const maleKeywords = /male|man|david|mark|nam/i;
+          const preferred = currentGender === "Female"
+            ? filtered.find((v) => femaleKeywords.test(v.name))
+              ?? filtered.find((v) => !maleKeywords.test(v.name))
+              ?? filtered[0]
+            : filtered.find((v) => maleKeywords.test(v.name))
+              ?? filtered.find((v) => !femaleKeywords.test(v.name))
+              ?? filtered[0];
+          utt.voice = preferred;
+        }
+        ttsActiveRef.current = true;
+        setMicEnabled(false);
+        utt.onend = () => {
+          ttsActiveRef.current = false;
+          setAgentSpeaking(false);
+          setMicEnabled(true);
+        };
+        utt.onerror = () => {
+          ttsActiveRef.current = false;
+          setAgentSpeaking(false);
+          setMicEnabled(true);
+        };
+        window.speechSynthesis.speak(utt);
+      };
+
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        applyVoiceAndSpeak();
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          applyVoiceAndSpeak();
+        };
+      }
+    } else {
+      const speakEnd = setTimeout(() => setAgentSpeaking(false), Math.min(text.length * 35, 4000));
+      timersRef.current.push(speakEnd);
+    }
+  }, []);
+
+  const playAgentAudio = useCallback((text: string, audioBase64?: string) => {
+    if (!audioBase64) {
+      speakText(text);
+      return undefined;
+    }
+
+    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
+
+    try {
+      window.speechSynthesis?.cancel();
+      const audio = new Audio(audioUrl);
+      ttsActiveRef.current = true;
+      setMicEnabled(false);
+      setAgentSpeaking(true);
+      audio.onended = () => {
+        ttsActiveRef.current = false;
+        setAgentSpeaking(false);
+        setMicEnabled(true);
+      };
+      audio.onerror = () => {
+        ttsActiveRef.current = false;
+        setAgentSpeaking(false);
+        setMicEnabled(true);
+        speakText(text);
+      };
+      void audio.play().catch(() => {
+        ttsActiveRef.current = false;
+        setAgentSpeaking(false);
+        setMicEnabled(true);
+        speakText(text);
+      });
+    } catch {
+      speakText(text);
+    }
+
+    return audioUrl;
+  }, [speakText]);
+
+  const sendChatMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || agentTyping) return;
+
+    const session = getAuthSession();
+    if (!session?.token) {
+      setAuthModal("login");
+      return;
+    }
 
     const userId = msgCounterRef.current++;
+    const typingId = msgCounterRef.current++;
     const userMsg: Message = {
       id: userId,
       role: "user",
       text: trimmed,
       timestamp: new Date(),
     };
-    setMessages((prev) => [...prev, userMsg]);
+
+    const historyPayload = [
+      ...messages.filter((message) => !message.typing).map((message) => ({
+        role: message.role === "agent" ? "assistant" : "user",
+        text: message.text,
+      })),
+      { role: "user", text: trimmed },
+    ];
+
+    setMessages((prev: Message[]) => [
+      ...prev,
+      userMsg,
+      {
+        id: typingId,
+        role: "agent",
+        text: "",
+        timestamp: new Date(),
+        typing: true,
+      },
+    ]);
     setChatInput("");
     inputRef.current?.focus();
-
-    // Agent typing indicator
     setAgentTyping(true);
-    setAgentSpeaking(true);
-    const typingId = msgCounterRef.current++;
-    const typingMsg: Message = {
-      id: typingId,
-      role: "agent",
-      text: "",
-      timestamp: new Date(),
-      typing: true,
-    };
-    setTimeout(() => {
-      setMessages((prev) => [...prev, typingMsg]);
-    }, 400);
 
-    // Agent reply after short delay
-    const replyDelay = 1500 + Math.random() * 1000;
-    const t = setTimeout(() => {
-      const reply = AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
-      setMessages((prev) =>
-        prev.map((m) => (m.id === typingId ? { ...m, text: reply, typing: false } : m))
+    try {
+      const data = await chatRespond({
+        token: session.token,
+        text: trimmed,
+        history: historyPayload,
+        topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+      });
+
+      const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
+      const audioUrl = playAgentAudio(responseText, data.audio_base64);
+
+      setMessages((prev: Message[]) =>
+        prev.map((message) => (
+          message.id === typingId
+            ? { ...message, text: responseText, typing: false, audioUrl }
+            : message
+        ))
       );
-      setAgentTyping(false);
 
-      // Text-to-speech
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(reply);
-        const currentLanguage = languageRef.current;
-        const currentGender = genderRef.current;
-        utt.lang = LANGUAGE_CODES[currentLanguage];
-        utt.rate = 1;
-        utt.pitch = currentGender === "Female" ? 1.15 : 0.9;
-
-        const applyVoiceAndSpeak = () => {
-          const voices = window.speechSynthesis.getVoices();
-          const langPrefix = LANGUAGE_CODES[currentLanguage].split("-")[0];
-          const filtered = voices.filter((v) => v.lang.startsWith(langPrefix));
-          if (filtered.length > 0) {
-            const femaleKeywords = /female|woman|zira|samantha|nữ/i;
-            const maleKeywords = /male|man|david|mark|nam/i;
-            const preferred = currentGender === "Female"
-              ? filtered.find((v) => femaleKeywords.test(v.name))
-                ?? filtered.find((v) => !maleKeywords.test(v.name))
-                ?? filtered[0]
-              : filtered.find((v) => maleKeywords.test(v.name))
-                ?? filtered.find((v) => !femaleKeywords.test(v.name))
-                ?? filtered[0];
-            utt.voice = preferred;
-          }
-          ttsActiveRef.current = true;
-          setMicEnabled(false);
-          utt.onend = () => {
-            ttsActiveRef.current = false;
-            setAgentSpeaking(false);
-            setMicEnabled(true);
-          };
-          utt.onerror = () => {
-            ttsActiveRef.current = false;
-            setAgentSpeaking(false);
-            setMicEnabled(true);
-          };
-          window.speechSynthesis.speak(utt);
-        };
-
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          applyVoiceAndSpeak();
-        } else {
-          // voices not loaded yet — wait for the event
-          window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.onvoiceschanged = null;
-            applyVoiceAndSpeak();
-          };
-        }
-      } else {
-        const speakEnd = setTimeout(() => setAgentSpeaking(false), Math.min(reply.length * 35, 4000));
-        timersRef.current.push(speakEnd);
-      }
-    }, replyDelay);
-    timersRef.current.push(t);
-
-    // Auto-generate an English feedback card after each user message
-    const feedbackDelay = replyDelay + 600 + Math.random() * 800;
-    const tf = setTimeout(() => {
       const idx = autoFeedbackIndexRef.current % AUTO_FEEDBACKS.length;
       autoFeedbackIndexRef.current++;
       const fb = AUTO_FEEDBACKS[idx];
@@ -644,10 +379,22 @@ export default function VoiceAgent() {
         id: feedbackCounterRef.current++,
         timestamp: new Date(),
       };
-      setFeedbacks((prev) => [newFb, ...prev]);
-    }, feedbackDelay);
-    timersRef.current.push(tf);
-  }, []);
+      setFeedbacks((prev: FeedbackItem[]) => [newFb, ...prev]);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Chat request failed";
+      setMessages((prev: Message[]) =>
+        prev.map((message) => (
+          message.id === typingId
+            ? { ...message, text: `Agent error: ${errorMessage}`, typing: false }
+            : message
+        ))
+      );
+      setAgentSpeaking(false);
+      setMicEnabled(true);
+    } finally {
+      setAgentTyping(false);
+    }
+  }, [agentTyping, messages, playAgentAudio, topic]);
 
   // Auto-start/stop recognition when mic toggle or connection changes
   useEffect(() => {
@@ -754,55 +501,9 @@ export default function VoiceAgent() {
 
       const t0 = setTimeout(() => {
         setStatus("connected");
-
-        // Agent greeting based on selected topic
-        const greetingText = TOPIC_GREETINGS[topic] ?? TOPIC_GREETINGS["daily"];
-        const greetId = msgCounterRef.current++;
-        const typingId = msgCounterRef.current++;
-
-        setTimeout(() => {
-          setAgentSpeaking(true);
-          setAgentTyping(true);
-          setMessages([{ id: greetId, role: "agent", text: "", timestamp: new Date(), typing: true }]);
-        }, 400);
-
-        setTimeout(() => {
-          setMessages([{ id: typingId, role: "agent", text: greetingText, timestamp: new Date() }]);
-          setAgentTyping(false);
-
-          // TTS
-          if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-            const utt = new SpeechSynthesisUtterance(greetingText);
-            utt.lang = LANGUAGE_CODES[languageRef.current];
-            utt.rate = 1;
-            utt.pitch = genderRef.current === "Female" ? 1.15 : 0.9;
-            const applyAndSpeak = () => {
-              const voices = window.speechSynthesis.getVoices();
-              const langPrefix = LANGUAGE_CODES[languageRef.current].split("-")[0];
-              const filtered = voices.filter((v) => v.lang.startsWith(langPrefix));
-              if (filtered.length > 0) {
-                const femaleKw = /female|woman|zira|samantha|nữ/i;
-                const maleKw = /male|man|david|mark|nam/i;
-                utt.voice = genderRef.current === "Female"
-                  ? (filtered.find((v) => femaleKw.test(v.name)) ?? filtered.find((v) => !maleKw.test(v.name)) ?? filtered[0])
-                  : (filtered.find((v) => maleKw.test(v.name)) ?? filtered.find((v) => !femaleKw.test(v.name)) ?? filtered[0]);
-              }
-              ttsActiveRef.current = true;
-              setMicEnabled(false);
-              utt.onend = () => { ttsActiveRef.current = false; setAgentSpeaking(false); setMicEnabled(true); };
-              utt.onerror = () => { ttsActiveRef.current = false; setAgentSpeaking(false); setMicEnabled(true); };
-              window.speechSynthesis.speak(utt);
-            };
-            const voices = window.speechSynthesis.getVoices();
-            if (voices.length > 0) applyAndSpeak();
-            else { window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; applyAndSpeak(); }; }
-          } else {
-            const t = setTimeout(() => setAgentSpeaking(false), Math.min(greetingText.length * 35, 5000));
-            timersRef.current.push(t);
-          }
-        }, 1200);
-      }, 2000);
+        setAgentTyping(false);
+        setAgentSpeaking(false);
+      }, 600);
 
       timersRef.current.push(t0);
     }
@@ -836,7 +537,13 @@ export default function VoiceAgent() {
                 <span className="text-xs text-gray-300">{currentUser.name}</span>
               </div>
               <button
-                onClick={() => setCurrentUser(null)}
+                onClick={() => {
+                  if (onLogout) {
+                    onLogout();
+                    return;
+                  }
+                  setCurrentUser(null);
+                }}
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-400 transition-colors"
                 title="Đăng xuất"
               >
