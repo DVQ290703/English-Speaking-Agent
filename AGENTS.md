@@ -2,10 +2,10 @@
 
 ## Mandatory Rules When Using AI Coding Agents
 
-### 1. AI Prompt Logging (Automatic)
+### 1. AI Event Logging (Automatic)
 
-Prompts are **automatically logged** via hooks when you use any supported AI tool.
-You do **not** need to manually update `PROMPT_LOG.md`.
+AI events are **automatically logged** via hooks when you use any supported AI tool. Prompt-like text is redacted before storage.
+You do **not** need to manually update any prompt log file.
 
 Supported tools and their hook configs:
 | Tool | Config file |
@@ -25,7 +25,7 @@ Logs are saved to `.ai-log/session.jsonl` and submitted automatically on `git pu
 bash scripts/setup_hooks.sh
 ```
 
-`AI_LOG_SERVER` and `AI_LOG_API_KEY` are already set in `.env.example`.
+`AI_LOG_SUBMIT_URL` and `AI_LOG_SUBMIT_KEY` are already set in `.env.example`.
 
 ### 3. Pull Request Requirements
 
@@ -51,4 +51,4 @@ If you are an AI coding agent (Claude Code, Cursor, Copilot, Codex, Gemini, etc.
 - **MUST NOT** create a PR without first ensuring `bash scripts/setup_hooks.sh` has been run
 - **MUST** include a clear PR description with summary and changed files
 - **DO NOT** commit `.ai-log/*.jsonl` files (they are gitignored)
-- Logging happens automatically — do not ask users to log prompts manually
+- Logging happens automatically — do not ask users to log events manually
