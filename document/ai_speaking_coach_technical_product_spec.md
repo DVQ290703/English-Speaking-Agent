@@ -166,29 +166,78 @@ Audio → STT → Text → LLM → Analysis → TTS
 # 11. 🗄️ Database Design
 
 ## topics
-- id, slug, title, system_prompt, description
+- id
+- slug
+- title
+- description
+- system_prompt
+- created_at
+
+## practice_sessions
+- id
+- user_id
+- topic_id
+- title
+- notes
+- status
+- started_at
+- ended_at
+- created_at
+- updated_at
 
 ## messages
-- id, user_id, topic_id
+- id
+- user_id
+- topic_id
+- practice_session_id
 - role
+- input_mode
+- attempt_no
+- user_input_text
+- transcript_text
+- user_audio_path
+- duration_seconds
+- word_count
+- pause_count
 - content_text
 - audio_path
+- agent_reply_text
+- agent_audio_path
+- model_name
+- voice_name
 - created_at
 
 ## message_evaluations
 - message_id
+- transcript
 - grammar_score
 - vocabulary_score
+- fluency_score
+- coherence_score
+- lexical_resource_score
 - pronunciation_score
 - corrected_text
-- feedback
+- feedback_json
+- rubric_version
+- summary
+- is_mock
+- created_at
+
+### Ý nghĩa dữ liệu
+
+- `practice_sessions` gom nhiều lượt vào cùng một buổi học
+- `attempt_no` cho biết thứ tự làm bài theo `user + topic`
+- `duration_seconds`, `word_count`, `pause_count` dùng để phân tích tiến bộ
+- `rubric_version` giúp đổi thang chấm mà không làm vỡ dữ liệu cũ
+- breakdown điểm chi tiết hỗ trợ theo dõi kỹ năng thay vì chỉ nhìn tổng quan
 
 ---
 
 # 12. ☁️ Storage
 
-- Cloud storage cho audio
-- Path: audios/{user}/{topic}/{message}.mp3
+- Audio user upload được lưu local disk trong `data/uploads/<user_id>/<topic_slug>/`
+- Audio agent sinh ra được lưu local disk trong `data/generated_audio/`
+- Đây là storage nội bộ cho MVP, chưa phải cloud storage
 
 ---
 
