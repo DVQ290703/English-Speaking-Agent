@@ -1,6 +1,18 @@
-# Starter Code App
+# AI Speaking Coach API
 
-A template for building AI Agents in Python.
+FastAPI backend for the IELTS speaking coach MVP.
+
+Run with:
+
+```bash
+pip install -r requirements.txt
+uvicorn src.main:app --reload
+```
+
+Demo users:
+
+- `demo_student` / `Demo@1234`
+- `minh_nguyen` / `Demo@1234`
 
 ## Structure
 
@@ -11,7 +23,7 @@ A template for building AI Agents in Python.
 │   └── config.py       # Configuration
 ├── scripts/
 │   ├── setup_hooks.sh  # One-time hook installer
-│   ├── log_hook.py     # AI tool hook handler
+│   ├── log_hook.py     # AI event hook handler
 │   └── submit_log.py   # Submits logs on git push
 ├── requirements.txt
 ├── .env.example
@@ -76,6 +88,10 @@ See each file for the format and examples.
 
 ## AI Logging
 
-Prompts and tool calls are **automatically logged** when you use any supported AI tool (Claude Code, Cursor, Codex, Gemini, Copilot). No manual steps needed after running `setup_hooks.sh`.
+AI events and tool calls are **automatically logged** when you use any supported AI tool (Claude Code, Cursor, Codex, Gemini, Copilot). Prompt-like text is redacted before storage. No manual steps needed after running `setup_hooks.sh`.
+
+The hook logger writes to `.ai-log/session.jsonl` and can also forward each event to the API via `AI_LOG_API_URL` so the backend can persist it in SQLite. That ingest endpoint uses `AI_LOG_INGEST_KEY`, while `AI_LOG_SUBMIT_KEY` is reserved for grading-server submission.
+
+Default SQLite file: `data/speaking_coach_bootstrap.sqlite3`
 
 See [AGENTS.md](./AGENTS.md) for details.
