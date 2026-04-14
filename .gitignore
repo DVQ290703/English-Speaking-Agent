@@ -12,6 +12,10 @@ build/
 .pytest_cache/
 .mypy_cache/
 
+# Node
+node_modules/
+dist/
+
 # OS
 .DS_Store
 
