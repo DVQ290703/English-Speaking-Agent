@@ -1,6 +1,18 @@
-# Starter Code App
+# AI Speaking Coach API
 
-A template for building AI Agents in Python.
+FastAPI backend for the IELTS speaking coach MVP.
+
+Run with:
+
+```bash
+pip install -r requirements.txt
+uvicorn src.main:app --reload
+```
+
+Demo users:
+
+- `demo_student` / `Demo@1234`
+- `minh_nguyen` / `Demo@1234`
 
 ## Structure
 
@@ -10,9 +22,7 @@ A template for building AI Agents in Python.
 │   ├── tools.py        # Tool definitions
 │   └── config.py       # Configuration
 ├── scripts/
-│   ├── setup_hooks.sh  # One-time hook installer
-│   ├── log_hook.py     # AI tool hook handler
-│   └── submit_log.py   # Submits logs on git push
+│   └── (utility scripts)
 ├── requirements.txt
 ├── .env.example
 ├── AGENTS.md           # Rules for using AI coding agents
@@ -27,9 +37,6 @@ A template for building AI Agents in Python.
 ```bash
 git clone <repo-url>
 cd <repo>
-
-# Install git pre-push hook (required, run once)
-bash scripts/setup_hooks.sh
 ```
 
 ### 2. Configure environment
@@ -38,7 +45,7 @@ bash scripts/setup_hooks.sh
 cp .env.example .env
 ```
 
-Open `.env` and fill in your `ANTHROPIC_API_KEY`. The `AI_LOG_*` variables are pre-filled.
+Open `.env` and fill in your provider API key and any database settings you need.
 
 ### 3. Run
 
@@ -74,8 +81,6 @@ Update **[WORKLOG.md](./WORKLOG.md)** whenever your team makes a technical decis
 
 See each file for the format and examples.
 
-## AI Logging
-
-Prompts and tool calls are **automatically logged** when you use any supported AI tool (Claude Code, Cursor, Codex, Gemini, Copilot). No manual steps needed after running `setup_hooks.sh`.
+Default SQLite file: `data/speaking_coach_bootstrap.sqlite3`
 
 See [AGENTS.md](./AGENTS.md) for details.
