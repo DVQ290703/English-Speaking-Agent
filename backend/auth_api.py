@@ -117,7 +117,7 @@ def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(secu
 @lru_cache(maxsize=1)
 def get_voice_agent_pipeline():
     """Lazily initialize and cache the expensive voice agent pipeline."""
-    from src.agent.pipeline import VoiceAgentPipeline
+    from src.agents.pipeline import VoiceAgentPipeline
     from src.services.elevenlabs_tts import ElevenLabsTTS
     from src.services.groq_llm import GroqLLMService
 
