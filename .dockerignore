@@ -9,3 +9,14 @@ __pycache__/
 .gemini
 venv/
 .conda/
+.venv/
+node_modules/
+frontend/node_modules/
+outputs/
+tests/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+build/
+dist/
