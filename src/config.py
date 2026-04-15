@@ -10,6 +10,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "claude-sonnet-4-20250514")
 DEFAULT_VOICE = os.getenv("DEFAULT_VOICE", "alloy")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+AI_LOG_SUBMIT_URL = os.getenv("AI_LOG_SUBMIT_URL", "")
+AI_LOG_SUBMIT_KEY = os.getenv("AI_LOG_SUBMIT_KEY", "")
+AI_LOG_INGEST_KEY = os.getenv("AI_LOG_INGEST_KEY", "")
+AI_LOG_API_URL = os.getenv("AI_LOG_API_URL", "http://127.0.0.1:8000/hooks/ai-log")
+AI_LOG_ENABLED = os.getenv("AI_LOG_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 DATABASE_PATH = Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "speaking_coach_bootstrap.sqlite3")))

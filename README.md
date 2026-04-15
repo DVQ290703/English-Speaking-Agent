@@ -22,7 +22,9 @@ Demo users:
 │   ├── tools.py        # Tool definitions
 │   └── config.py       # Configuration
 ├── scripts/
-│   └── (utility scripts)
+│   ├── setup_hooks.sh  # One-time hook installer
+│   ├── log_hook.py     # AI event hook handler
+│   └── submit_log.py   # Submits logs on git push
 ├── requirements.txt
 ├── .env.example
 ├── AGENTS.md           # Rules for using AI coding agents
@@ -37,6 +39,9 @@ Demo users:
 ```bash
 git clone <repo-url>
 cd <repo>
+
+# Install git pre-push hook (required, run once)
+bash scripts/setup_hooks.sh
 ```
 
 ### 2. Configure environment
@@ -45,7 +50,7 @@ cd <repo>
 cp .env.example .env
 ```
 
-Open `.env` and fill in your provider API key and any database settings you need.
+Open `.env` and fill in your `ANTHROPIC_API_KEY`. The `AI_LOG_*` variables are pre-filled.
 
 ### 3. Run
 
@@ -80,6 +85,12 @@ Update **[WORKLOG.md](./WORKLOG.md)** whenever your team makes a technical decis
 - **Important bugs** — root cause and fix
 
 See each file for the format and examples.
+
+## AI Logging
+
+AI events and tool calls are **automatically logged** when you use any supported AI tool (Claude Code, Cursor, Codex, Gemini, Copilot). Prompt-like text is redacted before storage. No manual steps needed after running `setup_hooks.sh`.
+
+The hook logger writes to `.ai-log/session.jsonl` and can also forward each event to the API via `AI_LOG_API_URL` so the backend can persist it in SQLite. That ingest endpoint uses `AI_LOG_INGEST_KEY`, while `AI_LOG_SUBMIT_KEY` is reserved for grading-server submission.
 
 Default SQLite file: `data/speaking_coach_bootstrap.sqlite3`
 
