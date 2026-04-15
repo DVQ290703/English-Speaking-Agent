@@ -255,11 +255,11 @@ def login(payload: LoginRequest):
             row = cur.fetchone()
 
     if not row:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password...")
     
     user_id, email, password_hash, display_name, english_level = row
     if not verify_password(payload.password, password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong Password...")
     
     access_token, expires_in = create_access_token(user_id=user_id, email=email)
 
