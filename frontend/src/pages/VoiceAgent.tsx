@@ -329,7 +329,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       timestamp: new Date(),
     };
 
-    const historyPayload = [
+    const historyPayload: { role: string; text: string }[] = [
       ...messages.filter((message) => !message.typing).map((message) => ({
         role: message.role === "agent" ? "assistant" : "user",
         text: message.text,
