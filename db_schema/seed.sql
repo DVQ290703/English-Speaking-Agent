@@ -4,10 +4,14 @@
 
 -- Users (password_hash = bcrypt of "Password123!")
 INSERT INTO users (id, email, password_hash, display_name, english_level) VALUES
-  ('a1000000-0000-0000-0000-000000000001', 'alice@example.com',  '$2b$12$KIXtq1NmFPu8fWC8kL1FBuFT4vpC5h5Fg2iUqwEsJI9djxzlrWcMe', 'Alice Nguyen',  'B1'),
-  ('a1000000-0000-0000-0000-000000000002', 'bob@example.com',    '$2b$12$KIXtq1NmFPu8fWC8kL1FBuFT4vpC5h5Fg2iUqwEsJI9djxzlrWcMe', 'Bob Tran',      'A2'),
-  ('a1000000-0000-0000-0000-000000000003', 'charlie@example.com','$2b$12$KIXtq1NmFPu8fWC8kL1FBuFT4vpC5h5Fg2iUqwEsJI9djxzlrWcMe', 'Charlie Le',    'B2')
-ON CONFLICT (email) DO NOTHING;
+  ('a1000000-0000-0000-0000-000000000001', 'alice@example.com',  '$2b$12$olq2Re/lfTVN2w4pr.ZZp.b4TcVjeKKKJy2.kKTUrdJBdOK27g0.q', 'Alice Nguyen',  'B1'),
+  ('a1000000-0000-0000-0000-000000000002', 'bob@example.com',    '$2b$12$olq2Re/lfTVN2w4pr.ZZp.b4TcVjeKKKJy2.kKTUrdJBdOK27g0.q', 'Bob Tran',      'A2'),
+  ('a1000000-0000-0000-0000-000000000003', 'charlie@example.com','$2b$12$olq2Re/lfTVN2w4pr.ZZp.b4TcVjeKKKJy2.kKTUrdJBdOK27g0.q', 'Charlie Le',    'B2')
+ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  display_name = EXCLUDED.display_name,
+  english_level = EXCLUDED.english_level,
+  updated_at = NOW();
 
 -- Topics
 INSERT INTO topics (id, code, title, description, difficulty_level) VALUES
