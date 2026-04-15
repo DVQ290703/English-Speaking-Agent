@@ -416,6 +416,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
     function startListening() {
       if (stopped) return;
+
+      // Detach all event handlers from the previous instance before discarding it
+      // to prevent accumulated listeners from firing during garbage collection.
+      if (recognitionRef.current) {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+      }
+
       const recognition = new SpeechRecognitionAPI!();
       recognition.lang = LANGUAGE_CODES[language];
       recognition.interimResults = true;
