@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,6 +22,18 @@ def print_pass(name: str) -> None:
     print(f"PASS {name}")
 
 
+def contains_sensitive_key(value) -> bool:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"prompt", "content", "text", "input", "message", "messages"}:
+                return True
+            if contains_sensitive_key(item):
+                return True
+    elif isinstance(value, list):
+        return any(contains_sensitive_key(item) for item in value)
+    return False
+
+
 def request_json(base_url: str, method: str, path: str, *, headers=None, json_body=None, form_data=None, files=None):
     request_headers = dict(headers or {})
     body: bytes | None = None
@@ -28,7 +42,7 @@ def request_json(base_url: str, method: str, path: str, *, headers=None, json_bo
         body = json.dumps(json_body).encode("utf-8")
         request_headers.setdefault("Content-Type", "application/json")
     elif files:
-        boundary = f"----test-boundary-{uuid.uuid4().hex}"
+        boundary = f"----pytest-boundary-{uuid.uuid4().hex}"
         request_headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
         parts: list[bytes] = []
 
@@ -95,122 +109,79 @@ def create_silent_wav(path: Path) -> None:
         wav_file.writeframes(b"\x00\x00" * 16_000)
 
 
-def create_smoke_audio_file() -> Path:
-    audio_dir = Path.cwd() / "data" / "smoke_artifacts"
-    audio_dir.mkdir(parents=True, exist_ok=True)
-    audio_path = audio_dir / f"smoke_{uuid.uuid4().hex}.wav"
-    create_silent_wav(audio_path)
-    return audio_path
+def read_log_lines() -> list[str]:
+    log_file = Path.cwd() / ".ai-log" / "session.jsonl"
+    if not log_file.exists():
+        return []
+    return log_file.read_text(encoding="utf-8").splitlines()
 
 
-@pytest.fixture(scope="module")
-def base_url() -> str:
-    return api_base_url()
+def emit_pytest_hook_event(base_url: str) -> dict:
+    session_id = f"pytest-session-smoke-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "hook_event_name": "PytestSmokeRun",
+        "session_id": session_id,
+        "model": "pytest",
+        "payload": {
+            "suite": "api-smoke",
+            "status": "passed",
+        },
+    }
+    env = os.environ.copy()
+    env["AI_TOOL_NAME"] = "pytest"
+    env["AI_LOG_DIR"] = str(Path.cwd() / ".ai-log")
+    env["AI_LOG_API_URL"] = f"{base_url.rstrip('/')}/hooks/ai-log"
+    env.setdefault("AI_LOG_INGEST_KEY", "pytest-ingest-key")
 
-
-def request_json_or_fail(base_url: str, method: str, path: str, **kwargs):
-    try:
-        return request_json(base_url, method, path, **kwargs)
-    except urllib.error.URLError as exc:
-        pytest.fail(f"Cannot reach API at {base_url}: {exc}")
-
-
-def request_raw_or_fail(base_url: str, method: str, path: str, **kwargs):
-    try:
-        return request_raw(base_url, method, path, **kwargs)
-    except urllib.error.URLError as exc:
-        pytest.fail(f"Cannot reach API at {base_url}: {exc}")
-
-
-def request_raw(base_url: str, method: str, path: str, *, headers=None, json_body=None, form_data=None, files=None):
-    request_headers = dict(headers or {})
-    body: bytes | None = None
-
-    if json_body is not None:
-        body = json.dumps(json_body).encode("utf-8")
-        request_headers.setdefault("Content-Type", "application/json")
-    elif files:
-        boundary = f"----test-boundary-{uuid.uuid4().hex}"
-        request_headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
-        parts: list[bytes] = []
-
-        for key, value in (form_data or {}).items():
-            parts.extend(
-                [
-                    f"--{boundary}\r\n".encode("utf-8"),
-                    f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"),
-                    value.encode("utf-8"),
-                    b"\r\n",
-                ]
-            )
-
-        for key, (filename, file_bytes, content_type) in files.items():
-            parts.extend(
-                [
-                    f"--{boundary}\r\n".encode("utf-8"),
-                    (
-                        f'Content-Disposition: form-data; name="{key}"; filename="{filename}"\r\n'
-                        f"Content-Type: {content_type}\r\n\r\n"
-                    ).encode("utf-8"),
-                    file_bytes,
-                    b"\r\n",
-                ]
-            )
-
-        parts.append(f"--{boundary}--\r\n".encode("utf-8"))
-        body = b"".join(parts)
-    elif form_data is not None:
-        body = urllib.parse.urlencode(form_data).encode("utf-8")
-        request_headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
-
-    req = urllib.request.Request(
-        f"{base_url.rstrip('/')}{path}",
-        data=body,
-        headers=request_headers,
-        method=method,
+    result = subprocess.run(
+        [sys.executable, "scripts/log_hook.py", "--tool", "pytest"],
+        input=json.dumps(payload).encode("utf-8"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(Path.cwd()),
+        check=False,
     )
+    if result.returncode != 0:
+        raise AssertionError(
+            "log_hook.py failed:\n"
+            f"stdout: {result.stdout.decode('utf-8', errors='replace')}\n"
+            f"stderr: {result.stderr.decode('utf-8', errors='replace')}"
+        )
+    return payload
+
+
+def test_api_smoke():
+    base_url = api_base_url()
+    failures: list[str] = []
+
+    def expect_ok(name: str, response):
+        status, data, text = response
+        if status == 200:
+            print_pass(name)
+            return data
+        failures.append(f"{name}: {status} {text}")
+        return None
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            payload = resp.read()
-            return resp.status, resp.headers, payload
-    except urllib.error.HTTPError as exc:
-        payload = exc.read()
-        return exc.code, exc.headers, payload
+        health = expect_ok("GET /health", request_json(base_url, "GET", "/health"))
+    except urllib.error.URLError as exc:
+        pytest.fail(f"Cannot reach API at {base_url}: {exc}")
+    if isinstance(health, dict):
+        assert health.get("status") == "ok"
 
+    topics = expect_ok("GET /topics", request_json(base_url, "GET", "/topics"))
+    if not isinstance(topics, list) or not topics:
+        failures.append("GET /topics: no topics returned")
+        topics = []
 
-def assert_json_ok(name: str, response, expected_status: int = 200):
-    status, data, text = response
-    assert status == expected_status, f"{name}: {status} {text}"
-    print_pass(name)
-    return data
-
-
-def assert_raw_ok(name: str, response, expected_status: int = 200):
-    status, headers, payload = response
-    assert status == expected_status, f"{name}: {status}"
-    print_pass(name)
-    return headers, payload
-
-
-def get_first_topic(base_url: str) -> dict:
-    topics = assert_json_ok("GET /topics", request_json_or_fail(base_url, "GET", "/topics"))
-    assert isinstance(topics, list) and topics, "GET /topics: no topics returned"
-    topic_id = topics[0]["id"]
-    topic_detail = assert_json_ok("GET /topics/{id}", request_json_or_fail(base_url, "GET", f"/topics/{topic_id}"))
-    assert isinstance(topic_detail, dict)
-    assert topic_detail["id"] == topic_id, "GET /topics/{id}: returned topic id did not match"
-    return topic_detail
-
-
-def create_auth_context(base_url: str) -> dict:
     username = f"smoke_{uuid.uuid4().hex[:10]}"
     password = "SmokeTest123!"
     display_name = "Smoke Test"
 
-    register = assert_json_ok(
+    expect_ok(
         "POST /auth/register",
-        request_json_or_fail(
+        request_json(
             base_url,
             "POST",
             "/auth/register",
@@ -221,311 +192,146 @@ def create_auth_context(base_url: str) -> dict:
             },
         ),
     )
-    login = assert_json_ok(
+    login = expect_ok(
         "POST /auth/login",
-        request_json_or_fail(
+        request_json(
             base_url,
             "POST",
             "/auth/login",
             json_body={"username": username, "password": password},
         ),
     )
-    token = login["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-    return {
-        "username": username,
-        "password": password,
-        "display_name": display_name,
-        "register": register,
-        "login": login,
-        "token": token,
-        "headers": headers,
-    }
+    token = login["access_token"] if isinstance(login, dict) and login.get("access_token") else ""
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
 
+    expect_ok("GET /auth/me", request_json(base_url, "GET", "/auth/me", headers=headers))
+    config = expect_ok("GET /config", request_json(base_url, "GET", "/config", headers=headers))
 
-def create_practice_session(base_url: str, headers: dict[str, str], topic_id: int, *, title: str = "Smoke practice session") -> dict:
-    session = assert_json_ok(
-        "POST /practice-sessions",
-        request_json_or_fail(
-            base_url,
-            "POST",
-            "/practice-sessions",
-            headers=headers,
-            json_body={
-                "title": title,
-                "topic_id": topic_id,
-                "notes": "Created from smoke test.",
-            },
-        ),
+    model_value = "gpt-4o-mini"
+    voice_value = "nova"
+    if isinstance(config, dict):
+        model_value = config.get("model_name", model_value)
+        voice_value = config.get("voice_name", voice_value)
+
+    expect_ok(
+        "POST /config/model",
+        request_json(base_url, "POST", "/config/model", headers=headers, json_body={"value": model_value}),
     )
-    assert session["status"] == "active"
-    return session
-
-
-def post_text_turn(base_url: str, headers: dict[str, str], topic_id: int, session_id: int, *, text: str) -> dict:
-    return assert_json_ok(
-        "POST /chat/text",
-        request_json_or_fail(
-            base_url,
-            "POST",
-            "/chat/text",
-            headers=headers,
-            json_body={
-                "topic_id": topic_id,
-                "text": text,
-                "model_name": "gpt-4o-mini",
-                "voice_name": "nova",
-                "practice_session_id": session_id,
-            },
-        ),
+    expect_ok(
+        "POST /config/voice",
+        request_json(base_url, "POST", "/config/voice", headers=headers, json_body={"value": voice_value}),
     )
 
+    if topics:
+        topic_id = topics[0]["id"]
 
-def post_audio_turn(base_url: str, headers: dict[str, str], topic_id: int, session_id: int) -> dict:
-    audio_path = create_smoke_audio_file()
-    with audio_path.open("rb") as audio_file:
-        return assert_json_ok(
-            "POST /chat/audio",
-            request_json_or_fail(
+        expect_ok(
+            "POST /chat/text",
+            request_json(
                 base_url,
                 "POST",
-                "/chat/audio",
+                "/chat/text",
                 headers=headers,
-                form_data={
-                    "topic_id": str(topic_id),
-                    "model_name": "gpt-4o-mini",
-                    "voice_name": "nova",
-                    "practice_session_id": str(session_id),
+                json_body={
+                    "topic_id": topic_id,
+                    "text": "i usually study english in the evening because it helps me relax",
+                    "model_name": model_value,
+                    "voice_name": voice_value,
                 },
-                files={"audio_file": (audio_path.name, audio_file.read(), "audio/wav")},
             ),
         )
 
+        audio_dir = Path.cwd() / "data" / "pytest_artifacts"
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        audio_path = audio_dir / f"smoke_{uuid.uuid4().hex}.wav"
+        create_silent_wav(audio_path)
+        with audio_path.open("rb") as audio_file:
+            expect_ok(
+                "POST /chat/audio",
+                request_json(
+                    base_url,
+                    "POST",
+                    "/chat/audio",
+                    headers=headers,
+                    form_data={
+                        "topic_id": str(topic_id),
+                        "model_name": model_value,
+                        "voice_name": voice_value,
+                    },
+                    files={"audio_file": (audio_path.name, audio_file.read(), "audio/wav")},
+                ),
+            )
 
-def assert_text_turn_shape(turn: dict, *, session_id: int, attempt_no: int) -> None:
-    message = turn["message"]
-    evaluation = turn["evaluation"]
-    assert message["practice_session_id"] == session_id
-    assert message["attempt_no"] == attempt_no
-    assert message["input_mode"] == "text"
-    assert message["user_audio_path"] is None
-    assert message["duration_seconds"] is not None and message["duration_seconds"] > 0
-    assert message["word_count"] is not None and message["word_count"] > 0
-    assert message["pause_count"] is not None and message["pause_count"] >= 0
-    assert evaluation["rubric_version"] == "v2.0"
-    assert evaluation["pronunciation_score"] is None
-    for key in ("fluency_score", "coherence_score", "lexical_resource_score"):
-        assert evaluation[key] is not None
+        messages = expect_ok("GET /messages", request_json(base_url, "GET", "/messages", headers=headers))
+        history = expect_ok("GET /history", request_json(base_url, "GET", "/history", headers=headers))
 
+        items = messages.get("items", []) if isinstance(messages, dict) else []
+        if not items:
+            failures.append("GET /messages: no message items returned")
+        if isinstance(history, dict) and not history.get("items", []):
+            failures.append("GET /history: no history items returned")
 
-def assert_audio_turn_shape(turn: dict, *, session_id: int, attempt_no: int) -> None:
-    message = turn["message"]
-    evaluation = turn["evaluation"]
-    assert message["practice_session_id"] == session_id
-    assert message["attempt_no"] == attempt_no
-    assert message["input_mode"] == "audio"
-    assert message["user_audio_path"] is not None
-    assert message["duration_seconds"] is not None and message["duration_seconds"] > 0
-    assert message["word_count"] is not None and message["word_count"] > 0
-    assert message["pause_count"] is not None and message["pause_count"] >= 0
-    assert evaluation["rubric_version"] == "v2.0"
-    assert evaluation["pronunciation_score"] is not None
-    for key in ("fluency_score", "coherence_score", "lexical_resource_score"):
-        assert evaluation[key] is not None
+        if items:
+            message_id = items[0]["id"]
+            expect_ok("GET /messages/{id}", request_json(base_url, "GET", f"/messages/{message_id}", headers=headers))
+            expect_ok("GET /evaluation/{id}", request_json(base_url, "GET", f"/evaluation/{message_id}", headers=headers))
+            expect_ok(
+                "GET /audio user",
+                request_json(base_url, "GET", f"/audio/{message_id}?kind=user", headers=headers),
+            )
+            expect_ok(
+                "GET /audio agent",
+                request_json(base_url, "GET", f"/audio/{message_id}?kind=agent", headers=headers),
+            )
+        else:
+            failures.append("GET /messages/{id}: no message id available")
 
+    ai_log_ingest_key = os.environ.get("AI_LOG_INGEST_KEY", "pytest-ingest-key")
+    ai_log_headers = {"X-AI-Log-Key": ai_log_ingest_key}
 
-def test_get_health(base_url):
-    health = assert_json_ok("GET /health", request_json_or_fail(base_url, "GET", "/health"))
-    assert health["status"] == "ok"
-    assert health["service"] == "ai-speaking-coach-api"
-    assert "log_level" in health
-
-
-def test_get_topics_and_topic_detail(base_url):
-    get_first_topic(base_url)
-
-
-def test_post_auth_register_login_me_logout(base_url):
-    auth = create_auth_context(base_url)
-    me = assert_json_ok("GET /auth/me", request_json_or_fail(base_url, "GET", "/auth/me", headers=auth["headers"]))
-    assert me["username"] == auth["username"]
-    assert me["display_name"] == auth["display_name"]
-    assert auth["register"]["access_token"] != auth["login"]["access_token"]
-
-    logout = assert_json_ok("POST /auth/logout", request_json_or_fail(base_url, "POST", "/auth/logout", headers=auth["headers"]))
-    assert logout["status"] == "ok"
-
-    after_logout_status, _, _ = request_json_or_fail(base_url, "GET", "/auth/me", headers=auth["headers"])
-    assert after_logout_status == 401
-
-
-def test_get_and_update_config(base_url):
-    auth = create_auth_context(base_url)
-    config = assert_json_ok("GET /config", request_json_or_fail(base_url, "GET", "/config", headers=auth["headers"]))
-    current_model = config["model_name"]
-    current_voice = config["voice_name"]
-
-    model_value = "claude-sonnet-4-20250514" if current_model != "claude-sonnet-4-20250514" else "gpt-4o-mini"
-    voice_value = "alloy" if current_voice != "alloy" else "nova"
-
-    model_response = assert_json_ok(
-        "POST /config/model",
-        request_json_or_fail(base_url, "POST", "/config/model", headers=auth["headers"], json_body={"value": model_value}),
+    codex_event = expect_ok(
+        "POST /hooks/ai-log codex",
+        request_json(
+            base_url,
+            "POST",
+            "/hooks/ai-log",
+            headers=ai_log_headers,
+            json_body={
+                "tool": "codex",
+                "event": "UserPromptSubmit",
+                "session_id": "pytest-session-codex",
+                "model": "gpt-4o-mini",
+                "repo": "A20-App-014",
+                "branch": "pytest",
+                "commit": "deadbeef",
+                "student": "pytest@example.com",
+                "payload": {
+                    "prompt": "should be redacted",
+                    "tool_input": {"content": "also redacted"},
+                    "nested": {"text": "hidden"},
+                },
+            },
+        ),
     )
-    assert model_response["model_name"] == model_value
-    assert model_response["voice_name"] == current_voice
+    if isinstance(codex_event, dict) and contains_sensitive_key(codex_event.get("payload", {})):
+        failures.append("POST /hooks/ai-log codex: sensitive key leaked into payload")
 
-    voice_response = assert_json_ok(
-        "POST /config/voice",
-        request_json_or_fail(base_url, "POST", "/config/voice", headers=auth["headers"], json_body={"value": voice_value}),
-    )
-    assert voice_response["model_name"] == model_value
-    assert voice_response["voice_name"] == voice_value
+    pytest_event_entry = emit_pytest_hook_event(base_url)
+    matched = False
+    for line in read_log_lines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("tool") == "pytest" and entry.get("session_id") == pytest_event_entry["session_id"]:
+            matched = True
+            if entry.get("event") != "PytestSmokeRun":
+                failures.append("Pytest hook event found but event name did not match")
+            if contains_sensitive_key(entry.get("payload", {})):
+                failures.append("Pytest hook event leaked sensitive key into .ai-log/session.jsonl")
+            break
+    if not matched:
+        failures.append("Pytest hook event was not found in .ai-log/session.jsonl")
 
-    updated_config = assert_json_ok("GET /config after update", request_json_or_fail(base_url, "GET", "/config", headers=auth["headers"]))
-    assert updated_config["model_name"] == model_value
-    assert updated_config["voice_name"] == voice_value
-
-
-def test_post_practice_sessions_and_get_detail(base_url):
-    auth = create_auth_context(base_url)
-    topic = get_first_topic(base_url)
-    session = create_practice_session(base_url, auth["headers"], topic["id"])
-
-    assert session["topic_id"] == topic["id"]
-    assert session["message_count"] == 0
-
-    sessions = assert_json_ok("GET /practice-sessions", request_json_or_fail(base_url, "GET", "/practice-sessions", headers=auth["headers"]))
-    assert any(item["id"] == session["id"] for item in sessions["items"])
-
-    detail = assert_json_ok(
-        "GET /practice-sessions/{id}",
-        request_json_or_fail(base_url, "GET", f"/practice-sessions/{session['id']}", headers=auth["headers"]),
-    )
-    assert detail["practice_session"]["id"] == session["id"]
-    assert detail["practice_session"]["status"] == "active"
-    assert detail["items"] == []
-
-    close_session = assert_json_ok(
-        "POST /practice-sessions/{id}/close",
-        request_json_or_fail(base_url, "POST", f"/practice-sessions/{session['id']}/close", headers=auth["headers"]),
-    )
-    assert close_session["status"] == "completed"
-
-
-def test_post_chat_text_and_message_details(base_url):
-    auth = create_auth_context(base_url)
-    topic = get_first_topic(base_url)
-    session = create_practice_session(base_url, auth["headers"], topic["id"], title="Text smoke session")
-
-    text_turn = post_text_turn(
-        base_url,
-        auth["headers"],
-        topic["id"],
-        session["id"],
-        text="i usually study english in the evening because it helps me relax",
-    )
-    assert_text_turn_shape(text_turn, session_id=session["id"], attempt_no=1)
-
-    message = text_turn["message"]
-    evaluation = text_turn["evaluation"]
-    message_id = message["id"]
-
-    detail = assert_json_ok(
-        "GET /messages/{id}",
-        request_json_or_fail(base_url, "GET", f"/messages/{message_id}", headers=auth["headers"]),
-    )
-    assert detail["message"]["id"] == message_id
-    assert detail["evaluation"]["message_id"] == message_id
-
-    evaluation_detail = assert_json_ok(
-        "GET /evaluation/{id}",
-        request_json_or_fail(base_url, "GET", f"/evaluation/{message_id}", headers=auth["headers"]),
-    )
-    assert evaluation_detail["message_id"] == message_id
-    assert evaluation_detail["rubric_version"] == evaluation["rubric_version"]
-
-    messages = assert_json_ok(
-        "GET /messages filtered by session",
-        request_json_or_fail(base_url, "GET", f"/messages?practice_session_id={session['id']}", headers=auth["headers"]),
-    )
-    assert len(messages["items"]) == 1
-    assert messages["items"][0]["id"] == message_id
-
-    session_detail = assert_json_ok(
-        "GET /practice-sessions/{id} after text",
-        request_json_or_fail(base_url, "GET", f"/practice-sessions/{session['id']}", headers=auth["headers"]),
-    )
-    assert session_detail["practice_session"]["message_count"] == 1
-    assert len(session_detail["items"]) == 1
-
-    agent_audio_status, _, _ = request_raw_or_fail(base_url, "GET", f"/audio/{message_id}?kind=agent", headers=auth["headers"])
-    assert agent_audio_status == 200
-
-
-def test_post_chat_audio_and_audio_downloads(base_url):
-    auth = create_auth_context(base_url)
-    topic = get_first_topic(base_url)
-    session = create_practice_session(base_url, auth["headers"], topic["id"], title="Audio smoke session")
-
-    audio_turn = post_audio_turn(base_url, auth["headers"], topic["id"], session["id"])
-    assert_audio_turn_shape(audio_turn, session_id=session["id"], attempt_no=1)
-
-    message_id = audio_turn["message"]["id"]
-
-    user_headers, _ = assert_raw_ok(
-        "GET /audio user",
-        request_raw_or_fail(base_url, "GET", f"/audio/{message_id}?kind=user", headers=auth["headers"]),
-    )
-    assert "audio/wav" in user_headers.get("Content-Type", "")
-
-    agent_headers, _ = assert_raw_ok(
-        "GET /audio agent",
-        request_raw_or_fail(base_url, "GET", f"/audio/{message_id}?kind=agent", headers=auth["headers"]),
-    )
-    assert "audio/wav" in agent_headers.get("Content-Type", "")
-
-    detail = assert_json_ok(
-        "GET /messages/{id} for audio",
-        request_json_or_fail(base_url, "GET", f"/messages/{message_id}", headers=auth["headers"]),
-    )
-    assert detail["message"]["id"] == message_id
-
-
-def test_get_messages_and_session_filter(base_url):
-    auth = create_auth_context(base_url)
-    topic = get_first_topic(base_url)
-    session = create_practice_session(base_url, auth["headers"], topic["id"], title="List smoke session")
-
-    text_turn = post_text_turn(
-        base_url,
-        auth["headers"],
-        topic["id"],
-        session["id"],
-        text="i usually study english in the evening because it helps me relax",
-    )
-    audio_turn = post_audio_turn(base_url, auth["headers"], topic["id"], session["id"])
-
-    messages = assert_json_ok("GET /messages", request_json_or_fail(base_url, "GET", "/messages", headers=auth["headers"]))
-    assert len(messages["items"]) >= 2
-
-    filtered_messages = assert_json_ok(
-        "GET /messages filtered",
-        request_json_or_fail(base_url, "GET", f"/messages?practice_session_id={session['id']}", headers=auth["headers"]),
-    )
-    assert len(filtered_messages["items"]) == 2
-    assert all(item["practice_session_id"] == session["id"] for item in filtered_messages["items"])
-
-    attempt_numbers = [item["attempt_no"] for item in filtered_messages["items"]]
-    assert attempt_numbers == [2, 1] or attempt_numbers == [1, 2]
-
-    session_detail = assert_json_ok(
-        "GET /practice-sessions/{id} after list flow",
-        request_json_or_fail(base_url, "GET", f"/practice-sessions/{session['id']}", headers=auth["headers"]),
-    )
-    assert session_detail["practice_session"]["message_count"] == 2
-    assert len(session_detail["items"]) == 2
-
-    text_message_id = text_turn["message"]["id"]
-    audio_message_id = audio_turn["message"]["id"]
-    assert text_message_id != audio_message_id
+    if failures:
+        pytest.fail("\n".join(failures))

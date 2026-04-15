@@ -8,7 +8,6 @@ from typing import Any
 
 from .config import DEFAULT_VOICE, GENERATED_AUDIO_DIR
 
-RUBRIC_VERSION = "v2.0"
 COMMON_FILLERS = {"um", "uh", "erm", "like", "you know", "actually"}
 SAMPLE_TRANSCRIPTS = [
     "I think learning English every day helps me become more confident when I speak.",
@@ -30,11 +29,6 @@ def tokenize(text: str) -> list[str]:
     return re.findall(r"[A-Za-z']+", text.lower())
 
 
-def count_fillers(text: str) -> int:
-    lowered = text.lower()
-    return sum(lowered.count(filler) for filler in COMMON_FILLERS)
-
-
 def pick_sample_transcript(seed_text: str) -> str:
     digest = hashlib.sha256(seed_text.encode("utf-8")).digest()
     index = digest[0] % len(SAMPLE_TRANSCRIPTS)
@@ -51,23 +45,6 @@ def normalize_text(text: str) -> str:
     if compact[-1] not in ".!?":
         compact += "."
     return compact
-
-
-def estimate_text_duration_seconds(word_count: int, pause_count: int) -> int:
-    estimated = max(5, round(word_count / 2.4) + pause_count)
-    return clamp(estimated, 5, 240)
-
-
-def read_audio_duration_seconds(audio_path: str) -> int | None:
-    try:
-        with wave.open(audio_path, "rb") as wav_file:
-            frame_count = wav_file.getnframes()
-            frame_rate = wav_file.getframerate() or 0
-            if frame_rate <= 0:
-                return None
-            return clamp(max(1, round(frame_count / frame_rate)), 1, 3600)
-    except Exception:
-        return None
 
 
 def detect_feedback(text: str, unique_ratio: float, word_count: int) -> list[str]:
@@ -99,8 +76,6 @@ def score_text(text: str) -> dict[str, Any]:
     tokens = tokenize(text)
     word_count = len(tokens)
     unique_ratio = len(set(tokens)) / word_count if word_count else 0.0
-    pause_count = count_fillers(text)
-    sentence_count = max(1, len(re.findall(r"[.!?]+", text)))
 
     grammar_score = 96
     if not text.strip():
@@ -123,16 +98,11 @@ def score_text(text: str) -> dict[str, Any]:
 
     grammar_score = clamp(grammar_score, 40, 100)
     vocabulary_score = clamp(vocabulary_score, 40, 100)
-    fluency_score = clamp(72 + min(word_count, 40) // 2 - pause_count * 4, 40, 100)
-    coherence_score = clamp(70 + sentence_count * 3 + (8 if word_count >= 20 else -6), 40, 100)
-    lexical_resource_score = clamp(60 + int(unique_ratio * 36), 40, 100)
 
     corrected_text = normalize_text(text)
     feedback = detect_feedback(text, unique_ratio, word_count)
     summary = (
-        f"Grammar {grammar_score}/100, vocabulary {vocabulary_score}/100, "
-        f"fluency {fluency_score}/100, coherence {coherence_score}/100, "
-        f"lexical resource {lexical_resource_score}/100. "
+        f"Grammar {grammar_score}/100, vocabulary {vocabulary_score}/100. "
         f"Focus on clearer structure and more specific examples."
     )
 
@@ -140,18 +110,11 @@ def score_text(text: str) -> dict[str, Any]:
         "transcript": text,
         "grammar_score": grammar_score,
         "vocabulary_score": vocabulary_score,
-        "fluency_score": fluency_score,
-        "coherence_score": coherence_score,
-        "lexical_resource_score": lexical_resource_score,
         "pronunciation_score": None,
         "corrected_text": corrected_text,
         "feedback": feedback,
         "summary": summary,
         "is_mock": True,
-        "rubric_version": RUBRIC_VERSION,
-        "word_count": word_count,
-        "pause_count": pause_count,
-        "duration_seconds": estimate_text_duration_seconds(word_count, pause_count),
     }
 
 
@@ -169,7 +132,6 @@ def score_audio(seed_text: str, audio_path: str, file_size: int) -> dict[str, An
     transcript = pick_sample_transcript(seed_text)
     text_result = score_text(transcript)
     pronunciation_score = estimate_pronunciation_score(audio_path, file_size)
-    audio_duration_seconds = read_audio_duration_seconds(audio_path) or text_result["duration_seconds"]
 
     feedback = list(text_result["feedback"])
     feedback.insert(
@@ -187,18 +149,11 @@ def score_audio(seed_text: str, audio_path: str, file_size: int) -> dict[str, An
         "transcript": transcript,
         "grammar_score": text_result["grammar_score"],
         "vocabulary_score": text_result["vocabulary_score"],
-        "fluency_score": text_result["fluency_score"],
-        "coherence_score": text_result["coherence_score"],
-        "lexical_resource_score": text_result["lexical_resource_score"],
         "pronunciation_score": pronunciation_score,
         "corrected_text": text_result["corrected_text"],
         "feedback": feedback,
         "summary": summary,
         "is_mock": True,
-        "rubric_version": RUBRIC_VERSION,
-        "word_count": text_result["word_count"],
-        "pause_count": text_result["pause_count"],
-        "duration_seconds": audio_duration_seconds,
     }
 
 
