@@ -7,7 +7,15 @@ HOOK_FILE=".git/hooks/pre-push"
 cat > "$HOOK_FILE" << 'EOF'
 #!/bin/bash
 # Submit AI logs to grading server before push
-python3 scripts/submit_log.py
+if command -v py >/dev/null 2>&1; then
+	py -3 scripts/submit_log.py || true
+elif command -v python3 >/dev/null 2>&1; then
+	python3 scripts/submit_log.py || true
+elif command -v python >/dev/null 2>&1; then
+	python scripts/submit_log.py || true
+else
+	echo "[ai-log] Python not found. Skipping log submission." >&2
+fi
 exit 0  # Never block push
 EOF
 
