@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut } from "lucide-react";
 import { SiOpenai } from "react-icons/si";
 
@@ -6,13 +7,17 @@ import { chatRespond } from "../api/chat";
 import { getAuthSession } from "../auth/tokenStorage";
 import {
   AgentWaveform,
-  AuthModal,
   DeviceSelect,
   MessageBubble,
   MicWaveform,
   SelectDropdown,
 } from "../components/voice-agent";
-import type { AuthUser, Message } from "../components/voice-agent";
+import type { Message } from "../components/voice-agent";
+
+interface AuthUser {
+  name: string;
+  email?: string;
+}
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
 type Gender = "Male" | "Female";
@@ -36,27 +41,6 @@ const FEEDBACK_ICON: Record<FeedbackType, { icon: typeof AlertCircle; color: str
   pronunciation: { icon: Volume2,        color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/25", label: "Pronunciation" },
   fluency:       { icon: Zap,            color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/25",  label: "Fluency"       },
 };
-
-const DEMO_FEEDBACKS: Omit<FeedbackItem, "id" | "timestamp">[] = [
-  {
-    type: "grammar",
-    original: "I am go to school yesterday.",
-    corrected: "I went to school yesterday.",
-    explanation: "Use simple past tense \"went\" for completed actions in the past, not \"am go\".",
-  },
-  {
-    type: "vocabulary",
-    original: "The movie was very good.",
-    corrected: "The movie was captivating / outstanding.",
-    explanation: "\"Good\" is very generic. Use more descriptive words like \"captivating\", \"outstanding\", or \"compelling\" for richer expression.",
-  },
-  {
-    type: "pronunciation",
-    original: "\"Comfortable\" /kəmˈfɔːrtəbl/",
-    corrected: "\"Comfortable\" /ˈkʌmftəbl/",
-    explanation: "This word is commonly mispronounced. It has 3 syllables: COMF-ter-ble, not com-FOR-ta-ble.",
-  },
-];
 
 const AUTO_FEEDBACKS: Omit<FeedbackItem, "id" | "timestamp">[] = [
   {
@@ -165,8 +149,8 @@ interface VoiceAgentProps {
 }
 
 export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
+  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser);
-  const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
   const [topic, setTopic] = useState<TopicId>("daily");
 
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
@@ -310,23 +294,28 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return audioUrl;
   }, [speakText]);
 
+  const generateScore = useCallback((text: string) => {
+    const words = text.trim().split(/\s+/).length;
+    const base = Math.floor(Math.random() * 20) + 72;
+    const bonus = Math.min(words * 0.6, 9);
+    return Math.min(Math.round(base + bonus), 99);
+  }, []);
+
   const sendChatMessage = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || agentTyping) return;
 
     const session = getAuthSession();
-    if (!session?.token) {
-      setAuthModal("login");
-      return;
-    }
-
     const userId = msgCounterRef.current++;
     const typingId = msgCounterRef.current++;
+    const score = generateScore(trimmed);
+
     const userMsg: Message = {
       id: userId,
       role: "user",
       text: trimmed,
       timestamp: new Date(),
+      score,
     };
 
     const historyPayload: { role: string; text: string }[] = [
@@ -353,23 +342,36 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setAgentTyping(true);
 
     try {
-      const data = await chatRespond({
-        token: session.token,
-        text: trimmed,
-        history: historyPayload,
-        topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
-      });
+      if (session?.token) {
+        const data = await chatRespond({
+          token: session.token,
+          text: trimmed,
+          history: historyPayload,
+          topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+        });
 
-      const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
-      const audioUrl = playAgentAudio(responseText, data.audio_base64);
+        const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
+        const audioUrl = playAgentAudio(responseText, data.audio_base64);
 
-      setMessages((prev: Message[]) =>
-        prev.map((message) => (
-          message.id === typingId
-            ? { ...message, text: responseText, typing: false, audioUrl }
-            : message
-        ))
-      );
+        setMessages((prev: Message[]) =>
+          prev.map((message) => (
+            message.id === typingId
+              ? { ...message, text: responseText, typing: false, audioUrl }
+              : message
+          ))
+        );
+      } else {
+        await new Promise<void>((res) => { timersRef.current.push(setTimeout(res, 700 + Math.random() * 600)); });
+        const reply = AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
+        playAgentAudio(reply);
+        setMessages((prev: Message[]) =>
+          prev.map((message) => (
+            message.id === typingId
+              ? { ...message, text: reply, typing: false }
+              : message
+          ))
+        );
+      }
 
       const idx = autoFeedbackIndexRef.current % AUTO_FEEDBACKS.length;
       autoFeedbackIndexRef.current++;
@@ -394,7 +396,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     } finally {
       setAgentTyping(false);
     }
-  }, [agentTyping, messages, playAgentAudio, topic]);
+  }, [agentTyping, messages, playAgentAudio, topic, generateScore]);
 
   // Auto-start/stop recognition when mic toggle or connection changes
   useEffect(() => {
@@ -563,13 +565,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           ) : (
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setAuthModal("login")}
+                onClick={() => navigate("/")}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors"
               >
                 <LogIn className="w-3 h-3" /> Đăng nhập
               </button>
               <button
-                onClick={() => setAuthModal("register")}
+                onClick={() => navigate("/register")}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
               >
                 <UserPlus className="w-3 h-3" /> Đăng ký
@@ -616,7 +618,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: Audio & Video */}
-        <div className="w-[320px] flex-shrink-0 border-r border-white/8 flex flex-col bg-[#0e1118] overflow-hidden">
+        <div className="w-[320px] shrink-0 border-r border-white/8 flex flex-col bg-[#0e1118] overflow-hidden">
           {/* Panel header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/6">
             <span className="text-xs font-semibold text-gray-300 tracking-wide">Audio & Video</span>
@@ -625,7 +627,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
           {/* Agent display */}
           <div className="bg-[#0c1020] mx-2 mt-2 rounded-md overflow-hidden border border-white/6">
-            <div className="flex flex-col items-center justify-center py-5 px-4 min-h-[130px]">
+            <div className="flex flex-col items-center justify-center py-5 px-4 min-h-32.5">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
                 agentSpeaking
                   ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-500/20"
@@ -703,7 +705,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                       className={`rounded-md border p-2 ${meta.bg} animate-fadeIn`}
                     >
                       <div className="flex items-center gap-1.5 mb-1.5">
-                        <Icon className={`w-3 h-3 flex-shrink-0 ${meta.color}`} />
+                        <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
                         <span className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</span>
                       </div>
                       <p className="text-[10px] text-red-300/80 line-through mb-0.5 leading-snug">{fb.original}</p>
@@ -778,7 +780,21 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             )}
 
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onReplay={() => {
+                  if (msg.role === "agent") {
+                    speakText(msg.text);
+                  } else {
+                    const utt = new SpeechSynthesisUtterance(msg.text);
+                    utt.lang = "en-US";
+                    utt.rate = 0.95;
+                    utt.pitch = 1.05;
+                    window.speechSynthesis?.speak(utt);
+                  }
+                }}
+              />
             ))}
 
             <div ref={chatBottomRef} />
@@ -823,7 +839,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
                   }}
                   disabled={!chatInput.trim() || agentTyping}
-                  className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                  className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                     chatInput.trim() && !agentTyping
                       ? "bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20"
                       : "bg-white/5 text-gray-700 cursor-not-allowed"
@@ -839,11 +855,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               <div className="flex items-center justify-between mt-2 px-1">
                 <div className="flex items-center gap-2">
                   {agentSpeaking && (
-                    <div className="flex items-center gap-[2px]">
+                    <div className="flex items-center gap-0.5">
                       {Array.from({ length: 10 }).map((_, i) => (
                         <div
                           key={i}
-                          className="w-[2px] rounded-full bg-blue-400"
+                          className="w-0.5 rounded-full bg-blue-400"
                           style={{
                             height: `${3 + Math.sin(i * 0.8) * 6}px`,
                             animation: `agentWave 0.8s ease-in-out ${i * 60}ms infinite`,
@@ -874,7 +890,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onClick={() => setShowSettings(false)}
         >
           <div
-            className="mt-[72px] mr-3 bg-[#161b27] border border-white/12 rounded-xl shadow-2xl w-80 p-4 text-sm"
+            className="mt-18 mr-3 bg-[#161b27] border border-white/12 rounded-xl shadow-2xl w-80 p-4 text-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-semibold text-gray-200 mb-1 text-sm">Chủ đề luyện tập</h3>
@@ -895,22 +911,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     <div className="text-[10px] text-gray-600 mt-0.5">{t.desc}</div>
                   </div>
                   {topic === t.id && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
                   )}
                 </button>
               ))}
             </div>
           </div>
         </div>
-      )}
-
-      {/* Auth Modal */}
-      {authModal && (
-        <AuthModal
-          mode={authModal}
-          onClose={() => setAuthModal(null)}
-          onSuccess={(user) => { setCurrentUser(user); setAuthModal(null); }}
-        />
       )}
     </div>
   );

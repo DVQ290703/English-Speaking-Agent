@@ -25,41 +25,32 @@ export default function LoginPage() {
 
   const validate = () => {
     const nextErrors = {};
-
     if (!form.email.trim()) {
       nextErrors.email = "Please enter your email.";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       nextErrors.email = "Email format is invalid.";
     }
-
     if (!form.password) {
       nextErrors.password = "Please enter your password.";
     } else if (form.password.length < 8) {
       nextErrors.password = "Password must have at least 8 characters.";
     }
-
     return nextErrors;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     const nextErrors = validate();
     setErrors(nextErrors);
     setApiError("");
-
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
+    if (Object.keys(nextErrors).length > 0) return;
 
     setIsSubmitting(true);
-
     try {
       const data = await loginRequest({
         email: form.email.trim(),
         password: form.password,
       });
-
       saveAuthSession({
         token: data.access_token,
         expiresIn: data.expires_in,
@@ -67,7 +58,6 @@ export default function LoginPage() {
         remembered: form.rememberMe,
         loggedAt: Date.now(),
       });
-
       navigate("/dashboard", { replace: true });
     } catch (error) {
       setApiError(error.message || "Login failed");
@@ -85,7 +75,10 @@ export default function LoginPage() {
       <main className="login-layout">
         <section className="brand-panel">
           <p className="eyebrow">VOICE TRAINER</p>
-          <h1>Speak with clarity, every day.</h1>
+          <h1>
+            Speak with<br />
+            <em>clarity, every day.</em>
+          </h1>
           <p className="subtitle">
             Practice English speaking with guided prompts, pronunciation scoring, and instant voice feedback.
           </p>
@@ -154,6 +147,32 @@ export default function LoginPage() {
 
             {apiError ? <p className="error-msg">{apiError}</p> : null}
           </form>
+
+          <p className="switch-link">
+            Don't have an account?
+            <a href="/register" onClick={(e) => { e.preventDefault(); navigate("/register"); }}>
+              Sign up free
+            </a>
+          </p>
+
+          <div style={{ marginTop: "12px", textAlign: "center" }}>
+            <a
+              href="/demo"
+              onClick={(e) => { e.preventDefault(); navigate("/demo"); }}
+              style={{
+                display: "inline-block",
+                padding: "10px 24px",
+                borderRadius: "10px",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#94a3b8",
+                fontSize: "0.88rem",
+                textDecoration: "none",
+                transition: "all 140ms ease",
+              }}
+            >
+              Dùng thử không cần đăng nhập →
+            </a>
+          </div>
         </section>
       </main>
     </div>
