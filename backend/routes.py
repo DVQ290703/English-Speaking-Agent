@@ -4,7 +4,17 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from .ai_services import normalize_history, run_langraph_agent, transcribe_audio
 from .database import get_connection
-from .schemas import ChatResponse, LoginRequest, LoginResponse, RegisterRequest, UserOut
+from .schemas import (
+    ChatResponse,
+    ConversationListResponse,
+    ConversationMessagesResponse,
+    ConversationOut,
+    LoginRequest,
+    LoginResponse,
+    MessageOut,
+    RegisterRequest,
+    UserOut,
+)
 from .security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
 
 
@@ -93,12 +103,12 @@ async def chat_respond(
     history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
+    conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Handle text or audio chat input and return both text and spoken feedback."""
-    _ = user_id
-
+    """Handle text or audio chat input, persist the turn, and return feedback."""
     user_input = (text or "").strip()
+    input_mode = "audio" if audio_file else "text"
 
     if not user_input and audio_file is not None:
         audio_bytes = await audio_file.read()
@@ -108,15 +118,155 @@ async def chat_respond(
     if not user_input:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
 
+    # ── Persist user message before calling the LLM ──────────────────────────
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if conversation_id:
+                cur.execute(
+                    "SELECT id::text FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
+                    (conversation_id, user_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+                conv_id = row[0]
+            else:
+                topic_id = None
+                if topic and topic.strip():
+                    cur.execute(
+                        "SELECT id::text FROM topics WHERE code = %s LIMIT 1",
+                        (topic.strip().lower(),),
+                    )
+                    t = cur.fetchone()
+                    if t:
+                        topic_id = t[0]
+                title = f"Chat on {topic.strip()}" if topic and topic.strip() else "New Conversation"
+                cur.execute(
+                    """
+                    INSERT INTO conversations (user_id, topic_id, title)
+                    VALUES (%s, %s, %s)
+                    RETURNING id::text
+                    """,
+                    (user_id, topic_id, title),
+                )
+                conv_id = cur.fetchone()[0]
+
+            cur.execute(
+                "SELECT COALESCE(MAX(turn_number), 0) + 1 FROM turns WHERE conversation_id = %s",
+                (conv_id,),
+            )
+            turn_number = cur.fetchone()[0]
+
+            cur.execute(
+                "INSERT INTO turns (conversation_id, turn_number) VALUES (%s, %s) RETURNING id::text",
+                (conv_id, turn_number),
+            )
+            turn_id = cur.fetchone()[0]
+
+            cur.execute(
+                """
+                INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
+                VALUES (%s, %s, 'user', %s, %s)
+                """,
+                (conv_id, turn_id, input_mode, user_input),
+            )
+
+    # ── Call LLM (outside DB connection) ─────────────────────────────────────
     conversation_history = normalize_history(history_raw=history, topic=topic)
     response_text, audio_base64 = run_langraph_agent(user_input=user_input, history=conversation_history)
+
+    # ── Persist assistant reply ───────────────────────────────────────────────
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
+                VALUES (%s, %s, 'assistant', 'text', %s)
+                """,
+                (conv_id, turn_id, response_text),
+            )
+            cur.execute(
+                "UPDATE conversations SET updated_at = NOW() WHERE id = %s",
+                (conv_id,),
+            )
 
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
         audio_base64=audio_base64,
         audio_mime="audio/mpeg",
+        conversation_id=conv_id,
     )
+
+
+@router.get("/api/conversations", response_model=ConversationListResponse)
+def list_conversations(user_id: str = Depends(get_current_user_id)):
+    """Return all conversations for the authenticated user, newest first."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id::text, title, status, started_at, ended_at, topic_id::text
+                FROM conversations
+                WHERE user_id = %s
+                ORDER BY started_at DESC
+                LIMIT 100
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    conversations = [
+        ConversationOut(
+            id=r[0],
+            title=r[1],
+            status=r[2],
+            started_at=r[3],
+            ended_at=r[4],
+            topic_id=r[5],
+        )
+        for r in rows
+    ]
+    return ConversationListResponse(conversations=conversations)
+
+
+@router.get("/api/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+def get_conversation_messages(
+    conversation_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return all messages in a conversation, in chronological order."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
+                (conversation_id, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+            cur.execute(
+                """
+                SELECT id::text, role, input_mode, text_content, created_at
+                FROM messages
+                WHERE conversation_id = %s
+                ORDER BY created_at ASC
+                """,
+                (conversation_id,),
+            )
+            rows = cur.fetchall()
+
+    messages = [
+        MessageOut(
+            id=r[0],
+            role=r[1],
+            input_mode=r[2],
+            text_content=r[3],
+            created_at=r[4],
+        )
+        for r in rows
+    ]
+    return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
 
 
 @router.post("/api/auth/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -32,3 +34,30 @@ class ChatResponse(BaseModel):
     response_text: str
     audio_base64: str = ""
     audio_mime: str = "audio/mpeg"
+    conversation_id: str
+
+
+class MessageOut(BaseModel):
+    id: str
+    role: str
+    input_mode: str | None
+    text_content: str | None
+    created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    id: str
+    title: str | None
+    status: str
+    started_at: datetime
+    ended_at: datetime | None
+    topic_id: str | None
+
+
+class ConversationListResponse(BaseModel):
+    conversations: list[ConversationOut]
+
+
+class ConversationMessagesResponse(BaseModel):
+    conversation_id: str
+    messages: list[MessageOut]
