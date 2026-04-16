@@ -12,6 +12,10 @@ build/
 .pytest_cache/
 .mypy_cache/
 
+# Node
+node_modules/
+dist/
+
 # OS
 .DS_Store
 
@@ -37,3 +41,4 @@ build/
 # AI logs — tracked structure, ignored content
 .ai-log/*.jsonl
 data/
+ uv.lock
