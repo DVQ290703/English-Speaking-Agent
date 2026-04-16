@@ -14,16 +14,23 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass
+    env_path = Path(".env")
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip())
 
-SERVER_URL = os.environ.get("AI_LOG_SERVER", "")
-API_KEY = os.environ.get("AI_LOG_API_KEY", "")
+SERVER_URL = os.environ.get("AI_LOG_SUBMIT_URL") or os.environ.get("AI_LOG_SERVER", "")
+API_KEY = os.environ.get("AI_LOG_SUBMIT_KEY") or os.environ.get("AI_LOG_API_KEY", "")
 LOG_FILE = Path(os.environ.get("AI_LOG_DIR", ".ai-log")) / "session.jsonl"
 
 
 def main():
     if not SERVER_URL:
-        print("[ai-log] AI_LOG_SERVER not set — skipping submission.", file=sys.stderr)
+        print("[ai-log] Missing AI_LOG_SUBMIT_URL (or AI_LOG_SERVER) — skipping submission.", file=sys.stderr)
         sys.exit(0)
 
     if not LOG_FILE.exists() or LOG_FILE.stat().st_size == 0:
