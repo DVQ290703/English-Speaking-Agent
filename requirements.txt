@@ -17,3 +17,4 @@ pydantic[email]
 python-multipart
 langsmith[claude-agent-sdk]
 sqlalchemy
+ipykernel
