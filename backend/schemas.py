@@ -34,6 +34,8 @@ class ChatResponse(BaseModel):
     response_text: str
     audio_base64: str = ""
     audio_mime: str = "audio/mpeg"
+    user_audio_url: str | None = None
+    assistant_audio_url: str | None = None
     conversation_id: str
 
 

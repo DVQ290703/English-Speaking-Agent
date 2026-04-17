@@ -87,6 +87,26 @@ def synthesize_audio_base64(response_text: str) -> str:
         return ""
 
 
+def synthesize_audio_bytes(response_text: str) -> bytes:
+    """Generate TTS audio and return raw bytes (for Minio storage)."""
+    try:
+        from src.services.elevenlabs_tts import ElevenLabsTTS
+
+        tts_service = ElevenLabsTTS(output_dir="outputs")
+        audio_path = tts_service.convert_text_to_speech(response_text)
+
+        if not audio_path:
+            return b""
+
+        audio_file = Path(audio_path)
+        if not audio_file.exists():
+            return b""
+
+        return audio_file.read_bytes()
+    except Exception:
+        return b""
+
+
 def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tuple[str, str]:
     """Run the main conversation pipeline and always return a text response."""
     try:

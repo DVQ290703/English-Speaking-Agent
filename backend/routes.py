@@ -2,7 +2,7 @@ import psycopg2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
 
-from .ai_services import normalize_history, run_langraph_agent, transcribe_audio
+from .ai_services import normalize_history, run_langraph_agent, synthesize_audio_bytes, transcribe_audio
 from .database import get_connection
 from .schemas import (
     ChatResponse,
@@ -16,6 +16,7 @@ from .schemas import (
     UserOut,
 )
 from .security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
+from .storage import store_user_audio, store_assistant_audio
 
 
 router = APIRouter()
@@ -106,14 +107,19 @@ async def chat_respond(
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Handle text or audio chat input, persist the turn, and return feedback."""
+    """Handle text or audio chat input, persist the turn, and return feedback with Minio audio storage."""
     user_input = (text or "").strip()
     input_mode = "audio" if audio_file else "text"
+    audio_bytes_received = b""
 
-    if not user_input and audio_file is not None:
-        audio_bytes = await audio_file.read()
-        transcript = transcribe_audio(audio_bytes, filename=audio_file.filename or "recording.webm")
-        user_input = transcript.strip() if transcript else "I sent an audio message."
+    # ── Read and store audio file if provided ────────────────────────────────
+    # Audio is stored regardless of whether text was provided or transcribed
+    if audio_file is not None:
+        audio_bytes_received = await audio_file.read()
+        # If no text provided, transcribe the audio
+        if not user_input:
+            transcript = transcribe_audio(audio_bytes_received, filename=audio_file.filename or "recording.webm")
+            user_input = transcript.strip() if transcript else "I sent an audio message."
 
     if not user_input:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
@@ -167,9 +173,24 @@ async def chat_respond(
                 """
                 INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
                 VALUES (%s, %s, 'user', %s, %s)
+                RETURNING id::text
                 """,
                 (conv_id, turn_id, input_mode, user_input),
             )
+            user_message_id = cur.fetchone()[0]
+
+    # ── Store user audio if provided ─────────────────────────────────────────
+    user_audio_url = None
+    if audio_bytes_received:
+        try:
+            _, user_audio_url = store_user_audio(
+                conversation_id=conv_id,
+                message_id=user_message_id,
+                audio_bytes=audio_bytes_received,
+                filename=audio_file.filename if audio_file else None,
+            )
+        except Exception:
+            pass  # Log error but don't fail the chat request
 
     # ── Call LLM (outside DB connection) ─────────────────────────────────────
     conversation_history = normalize_history(history_raw=history, topic=topic)
@@ -182,19 +203,37 @@ async def chat_respond(
                 """
                 INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
                 VALUES (%s, %s, 'assistant', 'text', %s)
+                RETURNING id::text
                 """,
                 (conv_id, turn_id, response_text),
             )
+            assistant_message_id = cur.fetchone()[0]
             cur.execute(
                 "UPDATE conversations SET updated_at = NOW() WHERE id = %s",
                 (conv_id,),
             )
+
+    # ── Store assistant audio and generate URL ───────────────────────────────
+    assistant_audio_url = None
+    if audio_base64:
+        try:
+            import base64
+            audio_bytes = base64.b64decode(audio_base64)
+            _, assistant_audio_url = store_assistant_audio(
+                conversation_id=conv_id,
+                message_id=assistant_message_id,
+                audio_bytes=audio_bytes,
+            )
+        except Exception:
+            pass  # Log error but don't fail the chat request
 
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
         audio_base64=audio_base64,
         audio_mime="audio/mpeg",
+        user_audio_url=user_audio_url,
+        assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
     )
 
