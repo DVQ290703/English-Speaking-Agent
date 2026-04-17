@@ -11,6 +11,9 @@ export interface ChatRespondResult {
   audio_base64?: string;
   audio_mime?: string;
   user_input?: string;
+  user_audio_url?: string | null;
+  assistant_audio_url?: string | null;
+  conversation_id?: string;
 }
 
 export function chatRespond(params: ChatRespondParams): Promise<ChatRespondResult>;
