@@ -21,5 +21,24 @@ dist/
 
 # AI logs — tracked structure, ignored content
 .ai-log/*.jsonl
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# AI logs — tracked structure, ignored content
+.ai-log/*.jsonl
 data/
  uv.lock
