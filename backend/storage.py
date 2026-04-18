@@ -81,6 +81,16 @@ def _upload(*, object_key: str, content: bytes, content_type: str) -> None:
     )
 
 
+def delete_object(object_key: str) -> None:
+    """Delete an object from MinIO. Silently ignores missing objects."""
+    client = get_minio_client()
+    try:
+        client.remove_object(MINIO_BUCKET, object_key)
+    except S3Error as exc:
+        if exc.code != "NoSuchKey":
+            raise
+
+
 def get_presigned_url(object_key: str, expires: timedelta = timedelta(hours=1)) -> str:
     """Generate a short-lived presigned GET URL. The bucket remains private."""
     client = get_minio_client()
@@ -94,12 +104,12 @@ def store_user_audio(
     audio_bytes: bytes,
     filename: str | None = None,
     content_type: str | None = None,
-) -> tuple[str, str, str]:
+) -> tuple[str, str]:
     """
     Upload user audio to MinIO.
 
     Returns:
-        (object_key, presigned_url, resolved_mime_type)
+        (object_key, resolved_mime_type)
     Raises on failure — callers are responsible for error handling.
     """
     extension, mime_type = _derive_extension(filename, content_type)
@@ -110,8 +120,7 @@ def store_user_audio(
         extension=extension,
     )
     _upload(object_key=object_key, content=audio_bytes, content_type=mime_type)
-    presigned_url = get_presigned_url(object_key)
-    return object_key, presigned_url, mime_type
+    return object_key, mime_type
 
 
 def store_assistant_audio(
@@ -119,12 +128,12 @@ def store_assistant_audio(
     conversation_id: str,
     message_id: str,
     audio_bytes: bytes,
-) -> tuple[str, str]:
+) -> str:
     """
     Upload assistant TTS audio (always mp3) to MinIO.
 
     Returns:
-        (object_key, presigned_url)
+        object_key
     Raises on failure — callers are responsible for error handling.
     """
     object_key = build_object_key(
@@ -134,5 +143,4 @@ def store_assistant_audio(
         extension="mp3",
     )
     _upload(object_key=object_key, content=audio_bytes, content_type="audio/mpeg")
-    presigned_url = get_presigned_url(object_key)
-    return object_key, presigned_url
+    return object_key
