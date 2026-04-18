@@ -423,13 +423,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
         const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
         
-        // audio_base64 is the real-time delivery format; assistant_audio_url
-        // (MinIO presigned) is only present for conversation history replay.
+        // audio_base64 is the real-time delivery format — always use it for
+        // immediate playback. assistant_audio_url is a MinIO presigned URL with
+        // a Docker-internal hostname (minio:9000) that the browser cannot reach;
+        // it is only useful for conversation history replay via the messages API.
         let audioUrl: string | undefined;
-        if (data.assistant_audio_url) {
-          audioUrl = data.assistant_audio_url;
-        } else if (data.audio_base64) {
+        if (data.audio_base64) {
           audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
+        } else if (data.assistant_audio_url) {
+          audioUrl = data.assistant_audio_url;
         }
         
         const audioToPlay = audioUrl;
