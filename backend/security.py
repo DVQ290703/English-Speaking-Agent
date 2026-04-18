@@ -25,7 +25,7 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str):
+def create_access_token(user_id: str, email: str) -> tuple[str, int]:
     """Generate a signed JWT and return it with its remaining lifetime in seconds."""
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(minutes=JWT_EXPIRE_MINUTES)
