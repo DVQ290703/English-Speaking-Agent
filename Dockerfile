@@ -37,8 +37,7 @@ COPY --from=builder /venv /venv
 
 WORKDIR /app
 
-COPY backend /app/backend
-COPY src     /app/src
+COPY app /app/app
 
 ENV PATH="/venv/bin:$PATH" \
     PYTHONPATH=/app \
@@ -49,4 +48,4 @@ EXPOSE 8000
 
 USER app
 
-CMD ["uvicorn", "backend.auth_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
