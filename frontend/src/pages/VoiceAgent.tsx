@@ -423,7 +423,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
         const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
         
-        // Prefer Minio URL over base64, construct base64 URL as fallback
+        // audio_base64 is the real-time delivery format; assistant_audio_url
+        // (MinIO presigned) is only present for conversation history replay.
         let audioUrl: string | undefined;
         if (data.assistant_audio_url) {
           audioUrl = data.assistant_audio_url;
@@ -439,7 +440,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             message.id === userId
               ? {
                   ...message,
-                  userAudioUrl: data.user_audio_url || message.userAudioUrl,
+                  // Keep the local blob URL (created before the API call).
+                  // MinIO presigned URLs use the internal Docker hostname and
+                  // are unreachable from the browser.
+                  userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
                 }
               : message.id === typingId
                 ? {
