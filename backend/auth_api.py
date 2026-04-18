@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,11 +10,20 @@ from backend.database import init_db_pool
 from backend.routes import router
 from backend.storage import init_storage
 
+_LOG_DIR = os.getenv("LOG_DIR", "logs")
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+os.makedirs(_LOG_DIR, exist_ok=True)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, _LOG_LEVEL, logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(f"{_LOG_DIR}/backend.log", encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger(__name__)
+logger.info("Log level set to %s, writing to %s/backend.log", _LOG_LEVEL, _LOG_DIR)
 
 
 @asynccontextmanager
@@ -22,7 +32,9 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing DB pool and storage...")
     init_db_pool()
     init_storage()
+    logger.info("Startup complete — ready to accept requests")
     yield
+    logger.info("Shutting down")
 
 
 app = FastAPI(title="Voice Agent Auth API", version="1.0.0", lifespan=lifespan)

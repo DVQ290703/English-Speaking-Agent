@@ -1,8 +1,12 @@
+import logging
+
 from langgraph.graph import END, StateGraph
 
 from src.services.elevenlabs_tts import ElevenLabsTTS
 from src.services.groq_llm import GroqLLMService
 from .state import AgentState
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceAgentPipeline:
@@ -15,10 +19,12 @@ class VoiceAgentPipeline:
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response and update the running conversation history."""
+        logger.debug("respond_node start input=%r", state["user_input"][:80])
         response_text = self.llm_service.generate_response(
             user_input=state["user_input"],
             history=state.get("history", []),
         )
+        logger.debug("respond_node done response=%r", response_text[:80])
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
             f"Assistant: {response_text}",
@@ -27,7 +33,9 @@ class VoiceAgentPipeline:
 
     def _tts_node(self, state: AgentState) -> AgentState:
         """Convert the generated reply into speech and store the raw bytes in state."""
+        logger.debug("tts_node start text=%r", state["response_text"][:80])
         audio_bytes = self.tts_service.convert_text_to_speech(state["response_text"])
+        logger.debug("tts_node done audio_bytes=%d", len(audio_bytes))
         return {**state, "audio_bytes": audio_bytes}
 
     def _build_graph(self):
