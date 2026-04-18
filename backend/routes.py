@@ -1,5 +1,6 @@
 import base64
 import logging
+import uuid as _uuid
 
 import psycopg2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -19,17 +20,27 @@ from .schemas import (
     UserOut,
 )
 from .security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
-from .storage import get_presigned_url, store_assistant_audio, store_user_audio
+from .storage import (
+    build_object_key,
+    delete_object,
+    _upload,
+    get_presigned_url,
+    store_assistant_audio,
+    store_user_audio,
+)
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/api")
+
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Internal helpers
 # ---------------------------------------------------------------------------
 
-def _persist_audio_asset(
+def _insert_audio_asset(
+    cur,
     *,
     message_id: str,
     audio_type: str,
@@ -37,30 +48,37 @@ def _persist_audio_asset(
     mime_type: str,
     size_bytes: int,
 ) -> None:
-    """Insert an audio_assets row. Separate connection so it can be called after MinIO upload."""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO audio_assets
-                    (message_id, audio_type, storage_provider, storage_key, mime_type, size_bytes)
-                VALUES (%s, %s, 'minio', %s, %s, %s)
-                """,
-                (message_id, audio_type, object_key, mime_type, size_bytes),
-            )
+    """Insert one audio_assets row using an already-open cursor.
+
+    Called within an existing connection block so the INSERT is part of the
+    same transaction as the surrounding message writes — no extra connection needed.
+    """
+    cur.execute(
+        """
+        INSERT INTO audio_assets
+            (message_id, audio_type, storage_provider, storage_key, mime_type, size_bytes)
+        VALUES (%s, %s, 'minio', %s, %s, %s)
+        """,
+        (message_id, audio_type, object_key, mime_type, size_bytes),
+    )
+
+
+def _validate_uuid(value: str, field: str) -> None:
+    """Raise HTTP 400 when *value* is not a valid UUID string."""
+    try:
+        _uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field}: must be a UUID",
+        )
 
 
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
 
-@router.get("/health")
-def health_check():
-    """Simple readiness endpoint for local checks and container health probes."""
-    return {"status": "ok"}
-
-
-@router.post("/api/auth/login", response_model=LoginResponse)
+@router.post("/auth/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
     """Authenticate a user and return a signed access token plus profile data."""
     with get_connection() as conn:
@@ -77,27 +95,21 @@ def login(payload: LoginRequest):
             row = cur.fetchone()
 
     if not row:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password...")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     user_id, email, password_hash, display_name, english_level = row
     if not verify_password(payload.password, password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong Password...")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     access_token, expires_in = create_access_token(user_id=user_id, email=email)
-
     return LoginResponse(
         access_token=access_token,
         expires_in=expires_in,
-        user=UserOut(
-            id=user_id,
-            email=email,
-            display_name=display_name,
-            english_level=english_level,
-        ),
+        user=UserOut(id=user_id, email=email, display_name=display_name, english_level=english_level),
     )
 
 
-@router.get("/api/auth/me", response_model=UserOut)
+@router.get("/auth/me", response_model=UserOut)
 def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Return the currently authenticated user's public profile."""
     claims = decode_token(credentials.credentials)
@@ -120,30 +132,21 @@ def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     user_id, email, display_name, english_level = row
-    return UserOut(
-        id=user_id,
-        email=email,
-        display_name=display_name,
-        english_level=english_level,
-    )
+    return UserOut(id=user_id, email=email, display_name=display_name, english_level=english_level)
 
 
-@router.post("/api/auth/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/auth/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest):
     """Create a new user account and return an access token for immediate login."""
     email = payload.email.lower().strip()
-    password = payload.password.strip()
-    display_name = payload.display_name.strip() if payload.display_name else None
-    english_level = payload.english_level.strip() if payload.english_level else None
-
-    if not display_name:
-        display_name = email.split("@", 1)[0]
-
-    if not email or not password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and password are required")
-
+    # Validate password length before any processing — do not strip passwords,
+    # as intentional leading/trailing whitespace should be preserved.
+    password = payload.password
     if len(password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must have at least 8 characters")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+
+    display_name = (payload.display_name or "").strip() or email.split("@", 1)[0]
+    english_level = (payload.english_level or "").strip() or None
 
     password_hash = hash_password(password)
 
@@ -159,7 +162,6 @@ def register(payload: RegisterRequest):
                     (email, password_hash, display_name, english_level),
                 )
                 row = cur.fetchone()
-                conn.commit()
             except psycopg2.errors.UniqueViolation:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
@@ -168,16 +170,10 @@ def register(payload: RegisterRequest):
 
     user_id, email, display_name, english_level = row
     access_token, expires_in = create_access_token(user_id=user_id, email=email)
-
     return LoginResponse(
         access_token=access_token,
         expires_in=expires_in,
-        user=UserOut(
-            id=user_id,
-            email=email,
-            display_name=display_name,
-            english_level=english_level,
-        ),
+        user=UserOut(id=user_id, email=email, display_name=display_name, english_level=english_level),
     )
 
 
@@ -185,8 +181,8 @@ def register(payload: RegisterRequest):
 # Chat
 # ---------------------------------------------------------------------------
 
-@router.post("/api/chat/respond", response_model=ChatResponse)
-async def chat_respond(
+@router.post("/chat/respond", response_model=ChatResponse)
+def chat_respond(
     text: str | None = Form(default=None),
     history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
@@ -194,22 +190,37 @@ async def chat_respond(
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Handle text or audio input, persist the turn, store audio in MinIO, and return the AI response."""
+    """Handle text or audio input, persist the turn, store audio in MinIO, return the AI response.
+
+    This is a synchronous route — FastAPI runs it in a thread-pool worker so
+    blocking calls (DB, LLM, MinIO) never stall the event loop.
+    """
     user_input = (text or "").strip()
     input_mode = "audio" if audio_file else "text"
     audio_bytes_received = b""
 
-    # ── Read and transcribe uploaded audio ───────────────────────────────────
+    # ── Read and optionally transcribe the uploaded audio ────────────────────
     if audio_file is not None:
-        audio_bytes_received = await audio_file.read()
+        audio_bytes_received = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
+        if len(audio_bytes_received) > _MAX_AUDIO_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Audio file exceeds 25 MB limit",
+            )
         if not user_input:
-            transcript = transcribe_audio(audio_bytes_received, filename=audio_file.filename or "recording.webm")
+            transcript = transcribe_audio(
+                audio_bytes_received,
+                filename=audio_file.filename or "recording.webm",
+            )
             user_input = transcript.strip() if transcript else "I sent an audio message."
 
     if not user_input:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
 
-    # ── Persist user message ─────────────────────────────────────────────────
+    if conversation_id:
+        _validate_uuid(conversation_id, "conversation_id")
+
+    # ── Block 1: persist conversation / turn / user message ──────────────────
     with get_connection() as conn:
         with conn.cursor() as cur:
             if conversation_id:
@@ -223,21 +234,18 @@ async def chat_respond(
                 conv_id = row[0]
             else:
                 topic_id = None
-                if topic and topic.strip():
+                topic_clean = topic.strip() if topic else ""
+                if topic_clean:
                     cur.execute(
                         "SELECT id::text FROM topics WHERE code = %s LIMIT 1",
-                        (topic.strip().lower(),),
+                        (topic_clean.lower(),),
                     )
                     t = cur.fetchone()
                     if t:
                         topic_id = t[0]
-                title = f"Chat on {topic.strip()}" if topic and topic.strip() else "New Conversation"
+                title = f"Chat on {topic_clean}" if topic_clean else "New Conversation"
                 cur.execute(
-                    """
-                    INSERT INTO conversations (user_id, topic_id, title)
-                    VALUES (%s, %s, %s)
-                    RETURNING id::text
-                    """,
+                    "INSERT INTO conversations (user_id, topic_id, title) VALUES (%s, %s, %s) RETURNING id::text",
                     (user_id, topic_id, title),
                 )
                 conv_id = cur.fetchone()[0]
@@ -264,38 +272,42 @@ async def chat_respond(
             )
             user_message_id = cur.fetchone()[0]
 
-    # ── Store user audio → record in audio_assets ────────────────────────────
-    user_audio_url: str | None = None
+    # ── Upload user audio to MinIO (outside DB transaction) ──────────────────
+    user_object_key: str | None = None
+    user_mime_type: str = "audio/webm"
     if audio_bytes_received:
         try:
-            object_key, user_audio_url, mime_type = store_user_audio(
+            user_object_key, user_mime_type = store_user_audio(
                 conversation_id=conv_id,
                 message_id=user_message_id,
                 audio_bytes=audio_bytes_received,
                 filename=audio_file.filename if audio_file else None,
                 content_type=audio_file.content_type if audio_file else None,
             )
-            _persist_audio_asset(
-                message_id=user_message_id,
-                audio_type="user_input",
-                object_key=object_key,
-                mime_type=mime_type,
-                size_bytes=len(audio_bytes_received),
-            )
         except Exception:
-            logger.exception(
-                "Failed to store user audio for message %s (conv %s)",
-                user_message_id,
-                conv_id,
-            )
+            logger.exception("MinIO upload failed for user audio (msg %s)", user_message_id)
 
-    # ── Call the agent (outside any DB connection) ────────────────────────────
+    # ── LLM + TTS (outside DB, most expensive step) ───────────────────────────
     conversation_history = normalize_history(history_raw=history, topic=topic)
     response_text, response_audio_bytes = run_langraph_agent(
         user_input=user_input, history=conversation_history
     )
 
-    # ── Persist assistant message ─────────────────────────────────────────────
+    # ── Upload assistant audio to MinIO (outside DB transaction) ─────────────
+    assistant_object_key: str | None = None
+    if response_audio_bytes:
+        try:
+            assistant_object_key = store_assistant_audio(
+                conversation_id=conv_id,
+                message_id="pending",   # placeholder — real ID inserted below
+                audio_bytes=response_audio_bytes,
+            )
+        except Exception:
+            logger.exception("MinIO upload failed for assistant audio (conv %s)", conv_id)
+
+    # ── Block 2: persist assistant message + both audio_asset records ─────────
+    # Batching all remaining writes into one connection/transaction keeps the
+    # DB round-trip count at 2 per turn (down from 4) and ensures consistency.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -307,44 +319,69 @@ async def chat_respond(
                 (conv_id, turn_id, response_text),
             )
             assistant_message_id = cur.fetchone()[0]
-            cur.execute(
-                "UPDATE conversations SET updated_at = NOW() WHERE id = %s",
-                (conv_id,),
-            )
 
-    # ── Store assistant audio → record in audio_assets ───────────────────────
-    if response_audio_bytes:
+            cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
+
+            if user_object_key:
+                _insert_audio_asset(
+                    cur,
+                    message_id=user_message_id,
+                    audio_type="user_input",
+                    object_key=user_object_key,
+                    mime_type=user_mime_type,
+                    size_bytes=len(audio_bytes_received),
+                )
+
+            if assistant_object_key:
+                # Re-upload under the deterministic key that includes the real message ID,
+                # then delete the "pending" placeholder to avoid orphaned objects.
+                pending_key = assistant_object_key
+                real_key = build_object_key(
+                    conversation_id=conv_id,
+                    message_id=assistant_message_id,
+                    audio_type="assistant_tts",
+                    extension="mp3",
+                )
+                try:
+                    _upload(object_key=real_key, content=response_audio_bytes, content_type="audio/mpeg")
+                    delete_object(pending_key)
+                    assistant_object_key = real_key
+                except Exception:
+                    logger.exception("Failed to re-key assistant audio to %s", real_key)
+
+                _insert_audio_asset(
+                    cur,
+                    message_id=assistant_message_id,
+                    audio_type="assistant_tts",
+                    object_key=assistant_object_key,
+                    mime_type="audio/mpeg",
+                    size_bytes=len(response_audio_bytes),
+                )
+
+    # ── Generate presigned URLs for the response ──────────────────────────────
+    user_audio_url: str | None = None
+    if user_object_key:
         try:
-            object_key, _ = store_assistant_audio(
-                conversation_id=conv_id,
-                message_id=assistant_message_id,
-                audio_bytes=response_audio_bytes,
-            )
-            _persist_audio_asset(
-                message_id=assistant_message_id,
-                audio_type="assistant_tts",
-                object_key=object_key,
-                mime_type="audio/mpeg",
-                size_bytes=len(response_audio_bytes),
-            )
+            user_audio_url = get_presigned_url(user_object_key)
         except Exception:
-            logger.exception(
-                "Failed to store assistant audio for message %s (conv %s)",
-                assistant_message_id,
-                conv_id,
-            )
+            logger.exception("Failed to generate presigned URL for user audio (msg %s)", user_message_id)
+
+    assistant_audio_url: str | None = None
+    if assistant_object_key:
+        try:
+            assistant_audio_url = get_presigned_url(assistant_object_key)
+        except Exception:
+            logger.exception("Failed to generate presigned URL for assistant audio (msg %s)", assistant_message_id)
 
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
-        # audio_base64 is the correct delivery mechanism for real-time playback.
-        # MinIO presigned URLs are signed against the internal Docker hostname
-        # (minio:9000) and are unreachable from the browser — returning them
-        # causes audio.onerror to fire and the browser falls back to Web Speech.
+        # audio_base64 is the real-time delivery format for immediate playback.
+        # user_audio_url / assistant_audio_url are for history replay via MinIO.
         audio_base64=base64.b64encode(response_audio_bytes).decode("utf-8") if response_audio_bytes else "",
         audio_mime="audio/mpeg",
-        user_audio_url=None,        # local blob URL already held by frontend is used for replay
-        assistant_audio_url=None,   # presigned URLs served via conversation history endpoint only
+        user_audio_url=user_audio_url,
+        assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
     )
 
@@ -353,7 +390,7 @@ async def chat_respond(
 # Conversations
 # ---------------------------------------------------------------------------
 
-@router.get("/api/conversations", response_model=ConversationListResponse)
+@router.get("/conversations", response_model=ConversationListResponse)
 def list_conversations(user_id: str = Depends(get_current_user_id)):
     """Return all conversations for the authenticated user, newest first."""
     with get_connection() as conn:
@@ -371,25 +408,20 @@ def list_conversations(user_id: str = Depends(get_current_user_id)):
             rows = cur.fetchall()
 
     conversations = [
-        ConversationOut(
-            id=r[0],
-            title=r[1],
-            status=r[2],
-            started_at=r[3],
-            ended_at=r[4],
-            topic_id=r[5],
-        )
+        ConversationOut(id=r[0], title=r[1], status=r[2], started_at=r[3], ended_at=r[4], topic_id=r[5])
         for r in rows
     ]
     return ConversationListResponse(conversations=conversations)
 
 
-@router.get("/api/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+@router.get("/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
 def get_conversation_messages(
     conversation_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
     """Return all messages in a conversation with fresh presigned audio URLs."""
+    _validate_uuid(conversation_id, "conversation_id")
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -426,15 +458,13 @@ def get_conversation_messages(
             except Exception:
                 logger.exception("Failed to generate presigned URL for key %s", storage_key)
 
-        messages.append(
-            MessageOut(
-                id=msg_id,
-                role=role,
-                input_mode=input_mode,
-                text_content=text_content,
-                created_at=created_at,
-                audio_url=audio_url,
-            )
-        )
+        messages.append(MessageOut(
+            id=msg_id,
+            role=role,
+            input_mode=input_mode,
+            text_content=text_content,
+            created_at=created_at,
+            audio_url=audio_url,
+        ))
 
     return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
