@@ -1,8 +1,11 @@
+import base64
+import logging
+
 import psycopg2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
 
-from .ai_services import normalize_history, run_langraph_agent, synthesize_audio_bytes, transcribe_audio
+from .ai_services import normalize_history, run_langraph_agent, transcribe_audio
 from .database import get_connection
 from .schemas import (
     ChatResponse,
@@ -16,11 +19,40 @@ from .schemas import (
     UserOut,
 )
 from .security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
-from .storage import store_user_audio, store_assistant_audio
+from .storage import get_presigned_url, store_assistant_audio, store_user_audio
 
-
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _persist_audio_asset(
+    *,
+    message_id: str,
+    audio_type: str,
+    object_key: str,
+    mime_type: str,
+    size_bytes: int,
+) -> None:
+    """Insert an audio_assets row. Separate connection so it can be called after MinIO upload."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO audio_assets
+                    (message_id, audio_type, storage_provider, storage_key, mime_type, size_bytes)
+                VALUES (%s, %s, 'minio', %s, %s, %s)
+                """,
+                (message_id, audio_type, object_key, mime_type, size_bytes),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 
 @router.get("/health")
 def health_check():
@@ -42,7 +74,6 @@ def login(payload: LoginRequest):
                 """,
                 (payload.email.lower(),),
             )
-
             row = cur.fetchone()
 
     if not row:
@@ -83,7 +114,6 @@ def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
                 """,
                 (user_id,),
             )
-
             row = cur.fetchone()
 
     if not row:
@@ -98,6 +128,63 @@ def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
     )
 
 
+@router.post("/api/auth/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterRequest):
+    """Create a new user account and return an access token for immediate login."""
+    email = payload.email.lower().strip()
+    password = payload.password.strip()
+    display_name = payload.display_name.strip() if payload.display_name else None
+    english_level = payload.english_level.strip() if payload.english_level else None
+
+    if not display_name:
+        display_name = email.split("@", 1)[0]
+
+    if not email or not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and password are required")
+
+    if len(password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must have at least 8 characters")
+
+    password_hash = hash_password(password)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO users (email, password_hash, display_name, english_level)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id::text, email::text, display_name, english_level;
+                    """,
+                    (email, password_hash, display_name, english_level),
+                )
+                row = cur.fetchone()
+                conn.commit()
+            except psycopg2.errors.UniqueViolation:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User registration failed")
+
+    user_id, email, display_name, english_level = row
+    access_token, expires_in = create_access_token(user_id=user_id, email=email)
+
+    return LoginResponse(
+        access_token=access_token,
+        expires_in=expires_in,
+        user=UserOut(
+            id=user_id,
+            email=email,
+            display_name=display_name,
+            english_level=english_level,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+
 @router.post("/api/chat/respond", response_model=ChatResponse)
 async def chat_respond(
     text: str | None = Form(default=None),
@@ -107,16 +194,14 @@ async def chat_respond(
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Handle text or audio chat input, persist the turn, and return feedback with Minio audio storage."""
+    """Handle text or audio input, persist the turn, store audio in MinIO, and return the AI response."""
     user_input = (text or "").strip()
     input_mode = "audio" if audio_file else "text"
     audio_bytes_received = b""
 
-    # ── Read and store audio file if provided ────────────────────────────────
-    # Audio is stored regardless of whether text was provided or transcribed
+    # ── Read and transcribe uploaded audio ───────────────────────────────────
     if audio_file is not None:
         audio_bytes_received = await audio_file.read()
-        # If no text provided, transcribe the audio
         if not user_input:
             transcript = transcribe_audio(audio_bytes_received, filename=audio_file.filename or "recording.webm")
             user_input = transcript.strip() if transcript else "I sent an audio message."
@@ -124,7 +209,7 @@ async def chat_respond(
     if not user_input:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
 
-    # ── Persist user message before calling the LLM ──────────────────────────
+    # ── Persist user message ─────────────────────────────────────────────────
     with get_connection() as conn:
         with conn.cursor() as cur:
             if conversation_id:
@@ -179,24 +264,38 @@ async def chat_respond(
             )
             user_message_id = cur.fetchone()[0]
 
-    # ── Store user audio if provided ─────────────────────────────────────────
-    user_audio_url = None
+    # ── Store user audio → record in audio_assets ────────────────────────────
+    user_audio_url: str | None = None
     if audio_bytes_received:
         try:
-            _, user_audio_url = store_user_audio(
+            object_key, user_audio_url, mime_type = store_user_audio(
                 conversation_id=conv_id,
                 message_id=user_message_id,
                 audio_bytes=audio_bytes_received,
                 filename=audio_file.filename if audio_file else None,
+                content_type=audio_file.content_type if audio_file else None,
+            )
+            _persist_audio_asset(
+                message_id=user_message_id,
+                audio_type="user_input",
+                object_key=object_key,
+                mime_type=mime_type,
+                size_bytes=len(audio_bytes_received),
             )
         except Exception:
-            pass  # Log error but don't fail the chat request
+            logger.exception(
+                "Failed to store user audio for message %s (conv %s)",
+                user_message_id,
+                conv_id,
+            )
 
-    # ── Call LLM (outside DB connection) ─────────────────────────────────────
+    # ── Call the agent (outside any DB connection) ────────────────────────────
     conversation_history = normalize_history(history_raw=history, topic=topic)
-    response_text, audio_base64 = run_langraph_agent(user_input=user_input, history=conversation_history)
+    response_text, response_audio_bytes = run_langraph_agent(
+        user_input=user_input, history=conversation_history
+    )
 
-    # ── Persist assistant reply ───────────────────────────────────────────────
+    # ── Persist assistant message ─────────────────────────────────────────────
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -213,30 +312,46 @@ async def chat_respond(
                 (conv_id,),
             )
 
-    # ── Store assistant audio and generate URL ───────────────────────────────
-    assistant_audio_url = None
-    if audio_base64:
+    # ── Store assistant audio → record in audio_assets ───────────────────────
+    if response_audio_bytes:
         try:
-            import base64
-            audio_bytes = base64.b64decode(audio_base64)
-            _, assistant_audio_url = store_assistant_audio(
+            object_key, _ = store_assistant_audio(
                 conversation_id=conv_id,
                 message_id=assistant_message_id,
-                audio_bytes=audio_bytes,
+                audio_bytes=response_audio_bytes,
+            )
+            _persist_audio_asset(
+                message_id=assistant_message_id,
+                audio_type="assistant_tts",
+                object_key=object_key,
+                mime_type="audio/mpeg",
+                size_bytes=len(response_audio_bytes),
             )
         except Exception:
-            pass  # Log error but don't fail the chat request
+            logger.exception(
+                "Failed to store assistant audio for message %s (conv %s)",
+                assistant_message_id,
+                conv_id,
+            )
 
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
-        audio_base64=audio_base64,
+        # audio_base64 is the correct delivery mechanism for real-time playback.
+        # MinIO presigned URLs are signed against the internal Docker hostname
+        # (minio:9000) and are unreachable from the browser — returning them
+        # causes audio.onerror to fire and the browser falls back to Web Speech.
+        audio_base64=base64.b64encode(response_audio_bytes).decode("utf-8") if response_audio_bytes else "",
         audio_mime="audio/mpeg",
-        user_audio_url=user_audio_url,
-        assistant_audio_url=assistant_audio_url,
+        user_audio_url=None,        # local blob URL already held by frontend is used for replay
+        assistant_audio_url=None,   # presigned URLs served via conversation history endpoint only
         conversation_id=conv_id,
     )
 
+
+# ---------------------------------------------------------------------------
+# Conversations
+# ---------------------------------------------------------------------------
 
 @router.get("/api/conversations", response_model=ConversationListResponse)
 def list_conversations(user_id: str = Depends(get_current_user_id)):
@@ -274,7 +389,7 @@ def get_conversation_messages(
     conversation_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return all messages in a conversation, in chronological order."""
+    """Return all messages in a conversation with fresh presigned audio URLs."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -286,76 +401,40 @@ def get_conversation_messages(
 
             cur.execute(
                 """
-                SELECT id::text, role, input_mode, text_content, created_at
-                FROM messages
-                WHERE conversation_id = %s
-                ORDER BY created_at ASC
+                SELECT
+                    m.id::text,
+                    m.role,
+                    m.input_mode,
+                    m.text_content,
+                    m.created_at,
+                    aa.storage_key
+                FROM messages m
+                LEFT JOIN audio_assets aa ON aa.message_id = m.id
+                WHERE m.conversation_id = %s
+                ORDER BY m.created_at ASC
                 """,
                 (conversation_id,),
             )
             rows = cur.fetchall()
 
-    messages = [
-        MessageOut(
-            id=r[0],
-            role=r[1],
-            input_mode=r[2],
-            text_content=r[3],
-            created_at=r[4],
-        )
-        for r in rows
-    ]
-    return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
-
-
-@router.post("/api/auth/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest):
-    """Create a new user account and return an access token for immediate login."""
-    email = payload.email.lower().strip()
-    password = payload.password.strip()
-    display_name = payload.display_name.strip() if payload.display_name else None
-    english_level = payload.english_level.strip() if payload.english_level else None
-
-    if not display_name:
-        display_name = email.split("@", 1)[0]
-
-    if not email or not password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and password are required")
-
-    if len(password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must have at least 8 characters")
-
-    password_hash = hash_password(password)
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
+    messages: list[MessageOut] = []
+    for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
+        audio_url: str | None = None
+        if storage_key:
             try:
-                cur.execute(
-                    """
-                    INSERT INTO users (email, password_hash, display_name, english_level)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id::text, email::text, display_name, english_level;
-                    """,
-                    (email, password_hash, display_name, english_level),
-                )
-                row = cur.fetchone()
-                conn.commit()
-            except psycopg2.errors.UniqueViolation:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+                audio_url = get_presigned_url(storage_key)
+            except Exception:
+                logger.exception("Failed to generate presigned URL for key %s", storage_key)
 
-    if not row:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="User registration failed")
+        messages.append(
+            MessageOut(
+                id=msg_id,
+                role=role,
+                input_mode=input_mode,
+                text_content=text_content,
+                created_at=created_at,
+                audio_url=audio_url,
+            )
+        )
 
-    user_id, email, display_name, english_level = row
-    access_token, expires_in = create_access_token(user_id=user_id, email=email)
-
-    return LoginResponse(
-        access_token=access_token,
-        expires_in=expires_in,
-        user=UserOut(
-            id=user_id,
-            email=email,
-            display_name=display_name,
-            english_level=english_level,
-        ),
-    )
+    return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)

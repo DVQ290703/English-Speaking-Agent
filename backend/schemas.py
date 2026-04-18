@@ -45,6 +45,7 @@ class MessageOut(BaseModel):
     input_mode: str | None
     text_content: str | None
     created_at: datetime
+    audio_url: str | None = None  # presigned URL, generated on demand
 
 
 class ConversationOut(BaseModel):
