@@ -22,10 +22,8 @@ from app.api.schemas import (
 from app.core.security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
 from app.core.storage import (
     build_object_key,
-    delete_object,
     _upload,
     get_presigned_url,
-    store_assistant_audio,
     store_user_audio,
 )
 
@@ -230,8 +228,18 @@ def chat_respond(
     if conversation_id:
         _validate_uuid(conversation_id, "conversation_id")
 
-    # ── Block 1: persist conversation / turn / user message ──────────────────
-    logger.debug("Block 1 — persisting conversation/turn/user message")
+    # Pre-generate all row IDs so MinIO uploads can use the real keys before
+    # any DB INSERT happens.  This eliminates the pending-key re-upload race
+    # and lets all three inserts land in one atomic Block 2 transaction.
+    turn_id = str(_uuid.uuid4())
+    user_message_id = str(_uuid.uuid4())
+    assistant_message_id = str(_uuid.uuid4())
+
+    # ── Block 1: get/create conversation + reserve turn_number ───────────────
+    # Only reads + one optional INSERT (new conversation).  Turn and messages
+    # are intentionally NOT inserted here so that a LLM/TTS failure leaves no
+    # orphaned user message without a paired assistant message.
+    logger.debug("Block 1 — resolving conversation and turn number")
     with get_connection() as conn:
         with conn.cursor() as cur:
             if conversation_id:
@@ -272,26 +280,9 @@ def chat_respond(
                 (conv_id,),
             )
             turn_number = cur.fetchone()[0]
+            logger.debug("Reserved turn_number=%d for conv_id=%s", turn_number, conv_id)
 
-            cur.execute(
-                "INSERT INTO turns (conversation_id, turn_number) VALUES (%s, %s) RETURNING id::text",
-                (conv_id, turn_number),
-            )
-            turn_id = cur.fetchone()[0]
-            logger.debug("Turn created turn_id=%s turn_number=%d", turn_id, turn_number)
-
-            cur.execute(
-                """
-                INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
-                VALUES (%s, %s, 'user', %s, %s)
-                RETURNING id::text
-                """,
-                (conv_id, turn_id, input_mode, user_input),
-            )
-            user_message_id = cur.fetchone()[0]
-            logger.info("User message persisted message_id=%s input_mode=%s text=%r", user_message_id, input_mode, user_input[:80])
-
-    # ── Upload user audio to MinIO (outside DB transaction) ──────────────────
+    # ── Upload user audio to MinIO ────────────────────────────────────────────
     user_object_key: str | None = None
     user_mime_type: str = "audio/webm"
     if audio_bytes_received:
@@ -319,36 +310,56 @@ def chat_respond(
         response_text[:80], len(response_audio_bytes),
     )
 
-    # ── Upload assistant audio to MinIO (outside DB transaction) ─────────────
+    # ── Upload assistant audio directly to the real key ───────────────────────
+    # assistant_message_id was pre-generated above, so the final storage key is
+    # known before the DB INSERT — no pending key or re-upload needed.
     assistant_object_key: str | None = None
     if response_audio_bytes:
-        logger.info("Uploading assistant audio to MinIO size=%d bytes", len(response_audio_bytes))
+        real_key = build_object_key(
+            conversation_id=conv_id,
+            message_id=assistant_message_id,
+            audio_type="assistant_tts",
+            extension="mp3",
+        )
+        logger.info("Uploading assistant audio to MinIO key=%s size=%d bytes", real_key, len(response_audio_bytes))
         try:
-            assistant_object_key = store_assistant_audio(
-                conversation_id=conv_id,
-                message_id="pending",
-                audio_bytes=response_audio_bytes,
-            )
-            logger.info("Assistant audio uploaded (pending) key=%s", assistant_object_key)
+            _upload(object_key=real_key, content=response_audio_bytes, content_type="audio/mpeg")
+            assistant_object_key = real_key
+            logger.info("Assistant audio uploaded key=%s", assistant_object_key)
         except Exception:
             logger.exception("MinIO upload failed for assistant audio (conv %s)", conv_id)
     else:
         logger.warning("Pipeline returned empty audio — no MinIO upload for assistant turn")
 
-    # ── Block 2: persist assistant message + both audio_asset records ─────────
-    logger.debug("Block 2 — persisting assistant message and audio assets")
+    # ── Block 2: single atomic transaction for all DB writes ─────────────────
+    # Runs only after LLM+TTS succeeds.  If anything above raised, this block
+    # is never reached and the conversation contains no orphaned messages.
+    logger.debug("Block 2 — persisting turn, user message, assistant message, and audio assets")
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """
-                INSERT INTO messages (conversation_id, turn_id, role, input_mode, text_content)
-                VALUES (%s, %s, 'assistant', 'text', %s)
-                RETURNING id::text
-                """,
-                (conv_id, turn_id, response_text),
+                "INSERT INTO turns (id, conversation_id, turn_number) VALUES (%s, %s, %s)",
+                (turn_id, conv_id, turn_number),
             )
-            assistant_message_id = cur.fetchone()[0]
-            logger.info("Assistant message persisted message_id=%s", assistant_message_id)
+            logger.debug("Turn inserted turn_id=%s turn_number=%d", turn_id, turn_number)
+
+            cur.execute(
+                """
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content)
+                VALUES (%s, %s, %s, 'user', %s, %s)
+                """,
+                (user_message_id, conv_id, turn_id, input_mode, user_input),
+            )
+            logger.info("User message inserted message_id=%s input_mode=%s text=%r", user_message_id, input_mode, user_input[:80])
+
+            cur.execute(
+                """
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content)
+                VALUES (%s, %s, %s, 'assistant', 'text', %s)
+                """,
+                (assistant_message_id, conv_id, turn_id, response_text),
+            )
+            logger.info("Assistant message inserted message_id=%s", assistant_message_id)
 
             cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
 
@@ -364,22 +375,6 @@ def chat_respond(
                 logger.debug("audio_asset row inserted for user_input message_id=%s", user_message_id)
 
             if assistant_object_key:
-                pending_key = assistant_object_key
-                real_key = build_object_key(
-                    conversation_id=conv_id,
-                    message_id=assistant_message_id,
-                    audio_type="assistant_tts",
-                    extension="mp3",
-                )
-                logger.info("Re-keying assistant audio: %s → %s", pending_key, real_key)
-                try:
-                    _upload(object_key=real_key, content=response_audio_bytes, content_type="audio/mpeg")
-                    delete_object(pending_key)
-                    assistant_object_key = real_key
-                    logger.info("Re-key successful, pending key deleted")
-                except Exception:
-                    logger.exception("Failed to re-key assistant audio to %s", real_key)
-
                 _insert_audio_asset(
                     cur,
                     message_id=assistant_message_id,
