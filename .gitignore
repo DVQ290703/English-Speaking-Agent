@@ -42,3 +42,5 @@ build/
 .ai-log/*.jsonl
 data/
  uv.lock
+
+ logs/
