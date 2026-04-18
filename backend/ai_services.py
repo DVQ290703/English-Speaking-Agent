@@ -2,14 +2,13 @@ import json
 import logging
 import os
 from functools import lru_cache
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
 def get_voice_agent_pipeline():
-    """Lazily initialize and cache the expensive voice agent pipeline."""
+    """Lazily initialize and cache the voice agent pipeline (LLM + TTS)."""
     from src.agents.pipeline import VoiceAgentPipeline
     from src.services.elevenlabs_tts import ElevenLabsTTS
     from src.services.groq_llm import GroqLLMService
@@ -17,7 +16,7 @@ def get_voice_agent_pipeline():
     llm_model = os.getenv("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
     return VoiceAgentPipeline(
         llm_service=GroqLLMService(model_name=llm_model),
-        tts_service=ElevenLabsTTS(output_dir="outputs"),
+        tts_service=ElevenLabsTTS(),
     )
 
 
@@ -31,7 +30,7 @@ def get_stt_service():
 
 
 def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
-    """Convert raw UI history into a compact list of prompt-ready conversation lines."""
+    """Convert raw UI history JSON into a compact list of prompt-ready conversation lines."""
     history_lines: list[str] = []
 
     if topic and topic.strip():
@@ -61,60 +60,42 @@ def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
-    """Transcribe uploaded audio and fall back safely on provider errors."""
+    """Transcribe uploaded audio; return empty string on any provider error."""
     try:
-        stt_service = get_stt_service()
-        return stt_service.transcribe(audio_bytes, filename=filename)
+        return get_stt_service().transcribe(audio_bytes, filename=filename)
     except Exception:
         logger.exception("STT transcription failed")
         return ""
 
 
-def _synthesize_audio_bytes(response_text: str) -> bytes:
-    """Generate TTS audio and return raw bytes."""
+def _synthesize_audio_bytes(text: str) -> bytes:
+    """Synthesize *text* via the cached pipeline's TTS service and return raw bytes.
+
+    Reuses the already-cached ElevenLabsTTS instance rather than constructing a
+    new one on every fallback call.
+    """
     try:
-        from src.services.elevenlabs_tts import ElevenLabsTTS
-
-        tts_service = ElevenLabsTTS(output_dir="outputs")
-        audio_path = tts_service.convert_text_to_speech(response_text)
-
-        if not audio_path:
-            return b""
-
-        audio_file = Path(audio_path)
-        if not audio_file.exists():
-            return b""
-
-        return audio_file.read_bytes()
+        return get_voice_agent_pipeline().tts_service.convert_text_to_speech(text)
     except Exception:
-        logger.exception("TTS synthesis failed for text: %.80s", response_text)
+        logger.exception("Direct TTS synthesis failed for text: %.80s", text)
         return b""
 
 
 def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tuple[str, bytes]:
-    """
-    Run the main conversation pipeline.
+    """Run the conversation pipeline and return (response_text, audio_bytes).
 
-    Returns:
-        (response_text, audio_bytes) — audio_bytes is empty on TTS failure.
+    audio_bytes is guaranteed to be either valid MP3 data or b"" — never None.
     """
     try:
         pipeline = get_voice_agent_pipeline()
         result = pipeline.run(user_input=user_input, history=history or [])
         response_text = str(result.get("response_text", "")).strip()
-        audio_path = str(result.get("audio_path", "")).strip()
-
-        audio_bytes = b""
-        if audio_path:
-            audio_file = Path(audio_path)
-            if audio_file.exists():
-                audio_bytes = audio_file.read_bytes()
+        audio_bytes: bytes = result.get("audio_bytes") or b""
 
         if response_text:
-            # Pipeline may succeed but not generate audio (audio_path absent or
-            # file missing). Fall back to ElevenLabs directly so the browser
-            # never has to use Web Speech Synthesis.
             if not audio_bytes:
+                # Pipeline LLM succeeded but TTS node failed — retry TTS directly.
+                logger.warning("Pipeline returned empty audio; retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text)
             return response_text, audio_bytes
 
