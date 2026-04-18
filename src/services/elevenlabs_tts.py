@@ -21,13 +21,16 @@ class ElevenLabsTTS:
         model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
 
         if not api_key:
-            logger.error("ElevenLabs: ELEVENLABS_API_KEY is not set")
+            logger.error("ElevenLabs: ELEVENLABS_API_KEY is not set — cannot synthesize audio")
             return b""
         if not voice_id:
-            logger.error("ElevenLabs: ELEVENLABS_VOICE_ID is not set")
+            logger.error("ElevenLabs: ELEVENLABS_VOICE_ID is not set — cannot synthesize audio")
             return b""
         if not text.strip():
+            logger.debug("ElevenLabs: empty text provided, skipping synthesis")
             return b""
+
+        logger.info("ElevenLabs TTS request voice_id=%s model_id=%s text_len=%d", voice_id, model_id, len(text))
 
         url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         headers = {
@@ -40,12 +43,12 @@ class ElevenLabsTTS:
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=60)
         except requests.RequestException as exc:
-            logger.error("ElevenLabs: request failed: %s", exc)
+            logger.error("ElevenLabs: HTTP request failed: %s", exc)
             return b""
 
         if response.status_code != 200:
             logger.error(
-                "ElevenLabs: API returned %d for voice_id=%s model=%s — %s",
+                "ElevenLabs: API returned HTTP %d voice_id=%s model_id=%s — %s",
                 response.status_code,
                 voice_id,
                 model_id,
@@ -54,5 +57,5 @@ class ElevenLabsTTS:
             return b""
 
         audio_bytes = response.content
-        logger.debug("ElevenLabs: received %d bytes for voice_id=%s", len(audio_bytes), voice_id)
+        logger.info("ElevenLabs TTS done voice_id=%s received=%d bytes", voice_id, len(audio_bytes))
         return audio_bytes
