@@ -16,7 +16,7 @@ class GroqSTTService:
         self.client = Groq(api_key=api_key)
         self.model_name = model_name
 
-    def transcribe_audio_bytes(self, audio_bytes: bytes, filename: str = "recording.wav") -> str:
+    def transcribe(self, audio_bytes: bytes, filename: str = "recording.wav") -> str:
         """Send in-memory audio to Groq and return the extracted transcript."""
         if not audio_bytes:
             return ""
@@ -39,7 +39,3 @@ class GroqSTTService:
             return str(transcription.get("text", "")).strip()
 
         return ""
-
-    def transcribe(self, audio_bytes: bytes, filename: str = "recording.wav") -> str:
-        """Compatibility wrapper matching the interface expected by the API layer."""
-        return self.transcribe_audio_bytes(audio_bytes, filename=filename)
