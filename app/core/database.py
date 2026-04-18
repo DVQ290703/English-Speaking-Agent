@@ -32,6 +32,15 @@ def get_connection() -> Generator[psycopg2.extensions.connection, None, None]:
 
     Commits on clean exit, rolls back on exception — connections are always
     returned to the pool so they are never leaked.
+
+    Callers MUST open cursors using the context-manager form::
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                ...
+
+    psycopg2 cursors implement ``__exit__`` which calls ``cur.close()``,
+    guaranteeing closure on every code path including exceptions.
     """
     if _pool is None:
         raise RuntimeError("DB pool is not initialized — call init_db_pool() at startup")
