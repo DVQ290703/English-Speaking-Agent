@@ -1,8 +1,10 @@
-import base64
 import json
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -64,31 +66,12 @@ def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
         stt_service = get_stt_service()
         return stt_service.transcribe(audio_bytes, filename=filename)
     except Exception:
+        logger.exception("STT transcription failed")
         return ""
 
 
-def synthesize_audio_base64(response_text: str) -> str:
-    """Convert response text to base64-encoded audio for direct frontend playback."""
-    try:
-        from src.services.elevenlabs_tts import ElevenLabsTTS
-
-        tts_service = ElevenLabsTTS(output_dir="outputs")
-        audio_path = tts_service.convert_text_to_speech(response_text)
-
-        if not audio_path:
-            return ""
-
-        audio_file = Path(audio_path)
-        if not audio_file.exists():
-            return ""
-
-        return base64.b64encode(audio_file.read_bytes()).decode("utf-8")
-    except Exception:
-        return ""
-
-
-def synthesize_audio_bytes(response_text: str) -> bytes:
-    """Generate TTS audio and return raw bytes (for Minio storage)."""
+def _synthesize_audio_bytes(response_text: str) -> bytes:
+    """Generate TTS audio and return raw bytes."""
     try:
         from src.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -104,28 +87,39 @@ def synthesize_audio_bytes(response_text: str) -> bytes:
 
         return audio_file.read_bytes()
     except Exception:
+        logger.exception("TTS synthesis failed for text: %.80s", response_text)
         return b""
 
 
-def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tuple[str, str]:
-    """Run the main conversation pipeline and always return a text response."""
+def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tuple[str, bytes]:
+    """
+    Run the main conversation pipeline.
+
+    Returns:
+        (response_text, audio_bytes) — audio_bytes is empty on TTS failure.
+    """
     try:
         pipeline = get_voice_agent_pipeline()
         result = pipeline.run(user_input=user_input, history=history or [])
         response_text = str(result.get("response_text", "")).strip()
         audio_path = str(result.get("audio_path", "")).strip()
 
-        audio_base64 = ""
+        audio_bytes = b""
         if audio_path:
             audio_file = Path(audio_path)
             if audio_file.exists():
-                audio_base64 = base64.b64encode(audio_file.read_bytes()).decode("utf-8")
+                audio_bytes = audio_file.read_bytes()
 
         if response_text:
-            return response_text, audio_base64
+            # Pipeline may succeed but not generate audio (audio_path absent or
+            # file missing). Fall back to ElevenLabs directly so the browser
+            # never has to use Web Speech Synthesis.
+            if not audio_bytes:
+                audio_bytes = _synthesize_audio_bytes(response_text)
+            return response_text, audio_bytes
 
     except Exception:
-        pass
+        logger.exception("LangGraph agent pipeline failed")
 
     fallback_text = "Sorry, I couldn't process your request right now."
-    return fallback_text, synthesize_audio_base64(fallback_text)
+    return fallback_text, _synthesize_audio_bytes(fallback_text)
