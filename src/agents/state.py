@@ -1,7 +1,8 @@
-from typing import List, TypedDict
+from typing import TypedDict
+
 
 class AgentState(TypedDict):
     user_input: str
     response_text: str
-    audio_path: str
-    history: List[str]
+    audio_bytes: bytes   # raw MP3 bytes from TTS; empty on failure
+    history: list[str]
