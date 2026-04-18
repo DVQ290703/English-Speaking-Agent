@@ -1,60 +1,90 @@
 from __future__ import annotations
 
+import logging
+from datetime import timedelta
 from io import BytesIO
-from uuid import uuid4
 
 from minio import Minio
 from minio.error import S3Error
 
-from .config import MINIO_ACCESS_KEY, MINIO_BUCKET, MINIO_ENDPOINT, MINIO_PUBLIC_BASE_URL, MINIO_SECURE, MINIO_SECRET_KEY
+from .config import MINIO_ACCESS_KEY, MINIO_BUCKET, MINIO_ENDPOINT, MINIO_SECURE, MINIO_SECRET_KEY
+
+logger = logging.getLogger(__name__)
+
+# Singleton — one client per process, not per request
+_client: Minio | None = None
+
+_CONTENT_TYPE_TO_EXT: dict[str, str] = {
+    "audio/webm": "webm",
+    "audio/mp4": "mp4",
+    "audio/mpeg": "mp3",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+}
 
 
 def get_minio_client() -> Minio:
-    return Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=MINIO_SECURE,
-    )
+    global _client
+    if _client is None:
+        _client = Minio(
+            MINIO_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=MINIO_SECURE,
+        )
+    return _client
 
 
-def build_object_key(*, conversation_id: str, message_id: str, audio_type: str, filename: str | None) -> str:
-    extension = "bin"
-    if filename and "." in filename:
-        extension = filename.rsplit(".", 1)[-1].lower()
-
-    return f"conversations/{conversation_id}/{audio_type}/{message_id}-{uuid4().hex}.{extension}"
-
-
-def ensure_bucket_exists(client: Minio) -> None:
+def init_storage() -> None:
+    """Create the audio bucket if it does not exist. Call once at app startup."""
+    client = get_minio_client()
     try:
-        if client.bucket_exists(MINIO_BUCKET):
-            return
-        client.make_bucket(MINIO_BUCKET)
+        if not client.bucket_exists(MINIO_BUCKET):
+            client.make_bucket(MINIO_BUCKET)
+            logger.info("Created MinIO bucket: %s", MINIO_BUCKET)
+        else:
+            logger.info("MinIO bucket already exists: %s", MINIO_BUCKET)
     except S3Error as exc:
         if exc.code not in {"BucketAlreadyOwnedByYou", "BucketAlreadyExists"}:
             raise
 
 
-def upload_audio_bytes(*, object_key: str, content: bytes, content_type: str | None) -> str | None:
+def _derive_extension(filename: str | None, content_type: str | None) -> tuple[str, str]:
+    """Return (extension, content_type) derived from filename or content-type header."""
+    if filename and "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+        ct = content_type or f"audio/{ext}"
+        return ext, ct
+    if content_type and content_type in _CONTENT_TYPE_TO_EXT:
+        return _CONTENT_TYPE_TO_EXT[content_type], content_type
+    return "webm", "audio/webm"
+
+
+def build_object_key(*, conversation_id: str, message_id: str, audio_type: str, extension: str) -> str:
+    """
+    Deterministic key — message_id is already a unique UUID, no random suffix needed.
+    audio_type matches audio_assets.audio_type CHECK: 'user_input' | 'assistant_tts'
+    Pattern: conversations/{conv_id}/{audio_type}/{message_id}.{ext}
+    """
+    return f"conversations/{conversation_id}/{audio_type}/{message_id}.{extension}"
+
+
+def _upload(*, object_key: str, content: bytes, content_type: str) -> None:
     client = get_minio_client()
-    content_stream = BytesIO(content)
-
-    ensure_bucket_exists(client)
-
     client.put_object(
         bucket_name=MINIO_BUCKET,
         object_name=object_key,
-        data=content_stream,
+        data=BytesIO(content),
         length=len(content),
-        content_type=content_type or "application/octet-stream",
+        content_type=content_type,
     )
 
-    if not MINIO_PUBLIC_BASE_URL:
-        return None
 
-    base_url = MINIO_PUBLIC_BASE_URL.rstrip("/")
-    return f"{base_url}/{MINIO_BUCKET}/{object_key}"
+def get_presigned_url(object_key: str, expires: timedelta = timedelta(hours=1)) -> str:
+    """Generate a short-lived presigned GET URL. The bucket remains private."""
+    client = get_minio_client()
+    return client.presigned_get_object(MINIO_BUCKET, object_key, expires=expires)
 
 
 def store_user_audio(
@@ -63,27 +93,25 @@ def store_user_audio(
     message_id: str,
     audio_bytes: bytes,
     filename: str | None = None,
-) -> tuple[str, str | None]:
+    content_type: str | None = None,
+) -> tuple[str, str, str]:
     """
-    Store user-uploaded audio to Minio.
-    
+    Upload user audio to MinIO.
+
     Returns:
-        (object_key, public_url) where public_url is None if MINIO_PUBLIC_BASE_URL is not configured
+        (object_key, presigned_url, resolved_mime_type)
+    Raises on failure — callers are responsible for error handling.
     """
+    extension, mime_type = _derive_extension(filename, content_type)
     object_key = build_object_key(
         conversation_id=conversation_id,
         message_id=message_id,
-        audio_type="user_audio",
-        filename=filename,
+        audio_type="user_input",
+        extension=extension,
     )
-    
-    public_url = upload_audio_bytes(
-        object_key=object_key,
-        content=audio_bytes,
-        content_type="audio/webm",
-    )
-    
-    return object_key, public_url
+    _upload(object_key=object_key, content=audio_bytes, content_type=mime_type)
+    presigned_url = get_presigned_url(object_key)
+    return object_key, presigned_url, mime_type
 
 
 def store_assistant_audio(
@@ -91,24 +119,20 @@ def store_assistant_audio(
     conversation_id: str,
     message_id: str,
     audio_bytes: bytes,
-) -> tuple[str, str | None]:
+) -> tuple[str, str]:
     """
-    Store assistant-generated (TTS) audio to Minio.
-    
+    Upload assistant TTS audio (always mp3) to MinIO.
+
     Returns:
-        (object_key, public_url) where public_url is None if MINIO_PUBLIC_BASE_URL is not configured
+        (object_key, presigned_url)
+    Raises on failure — callers are responsible for error handling.
     """
     object_key = build_object_key(
         conversation_id=conversation_id,
         message_id=message_id,
-        audio_type="assistant_audio",
-        filename="response.mp3",
+        audio_type="assistant_tts",
+        extension="mp3",
     )
-    
-    public_url = upload_audio_bytes(
-        object_key=object_key,
-        content=audio_bytes,
-        content_type="audio/mpeg",
-    )
-    
-    return object_key, public_url
+    _upload(object_key=object_key, content=audio_bytes, content_type="audio/mpeg")
+    presigned_url = get_presigned_url(object_key)
+    return object_key, presigned_url
