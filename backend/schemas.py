@@ -18,7 +18,7 @@ class RegisterRequest(BaseModel):
 class UserOut(BaseModel):
     id: str
     email: str
-    display_name: str
+    display_name: str | None
     english_level: str | None
 
 
