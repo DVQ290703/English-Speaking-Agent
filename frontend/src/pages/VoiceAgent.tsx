@@ -826,7 +826,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Agent display */}
-          <div className="bg-gradient-to-b from-blue-50 to-indigo-50 mx-2 mt-2 rounded-md overflow-hidden border border-gray-200">
+          <div className="bg-linear-to-b from-blue-50 to-indigo-50 mx-2 mt-2 rounded-md overflow-hidden border border-gray-200">
             <div className="flex flex-col items-center justify-center py-5 px-4 min-h-32.5">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
                 agentSpeaking
@@ -869,7 +869,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 <DeviceSelect value={selectedMic} options={MICROPHONES} onChange={setSelectedMic} />
               </div>
             </div>
-            <div className="bg-gradient-to-b from-blue-50 to-indigo-50 rounded-md border border-gray-200 py-2 px-2">
+            <div className="bg-linear-to-b from-blue-50 to-indigo-50 rounded-md border border-gray-200 py-2 px-2">
               <MicWaveform active={micEnabled && isConnected} />
             </div>
           </div>
