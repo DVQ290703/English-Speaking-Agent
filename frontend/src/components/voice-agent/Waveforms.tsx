@@ -1,10 +1,10 @@
 export function AgentWaveform({ active }: { active: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-[2px] h-8">
+    <div className="flex items-center justify-center gap-0.5 h-8">
       {Array.from({ length: 30 }).map((_, i) => (
         <div
           key={i}
-          className="w-[2px] rounded-full bg-blue-400"
+          className="w-0.5 rounded-full bg-blue-500"
           style={{
             height: active ? `${4 + Math.sin(i * 0.5) * 12}px` : "3px",
             animation: active
@@ -21,11 +21,11 @@ export function AgentWaveform({ active }: { active: boolean }) {
 
 export function MicWaveform({ active }: { active: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-[2px] h-16 w-full">
+    <div className="flex items-center justify-center gap-0.5 h-16 w-full">
       {Array.from({ length: 28 }).map((_, i) => (
         <div
           key={i}
-          className="w-[3px] rounded-full bg-blue-400"
+          className="w-0.75 rounded-full bg-blue-500"
           style={{
             height: active ? `${12 + Math.sin(i * 0.5) * 16 + Math.random() * 10}px` : "4px",
             animation: active
