@@ -4,7 +4,7 @@ import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, V
 import { SiOpenai } from "react-icons/si";
 
 import { chatRespond } from "../api/chat";
-import { getAuthSession } from "../auth/tokenStorage";
+import { getAuthSession, clearAuthSession } from "../auth/tokenStorage";
 import {
   AgentWaveform,
   DeviceSelect,
@@ -15,7 +15,7 @@ import {
 import type { Message } from "../components/voice-agent";
 
 interface AuthUser {
-  name: string;
+  display_name: string;
   email?: string;
 }
 
@@ -156,76 +156,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   useEffect(() => {
     localStorage.setItem("va-theme", isDark ? "dark" : "light");
-    const id = 'va-dark-override';
-    let el = document.getElementById(id) as HTMLStyleElement | null;
-    if (isDark) {
-      if (!el) {
-        el = document.createElement('style');
-        el.id = id;
-        document.head.appendChild(el);
-      }
-      el.textContent = `
-        [data-va=root]                  { background:#0d1117 !important; color:#e2e8f0 !important; }
-        [data-va=header]                { background:#0d1117 !important; border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=descbar]               { background:#0c1220 !important; border-color:rgba(255,255,255,0.06) !important; }
-        [data-va=content]               { background:#0d1117 !important; }
-        [data-va=left]                  { background:#13181f !important; border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=left] .border-gray-200 { border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=right]                 { background:#0d1117 !important; }
-        [data-va=messages]              { background:#0c1220 !important; }
-        [data-va=input]                 { background:#0d1117 !important; border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=textarea]              { background:#131929 !important; color:#e2e8f0 !important; border-color:rgba(255,255,255,0.12) !important; }
-        [data-va=textarea]::placeholder { color:#475569 !important; }
-        [data-va=root] .text-gray-800   { color:#e2e8f0 !important; }
-        [data-va=root] .text-gray-700   { color:#cbd5e1 !important; }
-        [data-va=root] .text-gray-600   { color:#94a3b8 !important; }
-        [data-va=root] .text-gray-500   { color:#64748b !important; }
-        [data-va=root] .text-gray-900   { color:#f1f5f9 !important; }
-        [data-va=root] .border-gray-200 { border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=root] .border-gray-100 { border-color:rgba(255,255,255,0.06) !important; }
-        [data-va=root] .bg-white        { background:#13181f !important; }
-        [data-va=root] .bg-gray-50      { background:#13181f !important; }
-        [data-va=root] .bg-gray-100     { background:#1a2232 !important; }
-        [data-va=root] .hover\\:bg-gray-100:hover { background:rgba(255,255,255,0.06) !important; }
-        [data-va=root] .bg-blue-50      { background:#12213a !important; }
-        [data-va=root] .bg-violet-50    { background:#1e1538 !important; }
-        [data-va=root] .bg-blue-100     { background:#172542 !important; }
-        [data-va=root] .bg-violet-100   { background:#241640 !important; }
-        [data-va=root] .border-blue-200,
-        [data-va=root] .border-blue-300  { border-color:rgba(96,165,250,0.28) !important; }
-        [data-va=root] .border-violet-200,
-        [data-va=root] .border-violet-300 { border-color:rgba(167,139,250,0.28) !important; }
-        [data-va=root] .bg-red-50       { background:#2a1215 !important; }
-        [data-va=root] .bg-yellow-50    { background:#251d0a !important; }
-        [data-va=root] .bg-purple-50    { background:#1e1330 !important; }
-        [data-va=root] .bg-green-50     { background:#0f2215 !important; }
-        [data-va=root] .border-red-200  { border-color:rgba(248,113,113,0.3) !important; }
-        [data-va=root] .border-yellow-200 { border-color:rgba(251,191,36,0.3) !important; }
-        [data-va=root] .border-purple-200 { border-color:rgba(192,132,252,0.3) !important; }
-        [data-va=root] .border-green-200 { border-color:rgba(74,222,128,0.3) !important; }
-        [data-va=root] select           { background:#13181f !important; color:#e2e8f0 !important; }
-        [data-va=root] .text-red-500    { color:#f87171 !important; }
-        [data-va=root] .text-red-600    { color:#f87171 !important; }
-        [data-va=root] .text-green-600  { color:#4ade80 !important; }
-        [data-va=root] .text-amber-600, [data-va=root] .text-yellow-600 { color:#fbbf24 !important; }
-        [data-va=root] .text-purple-600 { color:#c084fc !important; }
-        [data-va=root] .bg-gradient-to-b { background:#0c1220 !important; }
-        /* ScoreBadge /100 text — switch to light in dark mode */
-        [data-va=root] [data-score-suffix] { color:rgba(255,255,255,0.35) !important; }
-        /* ReplayButton — invert to white-transparent in dark mode */
-        [data-va=root] [data-replay-btn]   { border-color:rgba(255,255,255,0.15) !important; background:rgba(255,255,255,0.06) !important; color:rgba(255,255,255,0.45) !important; }
-        /* Chat bubbles in dark mode */
-        [data-va=root] .text-gray-900      { color:#f1f5f9 !important; }
-        [data-va=root] ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); }
-        [data-va=conv-header]           { background:#0d1117 !important; border-color:rgba(255,255,255,0.08) !important; }
-        [data-va=right]                 { background:#0d1117 !important; }
-      `;
-    } else {
-      if (el) el.remove();
-    }
   }, [isDark]);
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (initialUser) return initialUser;
+    const session = getAuthSession();
+    if (!session?.user) return null;
+    const u = session.user;
+    return { display_name: u.display_name || u.name || u.email || "User", email: u.email };
+  });
   const [topic, setTopic] = useState<TopicId>("daily");
 
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
@@ -260,7 +199,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   useEffect(() => { genderRef.current = gender; }, [gender]);
   useEffect(() => { languageRef.current = language; }, [language]);
-  useEffect(() => { setCurrentUser(initialUser); }, [initialUser]);
+  useEffect(() => { if (initialUser) setCurrentUser(initialUser); }, [initialUser]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -744,17 +683,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-lg px-2.5 py-1">
                 <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-gray-900">
-                  {currentUser.name[0].toUpperCase()}
+                  {currentUser.display_name?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <span className="text-xs text-gray-400">{currentUser.name}</span>
+                <span className="text-xs text-gray-400">{currentUser.display_name || currentUser.email || "User"}</span>
               </div>
               <button
                 onClick={() => {
-                  if (onLogout) {
-                    onLogout();
-                    return;
-                  }
+                  clearAuthSession();
                   setCurrentUser(null);
+                  if (onLogout) onLogout();
                 }}
                 className="flex items-center gap-1 text-xs text-gray-700 hover:text-red-400 transition-colors"
                 title="Đăng xuất"
