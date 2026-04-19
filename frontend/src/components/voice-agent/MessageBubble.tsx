@@ -8,6 +8,8 @@ export interface Message {
   typing?: boolean;
   audioUrl?: string;
   score?: number;
+  minioUrl?: string;
+  userAudioUrl?: string;
 }
 
 interface MessageBubbleProps {
