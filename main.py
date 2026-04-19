@@ -1,7 +1,2 @@
-def main():
-    print("Hello from a20-app-014!")
-
-
-if __name__ == "__main__":
-    main()
-# test log
+"""Root entry-point — delegates to app.main for uvicorn."""
+from app.main import app  # noqa: F401

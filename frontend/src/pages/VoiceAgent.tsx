@@ -178,6 +178,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const ttsActiveRef = useRef(false);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const localAudioUrlsRef = useRef<string[]>([]);
 
   useEffect(() => { genderRef.current = gender; }, [gender]);
   useEffect(() => { languageRef.current = language; }, [language]);
@@ -194,6 +198,69 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
+  }, []);
+
+  const clearLocalAudioUrls = useCallback(() => {
+    localAudioUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    localAudioUrlsRef.current = [];
+  }, []);
+
+  const startUserAudioCapture = useCallback(async () => {
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      return;
+    }
+
+    if (mediaRecorderRef.current?.state === "recording") {
+      return;
+    }
+
+    if (!mediaStreamRef.current) {
+      mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+
+    const preferredMimeType = "audio/webm;codecs=opus";
+    const recorder = MediaRecorder.isTypeSupported(preferredMimeType)
+      ? new MediaRecorder(mediaStreamRef.current, { mimeType: preferredMimeType })
+      : new MediaRecorder(mediaStreamRef.current);
+
+    audioChunksRef.current = [];
+    recorder.ondataavailable = (event: BlobEvent) => {
+      if (event.data && event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.start(100);
+    mediaRecorderRef.current = recorder;
+  }, []);
+
+  const stopUserAudioCapture = useCallback(async (): Promise<Blob | undefined> => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) {
+      return undefined;
+    }
+
+    if (recorder.state === "inactive") {
+      mediaRecorderRef.current = null;
+      if (audioChunksRef.current.length === 0) {
+        return undefined;
+      }
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      audioChunksRef.current = [];
+      return blob.size > 0 ? blob : undefined;
+    }
+
+    return await new Promise<Blob | undefined>((resolve) => {
+      recorder.onstop = () => {
+        mediaRecorderRef.current = null;
+        const blob = audioChunksRef.current.length
+          ? new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" })
+          : undefined;
+        audioChunksRef.current = [];
+        resolve(blob && blob.size > 0 ? blob : undefined);
+      };
+      recorder.stop();
+    });
   }, []);
 
   const speakText = useCallback((text: string) => {
@@ -256,13 +323,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }
   }, []);
 
-  const playAgentAudio = useCallback((text: string, audioBase64?: string) => {
-    if (!audioBase64) {
+  const playAgentAudio = useCallback((text: string, audioUrl?: string) => {
+    if (!audioUrl) {
       speakText(text);
       return undefined;
     }
-
-    const audioUrl = `data:audio/mpeg;base64,${audioBase64}`;
 
     try {
       window.speechSynthesis?.cancel();
@@ -301,7 +366,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return Math.min(Math.round(base + bonus), 99);
   }, []);
 
-  const sendChatMessage = useCallback(async (text: string) => {
+  const sendChatMessage = useCallback(async (text: string, audioBlob?: Blob) => {
     const trimmed = text.trim();
     if (!trimmed || agentTyping) return;
 
@@ -316,7 +381,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       text: trimmed,
       timestamp: new Date(),
       score,
+      userAudioUrl: audioBlob ? URL.createObjectURL(audioBlob) : undefined,
     };
+
+    if (userMsg.userAudioUrl) {
+      localAudioUrlsRef.current.push(userMsg.userAudioUrl);
+    }
 
     const historyPayload: { role: string; text: string }[] = [
       ...messages.filter((message) => !message.typing).map((message) => ({
@@ -346,18 +416,46 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         const data = await chatRespond({
           token: session.token,
           text: trimmed,
+          audioBlob,
           history: historyPayload,
           topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
         });
 
         const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
-        const audioUrl = playAgentAudio(responseText, data.audio_base64);
+        
+        // audio_base64 is the real-time delivery format — always use it for
+        // immediate playback. assistant_audio_url is a MinIO presigned URL with
+        // a Docker-internal hostname (minio:9000) that the browser cannot reach;
+        // it is only useful for conversation history replay via the messages API.
+        let audioUrl: string | undefined;
+        if (data.audio_base64) {
+          audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
+        } else if (data.assistant_audio_url) {
+          audioUrl = data.assistant_audio_url;
+        }
+        
+        const audioToPlay = audioUrl;
+        const playedUrl = playAgentAudio(responseText, audioToPlay);
 
         setMessages((prev: Message[]) =>
           prev.map((message) => (
-            message.id === typingId
-              ? { ...message, text: responseText, typing: false, audioUrl }
-              : message
+            message.id === userId
+              ? {
+                  ...message,
+                  // Keep the local blob URL (created before the API call).
+                  // MinIO presigned URLs use the internal Docker hostname and
+                  // are unreachable from the browser.
+                  userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
+                }
+              : message.id === typingId
+                ? {
+                    ...message,
+                    text: responseText,
+                    typing: false,
+                    audioUrl: playedUrl,
+                    minioUrl: data.assistant_audio_url || undefined,
+                  }
+                : message
           ))
         );
       } else {
@@ -404,6 +502,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       recognitionRef.current?.stop();
       setIsRecording(false);
       setChatInput("");
+      void stopUserAudioCapture();
       return;
     }
 
@@ -433,10 +532,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       recognition.interimResults = true;
       recognition.continuous = false;
       recognitionRef.current = recognition;
+      let hasSentFinal = false;
 
-      recognition.onstart = () => setIsRecording(true);
+      recognition.onstart = () => {
+        setIsRecording(true);
+        void startUserAudioCapture();
+      };
 
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
+      recognition.onresult = async (event: SpeechRecognitionEvent) => {
         let interim = "";
         let final = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -444,9 +547,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           if (event.results[i].isFinal) final += transcript;
           else interim += transcript;
         }
-        if (final) {
+        if (final && !hasSentFinal) {
+          hasSentFinal = true;
+          const recordedAudio = await stopUserAudioCapture();
           setChatInput("");
-          sendChatMessage(final);
+          sendChatMessage(final, recordedAudio);
         } else {
           setChatInput(interim);
         }
@@ -460,10 +565,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           alert("Trình duyệt chặn micro. Hãy cho phép quyền micro trong thanh địa chỉ.");
         }
         setIsRecording(false);
+        void stopUserAudioCapture();
       };
 
       recognition.onend = () => {
         setIsRecording(false);
+        void stopUserAudioCapture();
         // auto restart after brief pause
         setTimeout(() => { if (!stopped) startListening(); }, 200);
       };
@@ -479,8 +586,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       recognitionRef.current = null;
       setIsRecording(false);
       setChatInput("");
+      void stopUserAudioCapture();
     };
-  }, [status, micEnabled, language, sendChatMessage]);
+  }, [status, micEnabled, language, sendChatMessage, startUserAudioCapture, stopUserAudioCapture]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -499,6 +607,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setAgentSpeaking(false);
       setAgentTyping(false);
       setMessages([]);
+      clearLocalAudioUrls();
       setFeedbacks([]);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
@@ -507,6 +616,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     if (status === "disconnected") {
       setStatus("connecting");
       setMessages([]);
+      clearLocalAudioUrls();
       setFeedbacks([]);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
@@ -519,11 +629,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       timersRef.current.push(t0);
     }
-  }, [status, clearTimers]);
+  }, [status, clearTimers, clearLocalAudioUrls]);
 
   useEffect(() => {
-    return () => { clearTimers(); };
-  }, [clearTimers]);
+    return () => {
+      clearTimers();
+      clearLocalAudioUrls();
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    };
+  }, [clearTimers, clearLocalAudioUrls]);
 
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
@@ -779,23 +897,36 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               </div>
             )}
 
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                onReplay={() => {
-                  if (msg.role === "agent") {
-                    speakText(msg.text);
-                  } else {
-                    const utt = new SpeechSynthesisUtterance(msg.text);
-                    utt.lang = "en-US";
-                    utt.rate = 0.95;
-                    utt.pitch = 1.05;
-                    window.speechSynthesis?.speak(utt);
-                  }
-                }}
-              />
-            ))}
+            {messages.map((msg) => {
+              const canReplay = msg.role === "agent" || Boolean(msg.userAudioUrl);
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onReplay={canReplay ? () => {
+                    if (msg.role === "agent") {
+                      // Use stored audio URL if available; fall back to TTS if not
+                      const audioUrl = msg.minioUrl || msg.audioUrl;
+                      if (audioUrl) {
+                        playAgentAudio(msg.text, audioUrl);
+                      } else {
+                        speakText(msg.text);
+                      }
+                      return;
+                    }
+
+                    if (!msg.userAudioUrl) return;
+
+                    try {
+                      const audio = new Audio(msg.userAudioUrl);
+                      void audio.play();
+                    } catch {
+                      // Ignore playback failures for user recording replays.
+                    }
+                  } : undefined}
+                />
+              );
+            })}
 
             <div ref={chatBottomRef} />
           </div>
