@@ -201,23 +201,30 @@ body {
 }
 
 .password-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
+  position: relative;
+}
+
+.password-row input {
+  padding-right: 40px;
 }
 
 .toggle-btn {
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #94a3b8;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0 14px;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px;
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: color 140ms ease, background 140ms ease;
 }
-.toggle-btn:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+.toggle-btn:hover { color: #1e293b; background: rgba(0,0,0,0.06); }
 
 .field small { color: var(--err); font-size: 0.8rem; }
 
