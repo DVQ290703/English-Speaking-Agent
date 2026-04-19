@@ -1,41 +1,29 @@
 # A20-App-014
 
-Environment setup guide for team members.
+Latest setup and run instructions for team members.
 
 ## Prerequisites
 
-- Python 3.10 or newer
-- uv (package manager)
-- Docker Desktop (running)
+- Python 3.10+
+- uv
+- Node.js 18+
+- Docker Desktop
 - Git
 
-## 1. Initialize project and check Python version
-
-Run inside the project root:
+## 1. Clone and move into project
 
 ```bash
-uv init
+git clone <your-repo-url>
+cd A20-App-014
 ```
 
-Then verify Python requirement in pyproject.toml and .python-version:
+## 2. Python environment (local tools/tests)
 
-```toml
-requires-python = ">=3.10"
-```
-
-```toml
-3.10
-```
-
-## 2. Create and activate virtual environment
-
-Create the environment:
+Create and activate a virtual environment:
 
 ```bash
 uv venv
 ```
-
-Activate it:
 
 PowerShell:
 
@@ -49,15 +37,15 @@ Git Bash:
 source .venv/Scripts/activate
 ```
 
-## 3. Install dependencies
+Install Python dependencies:
 
 ```bash
 uv pip install -r requirements.txt
 ```
 
-## 4. Configure environment variables
+## 3. Environment variables
 
-Create .env from .env.example.
+Create .env from .env.example:
 
 PowerShell:
 
@@ -71,42 +59,45 @@ Git Bash:
 cp .env.example .env
 ```
 
-Open .env and fill required secrets, especially:
+Open .env and set required values:
 
-- API_KEY_ASSEMBLYAI
-- ELEVENLABS_API_KEY
 - GROQ_API_KEY
+- ELEVENLABS_API_KEY
+- ELEVENLABS_VOICE_ID
+- ELEVENLABS_MODEL_ID
 - JWT_SECRET_KEY
-- LANGSMITH_API_KEY (if tracing is enabled)
+- POSTGRES_DB
+- POSTGRES_USER
+- POSTGRES_PASSWORD
 
-## 5. Start Docker services
+Notes:
 
-Make sure Docker Desktop is running, then:
+- VITE_API_BASE_URL should stay http://localhost:8000 for local frontend.
+- In Docker Compose, backend connects to database using service host postgres automatically.
+
+## 4. Start backend stack (Docker Compose)
+
+This starts backend API, PostgreSQL, and pgAdmin:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-Check containers:
+Check running containers:
 
 ```bash
-docker ps
+docker compose ps
 ```
 
-Expected containers:
+Expected services:
 
+- voice_agent_backend
 - voice_agent_postgres
 - voice_agent_pgadmin
 
-## 6. Seed PostgreSQL data
+## 5. Seed PostgreSQL data
 
-Use one of the following commands.
-
-Git Bash (input redirection):
-
-```bash
-docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent < db_schema/seed.sql
-```
+Run seed from file (safe method):
 
 PowerShell (recommended):
 
@@ -114,29 +105,78 @@ PowerShell (recommended):
 Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
 ```
 
-## 7. Verify database connection
-
-Run a simple query:
+Git Bash:
 
 ```bash
-docker exec -it voice_agent_postgres psql -U voice_user -d voice_agent -c "SELECT NOW();"
+docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent < db_schema/seed.sql
 ```
 
-Optional: pgAdmin is available at:
+Important:
 
-- http://localhost:5050
+- Do not paste bcrypt hashes directly into shell SQL strings, because special characters like $ can be altered by shell expansion.
+- Always seed from file as shown above.
 
-Default login (if unchanged):
+## 6. Verify backend and database
 
+Backend health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Database quick check:
+
+```bash
+docker exec -it voice_agent_postgres psql -U voice_user -d voice_agent -c "SELECT email, length(password_hash) FROM users ORDER BY email;"
+```
+
+For seeded users, password hash length should be 60.
+
+Default seeded login:
+
+- alice@example.com / Password123!
+- bob@example.com / Password123!
+- charlie@example.com / Password123!
+
+## 7. Run frontend locally
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+App URL:
+
+- http://localhost:5173
+
+Production build commands:
+
+```bash
+npm run build
+npm run preview
+```
+
+## 8. Optional pgAdmin
+
+- URL: http://localhost:5050
 - Email: admin@local.dev
 - Password: admin123
+- DB host inside Docker network: postgres
 
 ## Useful Docker commands
 
-Start services:
+Start or rebuild services:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
+```
+
+View logs:
+
+```bash
+docker compose logs -f backend
+docker compose logs -f postgres
 ```
 
 Stop services:
@@ -145,11 +185,10 @@ Stop services:
 docker compose down
 ```
 
-Rebuild database from scratch (removes data volume):
+Reset database volume and reseed:
 
 ```bash
 docker compose down -v
-docker compose up -d
+docker compose up -d --build
+Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
 ```
-
-After rebuilding, run the seed command again.
