@@ -34,9 +34,9 @@ function TypingIndicator() {
 function ScoreBadge({ score }: { score: number }) {
   const isGood = score >= 85;
   const isMid  = score >= 70;
-  const color  = isGood ? "#22c55e" : isMid ? "#f59e0b" : "#f97316";
-  const bg     = isGood ? "rgba(34,197,94,0.12)"  : isMid ? "rgba(245,158,11,0.12)" : "rgba(249,115,22,0.12)";
-  const border = isGood ? "rgba(34,197,94,0.28)"  : isMid ? "rgba(245,158,11,0.28)" : "rgba(249,115,22,0.28)";
+  const color  = isGood ? "#15803d" : isMid ? "#b45309" : "#c2410c";
+  const bg     = isGood ? "rgba(34,197,94,0.10)"  : isMid ? "rgba(245,158,11,0.10)" : "rgba(249,115,22,0.10)";
+  const border = isGood ? "rgba(34,197,94,0.35)"  : isMid ? "rgba(245,158,11,0.35)" : "rgba(249,115,22,0.35)";
   return (
     <span
       title="Pronunciation score"
@@ -57,7 +57,7 @@ function ScoreBadge({ score }: { score: number }) {
       }}
     >
       {score}
-      <span style={{ color: "rgba(255,255,255,0.3)", fontWeight: 400, fontSize: 9 }}>/100</span>
+      <span data-score-suffix="" style={{ color: "rgba(0,0,0,0.3)", fontWeight: 400, fontSize: 9 }}>/100</span>
     </span>
   );
 }
@@ -65,6 +65,7 @@ function ScoreBadge({ score }: { score: number }) {
 function ReplayButton({ onClick }: { onClick: () => void }) {
   return (
     <button
+      data-replay-btn=""
       onClick={onClick}
       title="Replay"
       style={{
@@ -74,9 +75,9 @@ function ReplayButton({ onClick }: { onClick: () => void }) {
         width: 18,
         height: 18,
         borderRadius: "50%",
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(255,255,255,0.05)",
-        color: "rgba(255,255,255,0.4)",
+        border: "1px solid rgba(0,0,0,0.15)",
+        background: "rgba(0,0,0,0.04)",
+        color: "rgba(0,0,0,0.35)",
         cursor: "pointer",
         flexShrink: 0,
         transition: "all 140ms ease",
@@ -88,9 +89,9 @@ function ReplayButton({ onClick }: { onClick: () => void }) {
         (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(96,165,250,0.35)";
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)";
-        (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)";
-        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)";
+        (e.currentTarget as HTMLButtonElement).style.background = "rgba(0,0,0,0.04)";
+        (e.currentTarget as HTMLButtonElement).style.color = "rgba(0,0,0,0.35)";
+        (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(0,0,0,0.15)";
       }}
     >
       <Play style={{ width: 8, height: 8, fill: "currentColor" }} />
@@ -111,18 +112,18 @@ export default function MessageBubble({ message, onReplay }: MessageBubbleProps)
       <div
         className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center mb-0.5 ${
           isAgent
-            ? "bg-blue-600/25 border border-blue-500/40"
-            : "bg-purple-600/25 border border-purple-500/40"
+            ? "bg-blue-100 border-2 border-blue-300"
+            : "bg-violet-100 border-2 border-violet-300"
         }`}
       >
-        {isAgent ? <Bot className="w-3.5 h-3.5 text-blue-400" /> : <User className="w-3.5 h-3.5 text-purple-400" />}
+        {isAgent ? <Bot className="w-3.5 h-3.5 text-blue-600" /> : <User className="w-3.5 h-3.5 text-purple-600" />}
       </div>
 
       <div className={`max-w-[75%] flex flex-col gap-1 ${isAgent ? "items-start" : "items-end"}`}>
         {/* Header row: name + time + replay + score */}
         <div className={`flex items-center gap-1.5 ${isAgent ? "" : "flex-row-reverse"}`}>
-          <span className="text-[10px] font-medium text-gray-500">{isAgent ? "Agent" : "You"}</span>
-          <span className="text-[10px] text-gray-700">{timeStr}</span>
+          <span className="text-[10px] font-medium text-gray-600">{isAgent ? "Agent" : "You"}</span>
+          <span className="text-[10px] text-gray-400">{timeStr}</span>
           {!message.typing && onReplay && <ReplayButton onClick={onReplay} />}
           {!message.typing && !isAgent && message.score !== undefined && (
             <ScoreBadge score={message.score} />
@@ -133,8 +134,8 @@ export default function MessageBubble({ message, onReplay }: MessageBubbleProps)
         <div
           className={`px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
             isAgent
-              ? "bg-[#161d2e] border border-blue-900/40 text-gray-200 rounded-tl-sm"
-              : "bg-[#1e1630] border border-purple-900/40 text-gray-200 rounded-tr-sm"
+              ? "bg-blue-50 border border-blue-300 text-gray-900 rounded-tl-sm"
+              : "bg-violet-50 border border-violet-300 text-gray-900 rounded-tr-sm"
           }`}
         >
           {message.typing ? <TypingIndicator /> : message.text}
