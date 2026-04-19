@@ -17,7 +17,6 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
         setOpen(false);
       }
     }
-
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
@@ -29,13 +28,13 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
       <button
         data-testid="device-select"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors max-w-[160px]"
+        className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors max-w-40"
       >
         <span className="truncate">{shortVal}</span>
-        <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
+        <ChevronDown className="w-3 h-3 shrink-0 opacity-50" />
       </button>
       {open && (
-        <div className="absolute top-full mt-1 left-0 z-50 bg-[#1a1f2e] border border-white/15 rounded-md shadow-xl min-w-[220px] overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg min-w-55 overflow-hidden">
           {options.map((opt) => (
             <button
               key={opt}
@@ -46,8 +45,8 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
               }}
               className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                 opt === value
-                  ? "bg-blue-600/30 text-blue-300"
-                  : "text-gray-300 hover:bg-white/8"
+                  ? "bg-blue-50 text-blue-700 font-medium"
+                  : "text-gray-700 hover:bg-gray-50"
               }`}
             >
               {opt}
