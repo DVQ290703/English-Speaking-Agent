@@ -74,34 +74,34 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 220 20% 8%;
-  --foreground: 210 20% 90%;
-  --border: 220 15% 18%;
-  --card: 220 18% 11%;
-  --card-foreground: 210 20% 88%;
-  --card-border: 220 15% 20%;
-  --sidebar: 220 20% 7%;
-  --sidebar-foreground: 210 20% 88%;
-  --sidebar-border: 220 15% 16%;
-  --sidebar-primary: 217 91% 60%;
+  --background: 220 20% 97%;
+  --foreground: 220 20% 10%;
+  --border: 220 13% 88%;
+  --card: 0 0% 100%;
+  --card-foreground: 220 20% 10%;
+  --card-border: 220 13% 88%;
+  --sidebar: 220 15% 95%;
+  --sidebar-foreground: 220 20% 12%;
+  --sidebar-border: 220 13% 88%;
+  --sidebar-primary: 217 91% 50%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 18% 14%;
-  --sidebar-accent-foreground: 210 20% 85%;
+  --sidebar-accent: 220 14% 92%;
+  --sidebar-accent-foreground: 220 20% 15%;
   --sidebar-ring: 217 91% 60%;
-  --popover: 220 18% 11%;
-  --popover-foreground: 210 20% 88%;
-  --popover-border: 220 15% 20%;
-  --primary: 217 91% 60%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 20% 10%;
+  --popover-border: 220 13% 88%;
+  --primary: 217 91% 50%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 18% 16%;
-  --secondary-foreground: 210 20% 85%;
-  --muted: 220 15% 14%;
-  --muted-foreground: 215 16% 55%;
-  --accent: 217 91% 60%;
+  --secondary: 220 14% 93%;
+  --secondary-foreground: 220 20% 12%;
+  --muted: 220 13% 92%;
+  --muted-foreground: 215 14% 48%;
+  --accent: 217 91% 50%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
-  --input: 220 15% 22%;
+  --input: 220 13% 88%;
   --ring: 217 91% 60%;
   --chart-1: 217 91% 60%;
   --chart-2: 160 60% 45%;
@@ -114,12 +114,12 @@
   --app-font-mono: Menlo, monospace;
   --radius: .375rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.4);
-  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.4);
-  --shadow-sm: 0px 1px 3px 0px rgba(0,0,0, 0.4), 0px 1px 2px -1px rgba(0,0,0, 0.4);
-  --shadow: 0px 2px 4px 0px rgba(0,0,0, 0.4), 0px 1px 2px -1px rgba(0,0,0, 0.3);
-  --shadow-md: 0px 4px 8px 0px rgba(0,0,0, 0.4), 0px 2px 4px -1px rgba(0,0,0, 0.3);
-  --shadow-lg: 0px 8px 16px 0px rgba(0,0,0, 0.4), 0px 4px 6px -1px rgba(0,0,0, 0.3);
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.08);
+  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.08);
+  --shadow-sm: 0px 1px 3px 0px rgba(0,0,0, 0.08), 0px 1px 2px -1px rgba(0,0,0, 0.06);
+  --shadow: 0px 2px 4px 0px rgba(0,0,0, 0.08), 0px 1px 2px -1px rgba(0,0,0, 0.06);
+  --shadow-md: 0px 4px 8px 0px rgba(0,0,0, 0.08), 0px 2px 4px -1px rgba(0,0,0, 0.06);
+  --shadow-lg: 0px 8px 16px 0px rgba(0,0,0, 0.1), 0px 4px 6px -1px rgba(0,0,0, 0.06);
   --shadow-xl: 0px 12px 24px 0px rgba(0,0,0, 0.4), 0px 8px 10px -1px rgba(0,0,0, 0.3);
   --shadow-2xl: 0px 16px 32px 0px rgba(0,0,0, 0.5);
 
@@ -217,4 +217,5 @@
 .animate-fadeIn {
   animation: fadeSlideIn 0.35s ease-out both;
 }
+
 
