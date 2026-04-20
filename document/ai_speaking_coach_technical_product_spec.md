@@ -206,9 +206,51 @@ Audio → STT → Text → LLM → Analysis → TTS
 
 # 14. 🧪 Testing Strategy
 
-- Test lỗi người Việt
-- Test hesitation (um, ah)
-- Response < 7s
+## Triết lý
+
+- **Unit test thuần túy** — không gọi dịch vụ thật, không cần Docker
+- **Mock hoàn toàn** — DB, MinIO, Groq LLM, ElevenLabs TTS đều được giả lập
+- **Chạy nhanh** — toàn bộ 109 test < 10 giây
+
+## Phạm vi hiện tại
+
+| Layer | Module | Số test |
+|-------|--------|---------|
+| Security | `app/core/security.py` | 22 |
+| AI Services | `app/core/ai_services.py` | 21 |
+| API Schemas | `app/api/schemas.py` | 22 |
+| API Routes | `app/api/routes.py` | 44 |
+| User Data Flows | `test_user_data_flow.py` | 18 |
+| **Tổng** | | **127** |
+
+## Scenarios được cover
+
+- ✅ Happy path (thành công)
+- ✅ Auth token thiếu / sai / hết hạn → 401
+- ✅ Resource không tồn tại → 404
+- ✅ Input validation lỗi → 400 / 422
+- ✅ Duplicate dữ liệu → 400
+- ✅ File upload quá lớn → 413
+- ✅ Service lỗi → fallback xử lý
+- ✅ **User isolation**: user B không thấy data của user A
+- ✅ **Full lifecycle**: register → login → chat → lịch sử → messages
+- ✅ **Turn number** tăng đúng khi tiếp tục conversation
+
+## Chạy test
+
+```powershell
+# PowerShell
+python -m pytest tests/ -v
+
+# Git Bash
+python -m pytest tests/ -v
+```
+
+**Kết quả:** `127 passed, 0 warnings`
+
+## Tài liệu chi tiết
+
+Xem: [`document/Backend_Test_Suite_Documentation.md`](Backend_Test_Suite_Documentation.md)
 
 ---
 
