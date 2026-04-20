@@ -1,0 +1,5 @@
+# Test-only dependencies — không được cài vào Docker production image
+# Cài local bằng: uv pip install -r requirements-test.txt
+pytest
+pytest-anyio
+pytest-cov
