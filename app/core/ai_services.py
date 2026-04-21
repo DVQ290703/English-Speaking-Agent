@@ -85,10 +85,15 @@ def _synthesize_audio_bytes(text: str) -> bytes:
     logger.info("_synthesize_audio_bytes start text=%r (len=%d)", text[:80], len(text))
     try:
         audio = get_voice_agent_pipeline().tts_service.convert_text_to_speech(text)
-        if audio:
-            logger.info("_synthesize_audio_bytes done size=%d bytes", len(audio))
-        else:
+        if audio is None:
+            logger.warning("_synthesize_audio_bytes received None from TTS for text=%r", text[:80])
+            return b""
+
+        if not audio:
             logger.warning("_synthesize_audio_bytes returned empty bytes for text=%r", text[:80])
+            return b""
+
+        logger.info("_synthesize_audio_bytes done size=%d bytes", len(audio))
         return audio
     except Exception:
         logger.exception("Direct TTS synthesis failed for text: %.80s", text)
