@@ -157,7 +157,52 @@ npm run build
 npm run preview
 ```
 
-## 8. Optional pgAdmin
+## 8. Run backend unit tests (không cần Docker)
+
+Toàn bộ test chạy offline — không cần DB, MinIO hay API keys thật.
+
+Kích hoạt venv trước (xem bước 2), sau đó:
+
+PowerShell:
+
+```powershell
+# Chạy toàn bộ suite
+python -m pytest tests/ -v
+
+# Chạy nhanh
+python -m pytest tests/ -q
+
+# Chạy một module
+python -m pytest tests/test_api/ -v
+
+# Filter theo tên
+python -m pytest tests/ -k "login" -v
+
+# Dừng ngay khi fail
+python -m pytest tests/ -x
+```
+
+Git Bash:
+
+```bash
+python -m pytest tests/ -v
+python -m pytest tests/ -q
+python -m pytest tests/test_api/ -v
+python -m pytest tests/ -k "login" -v
+python -m pytest tests/ -x
+```
+
+Kết quả mong đợi:
+
+```
+127 passed in ~11s
+```
+
+Xem tài liệu chi tiết: [`document/Backend_Test_Suite_Documentation.md`](document/Backend_Test_Suite_Documentation.md)
+
+---
+
+## 9. Optional pgAdmin
 
 - URL: http://localhost:5050
 - Email: admin@local.dev
