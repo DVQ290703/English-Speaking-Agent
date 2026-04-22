@@ -3,7 +3,8 @@
 Unit tests for app.api.schemas
 Covers: LoginRequest, RegisterRequest, UserOut, LoginResponse,
         ChatResponse, MessageOut, ConversationOut,
-        ConversationListResponse, ConversationMessagesResponse
+        ConversationListResponse, ConversationMessagesResponse,
+        AssessmentResponse, WordResult
 """
 
 import os
@@ -16,6 +17,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
 
 from app.api.schemas import (
+    AssessmentResponse,
     ChatResponse,
     ConversationListResponse,
     ConversationMessagesResponse,
@@ -25,6 +27,7 @@ from app.api.schemas import (
     MessageOut,
     RegisterRequest,
     UserOut,
+    WordResult,
 )
 
 # ---------------------------------------------------------------------------
@@ -239,9 +242,6 @@ class TestConversationMessagesResponse:
     def test_conversation_messages_response_empty_messages(self):
         r = ConversationMessagesResponse(conversation_id="c1", messages=[])
         assert r.messages == []
-
-
-from app.api.schemas import AssessmentResponse, WordResult
 
 
 # ---------------------------------------------------------------------------
