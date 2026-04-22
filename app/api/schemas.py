@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr
 
@@ -69,13 +70,13 @@ class ConversationMessagesResponse(BaseModel):
 class WordResult(BaseModel):
     word: str
     accuracy_score: float
-    error_type: str
+    error_type: Literal["None", "Omission", "Insertion", "Mispronunciation", "UnexpectedBreak", "MissingBreak", "Monotone"]
     syllables: list[dict]
     phonemes: list[dict]
 
 
 class AssessmentResponse(BaseModel):
-    mode: str
+    mode: Literal["scripted", "unscripted"]
     recognized_text: str
     pron_score: float
     accuracy_score: float
