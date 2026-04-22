@@ -36,7 +36,7 @@ class AzureAssessmentService:
         """Assess pronunciation of audio_bytes.
 
         Args:
-            audio_bytes: Raw audio data (WAV, WebM, MP3, or any format Azure accepts).
+            audio_bytes: Raw PCM audio (16 kHz, 16-bit, mono) or WAV file bytes.
             reference_text: Target sentence for scripted mode. Omit for unscripted mode.
             language: Locale override (e.g. "en-GB"). Defaults to self.default_language.
             granularity: "Phoneme" (default, full detail), "Word", or "FullText".
@@ -73,7 +73,10 @@ class AzureAssessmentService:
             "Word": speechsdk.PronunciationAssessmentGranularity.Word,
             "FullText": speechsdk.PronunciationAssessmentGranularity.FullText,
         }
-        gran = granularity_map.get(granularity, speechsdk.PronunciationAssessmentGranularity.Phoneme)
+        gran = granularity_map.get(granularity)
+        if gran is None:
+            logger.warning("AzureAssessment unknown granularity=%r — falling back to Phoneme", granularity)
+            gran = speechsdk.PronunciationAssessmentGranularity.Phoneme
 
         pronunciation_config = speechsdk.PronunciationAssessmentConfig(
             reference_text=reference_text.strip() if is_scripted else "",
