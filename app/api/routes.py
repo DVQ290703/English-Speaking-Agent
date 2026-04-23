@@ -452,7 +452,10 @@ def assess_pronunciation(
         user_id, "scripted" if reference_text else "unscripted", language,
     )
 
-    audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
+    try:
+        audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
+    finally:
+        audio_file.file.close()
 
     if not audio_bytes:
         raise HTTPException(
