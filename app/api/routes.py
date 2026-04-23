@@ -210,7 +210,7 @@ def chat_respond(
         if len(audio_bytes_received) > _MAX_AUDIO_BYTES:
             logger.warning("Audio upload rejected — size %d exceeds 25 MB limit", len(audio_bytes_received))
             raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                 detail="Audio file exceeds 25 MB limit",
             )
         if not user_input:
