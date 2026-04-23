@@ -3,7 +3,8 @@
 Unit tests for app.api.schemas
 Covers: LoginRequest, RegisterRequest, UserOut, LoginResponse,
         ChatResponse, MessageOut, ConversationOut,
-        ConversationListResponse, ConversationMessagesResponse
+        ConversationListResponse, ConversationMessagesResponse,
+        AssessmentResponse, WordResult
 """
 
 import os
@@ -16,6 +17,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
 
 from app.api.schemas import (
+    AssessmentResponse,
     ChatResponse,
     ConversationListResponse,
     ConversationMessagesResponse,
@@ -25,6 +27,7 @@ from app.api.schemas import (
     MessageOut,
     RegisterRequest,
     UserOut,
+    WordResult,
 )
 
 # ---------------------------------------------------------------------------
@@ -239,3 +242,85 @@ class TestConversationMessagesResponse:
     def test_conversation_messages_response_empty_messages(self):
         r = ConversationMessagesResponse(conversation_id="c1", messages=[])
         assert r.messages == []
+
+
+
+# ---------------------------------------------------------------------------
+# WordResult
+# ---------------------------------------------------------------------------
+
+class TestWordResult:
+    def test_word_result_valid(self):
+        w = WordResult(
+            word="hello",
+            accuracy_score=95.0,
+            error_type="None",
+            syllables=[],
+            phonemes=[],
+        )
+        assert w.word == "hello"
+        assert w.accuracy_score == 95.0
+        assert w.error_type == "None"
+
+    def test_word_result_with_syllables_and_phonemes(self):
+        w = WordResult(
+            word="hello",
+            accuracy_score=80.0,
+            error_type="Mispronunciation",
+            syllables=[{"Syllable": "hɛ", "PronunciationAssessment": {"AccuracyScore": 70.0}}],
+            phonemes=[{"Phoneme": "h", "PronunciationAssessment": {"AccuracyScore": 98.0}}],
+        )
+        assert len(w.syllables) == 1
+        assert len(w.phonemes) == 1
+
+    def test_word_result_missing_required_raises(self):
+        with pytest.raises(ValidationError):
+            WordResult(accuracy_score=90.0, error_type="None", syllables=[], phonemes=[])
+
+
+# ---------------------------------------------------------------------------
+# AssessmentResponse
+# ---------------------------------------------------------------------------
+
+class TestAssessmentResponse:
+    def _word(self):
+        return WordResult(word="hi", accuracy_score=90.0, error_type="None", syllables=[], phonemes=[])
+
+    def test_assessment_response_unscripted(self):
+        r = AssessmentResponse(
+            mode="unscripted",
+            recognized_text="Hello.",
+            pron_score=91.5,
+            accuracy_score=95.0,
+            fluency_score=90.0,
+            completeness_score=None,
+            prosody_score=85.0,
+            words=[self._word()],
+        )
+        assert r.mode == "unscripted"
+        assert r.completeness_score is None
+        assert r.prosody_score == 85.0
+
+    def test_assessment_response_scripted_includes_completeness(self):
+        r = AssessmentResponse(
+            mode="scripted",
+            recognized_text="Hello.",
+            pron_score=91.5,
+            accuracy_score=95.0,
+            fluency_score=90.0,
+            completeness_score=100.0,
+            prosody_score=None,
+            words=[],
+        )
+        assert r.completeness_score == 100.0
+        assert r.prosody_score is None
+
+    def test_assessment_response_missing_required_raises(self):
+        with pytest.raises(ValidationError):
+            AssessmentResponse(
+                mode="unscripted",
+                pron_score=91.5,
+                accuracy_score=95.0,
+                fluency_score=90.0,
+                words=[],
+            )

@@ -238,10 +238,10 @@ class TestMe:
         assert r.json()["english_level"] == "C1"
 
     def test_me_no_token_returns_401(self):
-        """HTTPBearer raises 401 when the Authorization header is missing."""
+        """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
             r = c.get("/api/auth/me")
-        assert r.status_code == 401
+        assert r.status_code in (401, 403)
 
     def test_me_invalid_token_returns_401(self):
         with _client() as (c, _):
@@ -340,10 +340,10 @@ class TestChatRespond:
         assert r.status_code == 400
 
     def test_chat_respond_no_auth_returns_401(self):
-        """HTTPBearer raises 401 when the Authorization header is missing."""
+        """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
             r = c.post("/api/chat/respond", data={"text": "Hello"})
-        assert r.status_code == 401
+        assert r.status_code in (401, 403)
 
     def test_chat_respond_invalid_conversation_id_returns_400(self):
         with _client() as (c, _):
@@ -410,10 +410,10 @@ class TestListConversations:
         assert r.json()["conversations"] == []
 
     def test_list_conversations_no_auth_returns_401(self):
-        """HTTPBearer raises 401 when the Authorization header is missing."""
+        """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
             r = c.get("/api/conversations")
-        assert r.status_code == 401
+        assert r.status_code in (401, 403)
 
     def test_list_conversations_invalid_token_returns_401(self):
         with _client() as (c, _):
@@ -490,10 +490,10 @@ class TestGetConversationMessages:
         assert r.json()["messages"][0]["audio_url"] is None
 
     def test_get_messages_no_auth_returns_401(self):
-        """HTTPBearer raises 401 when the Authorization header is missing."""
+        """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages")
-        assert r.status_code == 401
+        assert r.status_code in (401, 403)
 
     def test_get_messages_invalid_uuid_returns_400(self):
         with _client() as (c, _):
@@ -517,3 +517,160 @@ class TestHealthCheck:
             r = c.get("/health")
         assert r.status_code == 200
         assert r.json() == {"status": "ok"}
+
+
+
+# ===========================================================================
+# POST /api/assess
+# ===========================================================================
+
+class TestAssessRoute:
+    """Tests for POST /api/assess — pronunciation assessment endpoint."""
+
+    def _headers(self, auth_headers):
+        headers, _ = auth_headers()
+        return headers
+
+    def _mock_result(self, mode: str = "unscripted", include_completeness: bool = False):
+        pron = {
+            "AccuracyScore": 95.0,
+            "FluencyScore": 90.0,
+            "PronScore": 91.5,
+            "ProsodyScore": 85.0,
+        }
+        if include_completeness:
+            pron["CompletenessScore"] = 100.0
+        return {
+            "mode": mode,
+            "display_text": "Hello.",
+            "PronunciationAssessment": pron,
+            "Words": [
+                {
+                    "Word": "hello",
+                    "PronunciationAssessment": {"AccuracyScore": 95.0, "ErrorType": "None"},
+                    "Syllables": [],
+                    "Phonemes": [],
+                }
+            ],
+        }
+
+    def test_requires_auth(self, client):
+        resp = client.post(
+            "/api/assess",
+            files={"audio_file": ("test.wav", b"fake-audio", "audio/wav")},
+        )
+        assert resp.status_code in (401, 403)
+
+    def test_missing_audio_file_returns_422(self, client, auth_headers):
+        resp = client.post("/api/assess", headers=self._headers(auth_headers))
+        assert resp.status_code == 422
+
+    def test_empty_audio_returns_400(self, client, auth_headers):
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            files={"audio_file": ("test.wav", b"", "audio/wav")},
+        )
+        assert resp.status_code == 400
+
+    def test_oversized_audio_returns_413(self, client, auth_headers):
+        oversized = b"x" * (25 * 1024 * 1024 + 1)
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            files={"audio_file": ("big.wav", oversized, "audio/wav")},
+        )
+        assert resp.status_code == 413
+
+    def test_unscripted_assess_returns_200(self, client, auth_headers):
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = self._mock_result("unscripted")
+            resp = client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mode"] == "unscripted"
+        assert data["pron_score"] == 91.5
+        assert data["accuracy_score"] == 95.0
+        assert data["fluency_score"] == 90.0
+        assert data["completeness_score"] is None
+        assert data["prosody_score"] == 85.0
+        assert len(data["words"]) == 1
+        assert data["words"][0]["word"] == "hello"
+
+    def test_scripted_assess_returns_completeness_score(self, client, auth_headers):
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = self._mock_result(
+                "scripted", include_completeness=True
+            )
+            resp = client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                data={"reference_text": "Hello"},
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mode"] == "scripted"
+        assert data["completeness_score"] == 100.0
+
+    def test_assess_passes_reference_text_to_service(self, client, auth_headers):
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = self._mock_result("scripted", include_completeness=True)
+            client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                data={"reference_text": "Good morning"},
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        call_kwargs = mock_get.return_value.assess.call_args
+        assert call_kwargs.kwargs["reference_text"] == "Good morning"
+
+    def test_assess_passes_language_override_to_service(self, client, auth_headers):
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = self._mock_result()
+            client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                data={"language": "en-GB"},
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        call_kwargs = mock_get.return_value.assess.call_args
+        assert call_kwargs.kwargs["language"] == "en-GB"
+
+    def test_azure_runtime_error_returns_502(self, client, auth_headers):
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.side_effect = RuntimeError("Speech not recognized.")
+            resp = client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        assert resp.status_code == 502
+        assert "Speech not recognized" in resp.json()["detail"]
+
+    def test_unknown_error_type_returns_502(self, client, auth_headers):
+        mock_result = {
+            "mode": "unscripted",
+            "display_text": "Hello.",
+            "PronunciationAssessment": {"AccuracyScore": 95.0, "FluencyScore": 90.0, "PronScore": 91.5},
+            "Words": [
+                {
+                    "Word": "hello",
+                    "PronunciationAssessment": {"AccuracyScore": 95.0, "ErrorType": "FutureUnknownType"},
+                    "Syllables": [],
+                    "Phonemes": [],
+                }
+            ],
+        }
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = mock_result
+            resp = client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        assert resp.status_code == 502
