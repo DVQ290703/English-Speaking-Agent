@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut } from "lucide-react";
+import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut, Moon, Sun } from "lucide-react";
 import { SiOpenai } from "react-icons/si";
 
 import { chatRespond } from "../api/chat";
-import { getAuthSession } from "../auth/tokenStorage";
+import { getAuthSession, clearAuthSession } from "../auth/tokenStorage";
 import {
   AgentWaveform,
   DeviceSelect,
@@ -15,7 +15,7 @@ import {
 import type { Message } from "../components/voice-agent";
 
 interface AuthUser {
-  name: string;
+  display_name: string;
   email?: string;
 }
 
@@ -36,10 +36,10 @@ interface FeedbackItem {
 }
 
 const FEEDBACK_ICON: Record<FeedbackType, { icon: typeof AlertCircle; color: string; bg: string; label: string }> = {
-  grammar:       { icon: AlertCircle,    color: "text-red-400",    bg: "bg-red-500/10 border-red-500/25",    label: "Grammar"       },
-  vocabulary:    { icon: BookOpen,       color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/25", label: "Vocabulary"  },
-  pronunciation: { icon: Volume2,        color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/25", label: "Pronunciation" },
-  fluency:       { icon: Zap,            color: "text-blue-400",   bg: "bg-blue-500/10 border-blue-500/25",  label: "Fluency"       },
+  grammar:       { icon: AlertCircle,    color: "text-red-500",    bg: "bg-red-50 border-red-200",    label: "Grammar"       },
+  vocabulary:    { icon: BookOpen,       color: "text-yellow-500", bg: "bg-yellow-50 border-yellow-200", label: "Vocabulary"  },
+  pronunciation: { icon: Volume2,        color: "text-purple-600", bg: "bg-violet-50 border-purple-500/25", label: "Pronunciation" },
+  fluency:       { icon: Zap,            color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",  label: "Fluency"       },
 };
 
 const AUTO_FEEDBACKS: Omit<FeedbackItem, "id" | "timestamp">[] = [
@@ -150,8 +150,60 @@ interface VoiceAgentProps {
 
 export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialUser);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try { return localStorage.getItem("va-theme") === "dark"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("va-theme", isDark ? "dark" : "light");
+  }, [isDark]);
+
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (initialUser) return initialUser;
+    const session = getAuthSession();
+    if (!session?.user) return null;
+    const u = session.user;
+    return { display_name: u.display_name || u.name || u.email || "User", email: u.email };
+  });
   const [topic, setTopic] = useState<TopicId>("daily");
+  const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("topic") || sessionStorage.getItem("va_selected_topic");
+      if (!raw) return;
+      sessionStorage.removeItem("va_selected_topic");
+
+      const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
+        "Daily Conversation": "daily",
+        "IELTS Part 1": "ielts1",
+        "IELTS Part 2": "ielts2",
+        "Academic Discussion": "ielts3",
+        "Describe a person": "ielts2",
+        "Describe a place": "ielts2",
+        "Job Interview": "career",
+        "Office Meeting": "career",
+        "Presentations": "career",
+        "Negotiation": "career",
+        "Email & Phone": "career",
+        "Shopping": "daily",
+        "Healthcare": "health",
+        "Family & Friends": "daily",
+        "Hobbies": "daily",
+        "Travel & Tourism": "travel",
+        "Food & Restaurant": "travel",
+        "Hotel & Booking": "travel",
+        "Culture & Customs": "travel",
+        "Airport English": "travel",
+      };
+      const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
+      if (mappedId) setTopic(mappedId);
+      setCustomTopicLabel(raw);
+    } catch {}
+  }, []);
 
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [micEnabled, setMicEnabled] = useState(true);
@@ -185,7 +237,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   useEffect(() => { genderRef.current = gender; }, [gender]);
   useEffect(() => { languageRef.current = language; }, [language]);
-  useEffect(() => { setCurrentUser(initialUser); }, [initialUser]);
+  useEffect(() => { if (initialUser) setCurrentUser(initialUser); }, [initialUser]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -647,50 +699,72 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const isConnecting = status === "connecting";
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0d1017] text-gray-200 flex flex-col">
+    <div data-va="root" className={`h-screen overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? " va-dark" : ""}`}>
       {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-[#0d1017]">
+      <header data-va="header" className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-white/90 rounded-sm flex items-center justify-center">
-            <span className="text-[10px] font-black text-gray-900 leading-none">VIN</span>
+          <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
+            <span className="text-[10px] font-black text-white leading-none">VIN</span>
           </div>
-          <span className="text-sm font-semibold text-white">IELTS Speaking Coach</span>
+          <span className="text-sm font-semibold text-gray-800">IELTS Speaking Coach</span>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsDark(v => !v)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
           {currentUser ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1">
-                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
-                  {currentUser.name[0].toUpperCase()}
-                </div>
-                <span className="text-xs text-gray-300">{currentUser.name}</span>
-              </div>
+            <div className="relative">
               <button
-                onClick={() => {
-                  if (onLogout) {
-                    onLogout();
-                    return;
-                  }
-                  setCurrentUser(null);
-                }}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-400 transition-colors"
-                title="Đăng xuất"
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-colors"
+                title={currentUser.display_name || currentUser.email || "User"}
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
+                  {currentUser.display_name?.[0]?.toUpperCase() ?? "?"}
+                </div>
+                <span className="text-xs text-gray-700">{currentUser.display_name || currentUser.email || "User"}</span>
+                <svg className={`w-3 h-3 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
               </button>
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-40 overflow-hidden animate-fadeIn">
+                    <div className="px-3 py-2.5 border-b border-gray-100">
+                      <div className="text-sm font-semibold text-gray-900 truncate">{currentUser.display_name || "User"}</div>
+                      <div className="text-xs text-gray-500 truncate">{currentUser.email}</div>
+                    </div>
+                    <button
+                      onClick={() => { setShowUserMenu(false); navigate("/dashboard"); }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>📊</span> Dashboard
+                    </button>
+                    <button
+                      onClick={() => { setShowUserMenu(false); setShowLogoutConfirm(true); }}
+                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Đăng xuất
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => navigate("/")}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg transition-colors"
               >
                 <LogIn className="w-3 h-3" /> Đăng nhập
               </button>
               <button
                 onClick={() => navigate("/register")}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-gray-900 rounded-lg transition-colors"
               >
                 <UserPlus className="w-3 h-3" /> Đăng ký
               </button>
@@ -702,17 +776,17 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       </header>
 
       {/* Description bar */}
-      <div className="flex items-center justify-between px-4 py-1.5 border-b border-white/6 bg-[#0d1017]/80 text-xs text-gray-500">
+      <div data-va="descbar" className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-400">Description</span>
-          <span className="text-gray-600">·</span>
-          <span className="text-gray-400">{TOPICS.find((t) => t.id === topic)?.label ?? "Daily Conversation"}</span>
+          <span className="font-medium text-gray-700">Description</span>
+          <span className="text-gray-400">·</span>
+          <span className="text-gray-700">{customTopicLabel ?? TOPICS.find((t) => t.id === topic)?.label ?? "Daily Conversation"}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
             data-testid="button-settings"
             onClick={() => setShowSettings((v) => !v)}
-            className="p-1.5 rounded hover:bg-white/8 transition-colors text-gray-500 hover:text-gray-300"
+            className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
@@ -722,10 +796,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             disabled={isConnecting}
             className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
               isConnected
-                ? "bg-red-600/80 hover:bg-red-600 text-white border border-red-500/50"
+                ? "bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50"
                 : isConnecting
-                ? "bg-blue-600/50 text-blue-300 border border-blue-500/30 cursor-not-allowed"
-                : "bg-white text-gray-900 hover:bg-gray-100 border border-white/20"
+                ? "bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed"
+                : "bg-white text-gray-900 hover:bg-gray-100 border border-gray-300"
             }`}
           >
             {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
@@ -734,26 +808,26 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       </div>
 
       {/* Main content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div data-va="content" className="flex flex-1 overflow-hidden">
         {/* Left panel: Audio & Video */}
-        <div className="w-[320px] shrink-0 border-r border-white/8 flex flex-col bg-[#0e1118] overflow-hidden">
+        <div data-va="left" className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-hidden">
           {/* Panel header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-white/6">
-            <span className="text-xs font-semibold text-gray-300 tracking-wide">Audio & Video</span>
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+            <span className="text-xs font-semibold text-gray-700 tracking-wide">Audio & Video</span>
             <SelectDropdown value={gender} options={GENDERS} onChange={setGender} />
           </div>
 
           {/* Agent display */}
-          <div className="bg-[#0c1020] mx-2 mt-2 rounded-md overflow-hidden border border-white/6">
+          <div className="bg-linear-to-b from-blue-50 to-indigo-50 mx-2 mt-2 rounded-md overflow-hidden border border-gray-200">
             <div className="flex flex-col items-center justify-center py-5 px-4 min-h-32.5">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
                 agentSpeaking
-                  ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-500/20"
-                  : "bg-blue-600/15 border border-blue-500/25"
+                  ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200"
+                  : "bg-blue-100 border border-blue-200"
               }`}>
-                <SiOpenai className={`w-6 h-6 transition-colors duration-300 ${agentSpeaking ? "text-blue-300" : "text-blue-400"}`} />
+                <SiOpenai className={`w-6 h-6 transition-colors duration-300 ${agentSpeaking ? "text-blue-600" : "text-blue-600"}`} />
               </div>
-              <span className="text-xs font-medium text-gray-400 mb-2">Agent</span>
+              <span className="text-xs font-medium text-gray-700 mb-2">Agent</span>
               {(isConnected || isConnecting) ? (
                 <AgentWaveform active={agentSpeaking} />
               ) : (
@@ -769,7 +843,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           {/* Microphone section */}
           <div className="px-2 mt-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">Microphone</span>
+              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">Microphone</span>
               <div className="flex items-center gap-2">
                 <button
                   data-testid="button-mic-toggle"
@@ -778,8 +852,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     isRecording
                       ? "text-red-400 hover:text-red-300 animate-pulse"
                       : micEnabled
-                      ? "text-blue-400 hover:text-blue-300"
-                      : "text-gray-600 hover:text-gray-400"
+                      ? "text-blue-600 hover:text-blue-300"
+                      : "text-gray-400 hover:text-gray-500"
                   }`}
                 >
                   {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
@@ -787,7 +861,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 <DeviceSelect value={selectedMic} options={MICROPHONES} onChange={setSelectedMic} />
               </div>
             </div>
-            <div className="bg-[#0c1020] rounded-md border border-white/6 py-2 px-2">
+            <div className="bg-linear-to-b from-blue-50 to-indigo-50 rounded-md border border-gray-200 py-2 px-2">
               <MicWaveform active={micEnabled && isConnected} />
             </div>
           </div>
@@ -795,9 +869,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           {/* AI Feedback Panel */}
           <div className="px-2 mt-3 flex-1 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold text-gray-500 tracking-widest uppercase">AI Feedback</span>
+              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">AI Feedback</span>
               {feedbacks.length > 0 && (
-                <span className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-500/25 rounded-full px-1.5 py-0.5">
+                <span className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-200 rounded-full px-1.5 py-0.5">
                   {feedbacks.length}
                 </span>
               )}
@@ -806,8 +880,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin pr-0.5">
               {feedbacks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
-                  <CheckCircle2 className="w-7 h-7 text-gray-700" />
-                  <p className="text-[10px] text-gray-600 leading-relaxed px-2">
+                  <CheckCircle2 className="w-7 h-7 text-gray-400" />
+                  <p className="text-[10px] text-gray-500 leading-relaxed px-2">
                     {isConnected
                       ? "Listening for errors..."
                       : "Connect to see real-time English corrections"}
@@ -826,9 +900,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                         <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
                         <span className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</span>
                       </div>
-                      <p className="text-[10px] text-red-300/80 line-through mb-0.5 leading-snug">{fb.original}</p>
-                      <p className="text-[10px] text-green-300 font-medium mb-1 leading-snug">{fb.corrected}</p>
-                      <p className="text-[9px] text-gray-500 leading-relaxed">{fb.explanation}</p>
+                      <p className="text-[10px] text-red-500 opacity-75 line-through mb-0.5 leading-snug">{fb.original}</p>
+                      <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">{fb.corrected}</p>
+                      <p className="text-[9px] text-gray-700 leading-relaxed">{fb.explanation}</p>
                     </div>
                   );
                 })
@@ -842,13 +916,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         {/* Right panel: Conversation transcript */}
         <div className="flex-1 flex flex-col">
           {/* Panel top bar */}
-          <div className="flex items-center justify-between px-4 py-2 border-b border-white/6">
+          <div data-va="conv-header" className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-gray-400">Conversation</span>
+              <span className="text-xs font-semibold text-gray-700">Conversation</span>
               {isConnected && (
                 <div className="flex items-center gap-1.5">
-                  <Circle className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? "text-blue-400" : "text-green-400"}`} />
-                  <span className="text-[10px] text-gray-500">
+                  <Circle className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? "text-blue-600" : "text-green-400"}`} />
+                  <span className="text-[10px] text-gray-600">
                     {agentSpeaking ? "Agent speaking" : "Listening"}
                   </span>
                 </div>
@@ -856,7 +930,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
-                <SiOpenai className="w-4 h-4 text-gray-400" />
+                <SiOpenai className="w-4 h-4 text-gray-500" />
                 <SelectDropdown value={model} options={MODELS} onChange={setModel} />
               </div>
               <SelectDropdown value={language} options={LANGUAGES} onChange={setLanguage} />
@@ -864,36 +938,36 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Messages area */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
+          <div data-va="messages" className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
             {status === "disconnected" && messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-blue-600/10 border border-blue-500/20 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
                   <SiOpenai className="w-8 h-8 text-blue-400/50" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-gray-400 text-sm">
-                    Click <span className="font-semibold text-white">Connect</span> to start a session
+                  <p className="text-gray-600 text-sm">
+                    Click <span className="font-semibold text-gray-900">Connect</span> to start a session
                   </p>
-                  <p className="text-gray-600 text-xs">Conversation transcript will appear here</p>
+                  <p className="text-gray-400 text-xs">Conversation transcript will appear here</p>
                 </div>
               </div>
             )}
 
             {status === "connecting" && (
               <div className="h-full flex flex-col items-center justify-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-600/15 border border-blue-500/30 flex items-center justify-center animate-pulse">
+                <div className="w-12 h-12 rounded-full bg-blue-100 border border-blue-300 flex items-center justify-center animate-pulse">
                   <SiOpenai className="w-6 h-6 text-blue-400" />
                 </div>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div
                       key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-blue-400"
+                      className="w-1.5 h-1.5 rounded-full bg-blue-500"
                       style={{ animation: `dotPulse 1s ease-in-out ${i * 200}ms infinite` }}
                     />
                   ))}
                 </div>
-                <p className="text-blue-300/70 text-xs">Establishing connection...</p>
+                <p className="text-blue-600/70 text-xs">Establishing connection...</p>
               </div>
             )}
 
@@ -932,9 +1006,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Chat input bar */}
-          <div className="border-t border-white/8 px-3 py-3 bg-[#0d1017]">
+          <div data-va="input" className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa]">
             {!isConnected ? (
-              <div className="flex items-center justify-center py-2 text-xs text-gray-700">
+              <div className="flex items-center justify-center py-2 text-xs text-gray-400">
                 Connect to start chatting
               </div>
             ) : (
@@ -954,10 +1028,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     disabled={agentTyping}
                     placeholder={isRecording ? "Đang nghe giọng nói..." : agentTyping ? "Agent is typing..." : "Type a message... (Enter to send)"}
                     rows={1}
-                    className={`w-full resize-none rounded-xl border px-3 py-2 text-sm bg-[#131929] text-gray-200 placeholder-gray-600 outline-none transition-all leading-relaxed
+                    data-va="textarea" className={`w-full resize-none rounded-xl border px-3 py-2 text-sm bg-[#f1f5f9] text-gray-800 placeholder-gray-400 outline-none transition-all leading-relaxed
                       ${agentTyping
-                        ? "border-white/8 opacity-60 cursor-not-allowed"
-                        : "border-white/12 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                        ? "border-gray-200 opacity-60 cursor-not-allowed"
+                        : "border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
                       }`}
                     style={{ minHeight: "38px", maxHeight: "120px" }}
                   />
@@ -972,8 +1046,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                   disabled={!chatInput.trim() || agentTyping}
                   className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                     chatInput.trim() && !agentTyping
-                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/20"
-                      : "bg-white/5 text-gray-700 cursor-not-allowed"
+                      ? "bg-blue-600 hover:bg-blue-500 text-gray-900 shadow-md shadow-blue-200"
+                      : "bg-gray-100 text-gray-500 cursor-not-allowed"
                   }`}
                 >
                   <SendHorizontal className="w-4 h-4" />
@@ -990,7 +1064,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                       {Array.from({ length: 10 }).map((_, i) => (
                         <div
                           key={i}
-                          className="w-0.5 rounded-full bg-blue-400"
+                          className="w-0.5 rounded-full bg-blue-500"
                           style={{
                             height: `${3 + Math.sin(i * 0.8) * 6}px`,
                             animation: `agentWave 0.8s ease-in-out ${i * 60}ms infinite`,
@@ -998,14 +1072,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                           }}
                         />
                       ))}
-                      <span className="ml-1 text-[10px] text-blue-400/70">Agent speaking</span>
+                      <span className="ml-1 text-[10px] text-blue-600/80">Agent speaking</span>
                     </div>
                   )}
                   {agentTyping && !agentSpeaking && (
-                    <span className="text-[10px] text-gray-600 italic">Agent is typing...</span>
+                    <span className="text-[10px] text-gray-500 italic">Agent is typing...</span>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-700">
+                <span className="text-[10px] text-gray-600">
                   {messages.filter((m) => !m.typing).length} messages • Enter to send, Shift+Enter for newline
                 </span>
               </div>
@@ -1021,25 +1095,34 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onClick={() => setShowSettings(false)}
         >
           <div
-            className="mt-18 mr-3 bg-[#161b27] border border-white/12 rounded-xl shadow-2xl w-80 p-4 text-sm"
+            className="mt-18 mr-3 bg-white border border-gray-200 rounded-xl shadow-2xl w-80 p-4 text-sm"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-gray-200 mb-1 text-sm">Chủ đề luyện tập</h3>
-            <p className="text-[10px] text-gray-600 mb-3">Chọn chủ đề để AI tập trung hướng dẫn đúng hướng</p>
+            <h3 className="font-semibold text-gray-800 mb-1 text-sm">Chủ đề luyện tập</h3>
+            <p className="text-[10px] text-gray-500 mb-3">Chọn chủ đề để AI tập trung hướng dẫn đúng hướng</p>
             <div className="space-y-1">
               {TOPICS.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => { setTopic(t.id); setShowSettings(false); }}
+                  onClick={() => {
+                    setTopic(t.id);
+                    setCustomTopicLabel(null);
+                    setShowSettings(false);
+                    try {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set("topic", t.label);
+                      window.history.replaceState({}, "", url.toString());
+                    } catch {}
+                  }}
                   className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
                     topic === t.id
-                      ? "bg-blue-600/25 border border-blue-500/40 text-blue-200"
-                      : "text-gray-400 hover:bg-white/6 border border-transparent"
+                      ? "bg-blue-100 border border-blue-300 text-blue-200"
+                      : "text-gray-600 hover:bg-gray-100 border border-transparent"
                   }`}
                 >
                   <div>
-                    <div className="text-xs font-medium">{t.label}</div>
-                    <div className="text-[10px] text-gray-600 mt-0.5">{t.desc}</div>
+                    <div className="text-xs font-medium text-gray-800">{t.label}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{t.desc}</div>
                   </div>
                   {topic === t.id && (
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
@@ -1050,6 +1133,39 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
         </div>
       )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+             onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-sm w-full p-6"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl shrink-0">👋</div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
+                <p className="text-sm text-gray-500 mt-1">Bạn có chắc muốn đăng xuất khỏi tài khoản không?</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowLogoutConfirm(false)}
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                Hủy
+              </button>
+              <button onClick={() => {
+                setShowLogoutConfirm(false);
+                clearAuthSession();
+                setCurrentUser(null);
+                if (onLogout) onLogout();
+                navigate("/", { replace: true });
+              }}
+                      className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">
+                Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 }
