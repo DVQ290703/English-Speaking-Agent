@@ -5,10 +5,13 @@ import psycopg2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
 
+from pydantic import ValidationError
+
 from app.core.logger import logger
-from app.core.ai_services import normalize_history, run_langraph_agent, transcribe_audio
+from app.core.ai_services import normalize_history, run_langraph_agent, transcribe_audio, get_assessment_service
 from app.core.database import get_connection
 from app.api.schemas import (
+    AssessmentResponse,
     ChatResponse,
     ConversationListResponse,
     ConversationMessagesResponse,
@@ -16,8 +19,11 @@ from app.api.schemas import (
     LoginRequest,
     LoginResponse,
     MessageOut,
+    PhonemeResult,
     RegisterRequest,
+    SyllableResult,
     UserOut,
+    WordResult,
 )
 from app.core.security import create_access_token, decode_token, get_current_user_id, hash_password, security, verify_password
 from app.core.storage import (
@@ -30,6 +36,15 @@ from app.core.storage import (
 router = APIRouter(prefix="/api")
 
 _MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
+
+# Azure PushAudioInputStream with default format expects WAV or raw PCM.
+# Compressed browser formats (webm, opus, mp4) are not supported.
+_SUPPORTED_AUDIO_CONTENT_TYPES = frozenset({
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/pcm",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +225,7 @@ def chat_respond(
         if len(audio_bytes_received) > _MAX_AUDIO_BYTES:
             logger.warning("Audio upload rejected — size %d exceeds 25 MB limit", len(audio_bytes_received))
             raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail="Audio file exceeds 25 MB limit",
             )
         if not user_input:
@@ -420,6 +435,130 @@ def chat_respond(
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Pronunciation assessment
+# ---------------------------------------------------------------------------
+
+@router.post("/assess", response_model=AssessmentResponse)
+def assess_pronunciation(
+    audio_file: UploadFile = File(...),
+    reference_text: str | None = Form(default=None),
+    language: str | None = Form(default=None),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Evaluate pronunciation from uploaded audio.
+
+    Pass reference_text for scripted (reading) mode.
+    Omit reference_text for unscripted (free speech) mode.
+    Pass language to override locale (default en-US, supports en-GB).
+
+    The service always uses Phoneme-level granularity (full word/syllable/phoneme
+    detail) and enables prosody assessment for en-US. These are not configurable
+    at the API level; use AzureAssessmentService directly for custom settings.
+    """
+    logger.info(
+        "assess_pronunciation start user_id=%s mode=%s language=%s",
+        user_id, "scripted" if reference_text else "unscripted", language,
+    )
+
+    content_type = (audio_file.content_type or "").lower().split(";")[0].strip()
+    if content_type and content_type not in _SUPPORTED_AUDIO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=(
+                f"Unsupported audio format '{content_type}'. "
+                "Upload WAV (PCM) audio; compressed formats such as WebM and Opus are not supported."
+            ),
+        )
+
+    try:
+        audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
+    finally:
+        audio_file.file.truncate(0)
+        audio_file.file.close()
+
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Audio file is empty",
+        )
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Audio file exceeds 25 MB limit",
+        )
+
+    # Resolve service first — a missing env-var raises ValueError from the
+    # constructor, which is a server misconfiguration, not a client error.
+    try:
+        service = get_assessment_service()
+    except ValueError as exc:
+        logger.error("AzureAssessmentService misconfigured: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Pronunciation assessment service is not available",
+        )
+
+    try:
+        result = service.assess(
+            audio_bytes=audio_bytes,
+            reference_text=reference_text,
+            language=language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except RuntimeError as exc:
+        logger.error("AzureAssessment failed user_id=%s error=%s", user_id, exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    pron = result.get("PronunciationAssessment", {})
+    try:
+        words = [
+            WordResult(
+                word=w.get("Word", ""),
+                accuracy_score=w.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                error_type=w.get("PronunciationAssessment", {}).get("ErrorType", "None"),
+                syllables=[
+                    SyllableResult(
+                        syllable=s.get("Syllable", ""),
+                        accuracy_score=s.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                    )
+                    for s in (w.get("Syllables") or [])
+                ],
+                phonemes=[
+                    PhonemeResult(
+                        phoneme=p.get("Phoneme", ""),
+                        accuracy_score=p.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                    )
+                    for p in (w.get("Phonemes") or [])
+                ],
+            )
+            for w in result.get("Words", [])
+        ]
+
+        logger.info(
+            "assess_pronunciation done user_id=%s mode=%s pron_score=%s recognized=%r",
+            user_id, result.get("mode"), pron.get("PronScore"), result.get("display_text", "")[:80],
+        )
+
+        return AssessmentResponse(
+            mode=result.get("mode", "unscripted"),
+            recognized_text=result.get("display_text", ""),
+            pron_score=pron.get("PronScore", 0.0),
+            accuracy_score=pron.get("AccuracyScore", 0.0),
+            fluency_score=pron.get("FluencyScore", 0.0),
+            completeness_score=pron.get("CompletenessScore"),
+            prosody_score=pron.get("ProsodyScore"),
+            words=words,
+        )
+    except ValidationError as exc:
+        logger.error("AzureAssessment schema validation failed user_id=%s error=%s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Azure returned an unrecognised response format",
+        )
 
 
 # ---------------------------------------------------------------------------
