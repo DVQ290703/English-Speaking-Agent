@@ -63,45 +63,48 @@ class AzureAssessmentService:
 
         # Wrap bytes in a push audio stream
         stream = speechsdk.audio.PushAudioInputStream()
-        stream.write(audio_bytes)
-        stream.close()
-        audio_config = speechsdk.audio.AudioConfig(stream=stream)
-
-        # Map granularity string to SDK enum
-        granularity_map = {
-            "Phoneme": speechsdk.PronunciationAssessmentGranularity.Phoneme,
-            "Word": speechsdk.PronunciationAssessmentGranularity.Word,
-            "FullText": speechsdk.PronunciationAssessmentGranularity.FullText,
-        }
-        gran = granularity_map.get(granularity)
-        if gran is None:
-            logger.warning("AzureAssessment unknown granularity=%r — falling back to Phoneme", granularity)
-            gran = speechsdk.PronunciationAssessmentGranularity.Phoneme
-
-        pronunciation_config = speechsdk.PronunciationAssessmentConfig(
-            reference_text=reference_text.strip() if is_scripted else "",
-            grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
-            granularity=gran,
-            enable_miscue=is_scripted,
-        )
-
-        if enable_prosody and locale == "en-US":
-            pronunciation_config.enable_prosody_assessment()
-            logger.debug("AzureAssessment prosody enabled locale=%s", locale)
-
-        speech_config = speechsdk.SpeechConfig(subscription=self._key, region=self._region)
-        speech_config.speech_recognition_language = locale
-
-        recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            audio_config=audio_config,
-        )
-        pronunciation_config.apply_to(recognizer)
-
         try:
-            result = recognizer.recognize_once()
+            stream.write(audio_bytes)
+            stream.close()
+            audio_config = speechsdk.audio.AudioConfig(stream=stream)
+
+            # Map granularity string to SDK enum
+            granularity_map = {
+                "Phoneme": speechsdk.PronunciationAssessmentGranularity.Phoneme,
+                "Word": speechsdk.PronunciationAssessmentGranularity.Word,
+                "FullText": speechsdk.PronunciationAssessmentGranularity.FullText,
+            }
+            gran = granularity_map.get(granularity)
+            if gran is None:
+                logger.warning("AzureAssessment unknown granularity=%r — falling back to Phoneme", granularity)
+                gran = speechsdk.PronunciationAssessmentGranularity.Phoneme
+
+            pronunciation_config = speechsdk.PronunciationAssessmentConfig(
+                reference_text=reference_text.strip() if is_scripted else "",
+                grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
+                granularity=gran,
+                enable_miscue=is_scripted,
+            )
+
+            if enable_prosody and locale == "en-US":
+                pronunciation_config.enable_prosody_assessment()
+                logger.debug("AzureAssessment prosody enabled locale=%s", locale)
+
+            speech_config = speechsdk.SpeechConfig(subscription=self._key, region=self._region)
+            speech_config.speech_recognition_language = locale
+
+            recognizer = speechsdk.SpeechRecognizer(
+                speech_config=speech_config,
+                audio_config=audio_config,
+            )
+            pronunciation_config.apply_to(recognizer)
+
+            try:
+                result = recognizer.recognize_once()
+            finally:
+                del recognizer
         finally:
-            del recognizer
+            del stream
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             json_str = result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
