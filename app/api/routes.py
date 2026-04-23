@@ -4,6 +4,7 @@ import uuid as _uuid
 import psycopg2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 
 from app.core.logger import logger
 from app.core.ai_services import normalize_history, run_langraph_agent, transcribe_audio, get_assessment_service
@@ -440,6 +441,10 @@ def assess_pronunciation(
     Pass reference_text for scripted (reading) mode.
     Omit reference_text for unscripted (free speech) mode.
     Pass language to override locale (default en-US, supports en-GB).
+
+    The service always uses Phoneme-level granularity (full word/syllable/phoneme
+    detail) and enables prosody assessment for en-US. These are not configurable
+    at the API level; use AzureAssessmentService directly for custom settings.
     """
     logger.info(
         "assess_pronunciation start user_id=%s mode=%s language=%s",
@@ -472,32 +477,39 @@ def assess_pronunciation(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
 
     pron = result.get("PronunciationAssessment", {})
-    words = [
-        WordResult(
-            word=w.get("Word", ""),
-            accuracy_score=w.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
-            error_type=w.get("PronunciationAssessment", {}).get("ErrorType", "None"),
-            syllables=w.get("Syllables", []),
-            phonemes=w.get("Phonemes", []),
+    try:
+        words = [
+            WordResult(
+                word=w.get("Word", ""),
+                accuracy_score=w.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                error_type=w.get("PronunciationAssessment", {}).get("ErrorType", "None"),
+                syllables=w.get("Syllables", []),
+                phonemes=w.get("Phonemes", []),
+            )
+            for w in result.get("Words", [])
+        ]
+
+        logger.info(
+            "assess_pronunciation done user_id=%s mode=%s pron_score=%s recognized=%r",
+            user_id, result.get("mode"), pron.get("PronScore"), result.get("display_text", "")[:80],
         )
-        for w in result.get("Words", [])
-    ]
 
-    logger.info(
-        "assess_pronunciation done user_id=%s mode=%s pron_score=%s recognized=%r",
-        user_id, result.get("mode"), pron.get("PronScore"), result.get("display_text", "")[:80],
-    )
-
-    return AssessmentResponse(
-        mode=result.get("mode", "unscripted"),
-        recognized_text=result.get("display_text", ""),
-        pron_score=pron.get("PronScore", 0.0),
-        accuracy_score=pron.get("AccuracyScore", 0.0),
-        fluency_score=pron.get("FluencyScore", 0.0),
-        completeness_score=pron.get("CompletenessScore"),
-        prosody_score=pron.get("ProsodyScore"),
-        words=words,
-    )
+        return AssessmentResponse(
+            mode=result.get("mode", "unscripted"),
+            recognized_text=result.get("display_text", ""),
+            pron_score=pron.get("PronScore", 0.0),
+            accuracy_score=pron.get("AccuracyScore", 0.0),
+            fluency_score=pron.get("FluencyScore", 0.0),
+            completeness_score=pron.get("CompletenessScore"),
+            prosody_score=pron.get("ProsodyScore"),
+            words=words,
+        )
+    except ValidationError as exc:
+        logger.error("AzureAssessment schema validation failed user_id=%s error=%s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Azure returned an unrecognised response format",
+        )
 
 
 # ---------------------------------------------------------------------------

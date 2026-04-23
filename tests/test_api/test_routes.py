@@ -575,6 +575,7 @@ class TestAssessRoute:
             "/api/assess",
             files={"audio_file": ("test.wav", b"fake-audio", "audio/wav")},
         )
+        # FastAPI HTTPBearer returns 403 (not 401) when Authorization header is absent.
         assert resp.status_code == 403
 
     def test_missing_audio_file_returns_422(self, client, auth_headers):
@@ -667,3 +668,26 @@ class TestAssessRoute:
             )
         assert resp.status_code == 502
         assert "Speech not recognized" in resp.json()["detail"]
+
+    def test_unknown_error_type_returns_502(self, client, auth_headers):
+        mock_result = {
+            "mode": "unscripted",
+            "display_text": "Hello.",
+            "PronunciationAssessment": {"AccuracyScore": 95.0, "FluencyScore": 90.0, "PronScore": 91.5},
+            "Words": [
+                {
+                    "Word": "hello",
+                    "PronunciationAssessment": {"AccuracyScore": 95.0, "ErrorType": "FutureUnknownType"},
+                    "Syllables": [],
+                    "Phonemes": [],
+                }
+            ],
+        }
+        with patch("app.api.routes.get_assessment_service") as mock_get:
+            mock_get.return_value.assess.return_value = mock_result
+            resp = client.post(
+                "/api/assess",
+                headers=self._headers(auth_headers),
+                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+            )
+        assert resp.status_code == 502
