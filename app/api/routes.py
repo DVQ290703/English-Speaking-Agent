@@ -35,6 +35,15 @@ router = APIRouter(prefix="/api")
 
 _MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
 
+# Azure PushAudioInputStream with default format expects WAV or raw PCM.
+# Compressed browser formats (webm, opus, mp4) are not supported.
+_SUPPORTED_AUDIO_CONTENT_TYPES = frozenset({
+    "audio/wav",
+    "audio/x-wav",
+    "audio/wave",
+    "audio/pcm",
+})
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -452,9 +461,25 @@ def assess_pronunciation(
         user_id, "scripted" if reference_text else "unscripted", language,
     )
 
+    content_type = (audio_file.content_type or "").lower().split(";")[0].strip()
+    if content_type and content_type not in _SUPPORTED_AUDIO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=(
+                f"Unsupported audio format '{content_type}'. "
+                "Upload WAV (PCM) audio; compressed formats such as WebM and Opus are not supported."
+            ),
+        )
+
     try:
         audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
     finally:
+        # Truncate the SpooledTemporaryFile buffer before closing to release
+        # memory immediately rather than waiting for GC under high concurrency.
+        try:
+            audio_file.file.truncate(0)
+        except Exception:
+            pass
         audio_file.file.close()
 
     if not audio_bytes:
@@ -468,8 +493,19 @@ def assess_pronunciation(
             detail="Audio file exceeds 25 MB limit",
         )
 
+    # Resolve service first — a missing env-var raises ValueError from the
+    # constructor, which is a server misconfiguration, not a client error.
     try:
-        result = get_assessment_service().assess(
+        service = get_assessment_service()
+    except ValueError as exc:
+        logger.error("AzureAssessmentService misconfigured: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Pronunciation assessment service is not available",
+        )
+
+    try:
+        result = service.assess(
             audio_bytes=audio_bytes,
             reference_text=reference_text,
             language=language,
