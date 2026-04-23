@@ -476,6 +476,7 @@ def assess_pronunciation(
     try:
         audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
     finally:
+        audio_file.file.truncate(0)
         audio_file.file.close()
 
     if not audio_bytes:
