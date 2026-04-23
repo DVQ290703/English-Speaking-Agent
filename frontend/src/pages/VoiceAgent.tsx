@@ -167,6 +167,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   });
   const [topic, setTopic] = useState<TopicId>("daily");
   const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
     try {
@@ -716,24 +718,41 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             {isDark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           {currentUser ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-lg px-2.5 py-1">
-                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-gray-900">
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-colors"
+                title={currentUser.display_name || currentUser.email || "User"}
+              >
+                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
                   {currentUser.display_name?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <span className="text-xs text-gray-400">{currentUser.display_name || currentUser.email || "User"}</span>
-              </div>
-              <button
-                onClick={() => {
-                  clearAuthSession();
-                  setCurrentUser(null);
-                  if (onLogout) onLogout();
-                }}
-                className="flex items-center gap-1 text-xs text-gray-700 hover:text-red-400 transition-colors"
-                title="Đăng xuất"
-              >
-                <LogOut className="w-3.5 h-3.5" />
+                <span className="text-xs text-gray-700">{currentUser.display_name || currentUser.email || "User"}</span>
+                <svg className={`w-3 h-3 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
               </button>
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-40 overflow-hidden animate-fadeIn">
+                    <div className="px-3 py-2.5 border-b border-gray-100">
+                      <div className="text-sm font-semibold text-gray-900 truncate">{currentUser.display_name || "User"}</div>
+                      <div className="text-xs text-gray-500 truncate">{currentUser.email}</div>
+                    </div>
+                    <button
+                      onClick={() => { setShowUserMenu(false); navigate("/dashboard"); }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                    >
+                      <span>📊</span> Dashboard
+                    </button>
+                    <button
+                      onClick={() => { setShowUserMenu(false); setShowLogoutConfirm(true); }}
+                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Đăng xuất
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -1114,6 +1133,39 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
         </div>
       )}
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+             onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-sm w-full p-6"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl shrink-0">👋</div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
+                <p className="text-sm text-gray-500 mt-1">Bạn có chắc muốn đăng xuất khỏi tài khoản không?</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowLogoutConfirm(false)}
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                Hủy
+              </button>
+              <button onClick={() => {
+                setShowLogoutConfirm(false);
+                clearAuthSession();
+                setCurrentUser(null);
+                if (onLogout) onLogout();
+                navigate("/", { replace: true });
+              }}
+                      className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">
+                Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 }

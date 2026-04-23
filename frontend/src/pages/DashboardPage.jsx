@@ -220,6 +220,7 @@ export default function DashboardPage({ demoMode = false }) {
   const [profile, setProfile] = useState(null);
   const [error, setError]     = useState("");
   const [activeTab, setActiveTab] = useState("All");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const session = useMemo(() => getAuthSession(), []);
 
   useEffect(() => {
@@ -292,7 +293,7 @@ export default function DashboardPage({ demoMode = false }) {
             + New Session
           </button>
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutConfirm(true)}
             className="text-sm text-gray-500 hover:text-gray-800 px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors"
           >
             Sign out
@@ -385,6 +386,32 @@ export default function DashboardPage({ demoMode = false }) {
         </div>
 
       </main>
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+             onClick={() => setShowLogoutConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-sm w-full p-6"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl shrink-0">👋</div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
+                <p className="text-sm text-gray-500 mt-1">Bạn có chắc muốn đăng xuất khỏi tài khoản không?</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setShowLogoutConfirm(false)}
+                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                Hủy
+              </button>
+              <button onClick={() => { setShowLogoutConfirm(false); handleLogout(); }}
+                      className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">
+                Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
