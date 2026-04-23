@@ -139,3 +139,25 @@ Ghi lại các quyết định kỹ thuật, phân công, và brainstorming củ
 **Code thay đổi:** `src/agent.ts` lines 45-67
 
 **Học được:** Luôn thiết kế stop condition trước khi implement retry logic.
+
+---
+
+### [ADR-3] Unit test thuần túy với sys.modules mock — 20/04/2026
+
+**Bối cảnh:** Cần viết test cho backend FastAPI mà không cần Docker, DB thật, hay MinIO thật. Package `minio` không được cài trong `.venv` test, gây `ImportError` khi pytest collect.
+
+**Các lựa chọn đã xem xét:**
+- **Integration test (testcontainers):** Dùng container Postgres + MinIO thật. Accurate nhưng chậm (30–60s), cần Docker running.
+- **pytest-mock + conftest patch:** Patch từng function nhưng vẫn bị lỗi top-level import `minio`.
+- **sys.modules injection:** Inject fake `minio` module vào `sys.modules` trước khi bất kỳ app module nào được import. Zero dependency.
+
+**Quyết định:** Dùng `sys.modules.setdefault("minio", FakeModule)` trong `conftest.py` và đầu mỗi test file. Import `app` một lần ở module level với `init_db_pool` và `init_storage` đã patch. Per-test chỉ mock `get_connection`.
+
+**Hệ quả:**
+- ✅ Toàn bộ 127 test chạy trong ~11s, không cần Docker
+- ✅ 0 warnings (JWT key đủ 32 bytes, HTTP_413 dùng tên mới)
+- ✅ Mỗi test hoàn toàn độc lập nhờ `_make_conn()` fresh per-test
+- ⚠️  Không test được real DB constraints (unique violation phải mock thủ công)
+- ⚠️  Nếu thêm dependency mới cần import ở top-level, phải stub vào `sys.modules`
+
+**Coverage hiện tại:** 127 tests / 5 modules — security, AI services, schemas, routes, user data flows.
