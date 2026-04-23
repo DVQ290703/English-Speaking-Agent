@@ -1,0 +1,45 @@
+[project]
+name = "a20-app-014"
+version = "0.1.0"
+description = "AI Speaking Coach – IELTS Speaking Assistant"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--no-header",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    "ignore::jwt.warnings.RemovedInPyjwt3Warning",
+    "ignore:.*InsecureKeyLengthWarning.*:Warning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m not slow')",
+    "integration: marks tests as integration tests (require real services)",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/core/logger.py",
+    "app/main.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
