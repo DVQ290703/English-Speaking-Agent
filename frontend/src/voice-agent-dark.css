@@ -1,0 +1,52 @@
+/* Dark mode overrides for Voice Agent — applied when [data-va=root].va-dark */
+[data-va=root].va-dark { background: #0d1117 !important; color: #e2e8f0 !important; }
+[data-va=root].va-dark [data-va=header] { background: #0d1117 !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-va=root].va-dark [data-va=descbar] { background: #0c1220 !important; border-color: rgba(255,255,255,0.06) !important; }
+[data-va=root].va-dark [data-va=content] { background: #0d1117 !important; }
+[data-va=root].va-dark [data-va=left] { background: #13181f !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-va=root].va-dark [data-va=left] .border-gray-200 { border-color: rgba(255,255,255,0.08) !important; }
+[data-va=root].va-dark [data-va=right] { background: #0d1117 !important; }
+[data-va=root].va-dark [data-va=messages] { background: #0c1220 !important; }
+[data-va=root].va-dark [data-va=input] { background: #0d1117 !important; border-color: rgba(255,255,255,0.08) !important; }
+[data-va=root].va-dark [data-va=textarea] { background: #131929 !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,0.12) !important; }
+[data-va=root].va-dark [data-va=textarea]::placeholder { color: #475569 !important; }
+[data-va=root].va-dark .text-gray-800 { color: #e2e8f0 !important; }
+[data-va=root].va-dark .text-gray-700 { color: #cbd5e1 !important; }
+[data-va=root].va-dark .text-gray-600 { color: #94a3b8 !important; }
+[data-va=root].va-dark .text-gray-500 { color: #64748b !important; }
+[data-va=root].va-dark .text-gray-900 { color: #f1f5f9 !important; }
+[data-va=root].va-dark .border-gray-200 { border-color: rgba(255,255,255,0.08) !important; }
+[data-va=root].va-dark .border-gray-100 { border-color: rgba(255,255,255,0.06) !important; }
+[data-va=root].va-dark .bg-white { background: #13181f !important; }
+[data-va=root].va-dark .bg-gray-50 { background: #13181f !important; }
+[data-va=root].va-dark .bg-gray-100 { background: #1a2232 !important; }
+[data-va=root].va-dark .hover\:bg-gray-100:hover { background: rgba(255,255,255,0.06) !important; }
+[data-va=root].va-dark .bg-blue-50 { background: #12213a !important; }
+[data-va=root].va-dark .bg-violet-50 { background: #1e1538 !important; }
+[data-va=root].va-dark .bg-blue-100 { background: #172542 !important; }
+[data-va=root].va-dark .bg-violet-100 { background: #241640 !important; }
+[data-va=root].va-dark .border-blue-200,
+[data-va=root].va-dark .border-blue-300 { border-color: rgba(96,165,250,0.28) !important; }
+[data-va=root].va-dark .border-violet-200,
+[data-va=root].va-dark .border-violet-300 { border-color: rgba(167,139,250,0.28) !important; }
+[data-va=root].va-dark .bg-red-50 { background: #2a1215 !important; }
+[data-va=root].va-dark .bg-yellow-50 { background: #251d0a !important; }
+[data-va=root].va-dark .bg-purple-50 { background: #1e1330 !important; }
+[data-va=root].va-dark .bg-green-50 { background: #0f2215 !important; }
+[data-va=root].va-dark .border-red-200 { border-color: rgba(248,113,113,0.3) !important; }
+[data-va=root].va-dark .border-yellow-200 { border-color: rgba(251,191,36,0.3) !important; }
+[data-va=root].va-dark .border-purple-200 { border-color: rgba(192,132,252,0.3) !important; }
+[data-va=root].va-dark .border-green-200 { border-color: rgba(74,222,128,0.3) !important; }
+[data-va=root].va-dark select { background: #13181f !important; color: #e2e8f0 !important; }
+[data-va=root].va-dark .text-red-500 { color: #f87171 !important; }
+[data-va=root].va-dark .text-red-600 { color: #f87171 !important; }
+[data-va=root].va-dark .text-green-600 { color: #4ade80 !important; }
+[data-va=root].va-dark .text-amber-600,
+[data-va=root].va-dark .text-yellow-600 { color: #fbbf24 !important; }
+[data-va=root].va-dark .text-purple-600 { color: #c084fc !important; }
+[data-va=root].va-dark .bg-gradient-to-b,
+[data-va=root].va-dark .bg-linear-to-b { background: #0c1220 !important; }
+[data-va=root].va-dark [data-score-suffix] { color: rgba(255,255,255,0.35) !important; }
+[data-va=root].va-dark [data-replay-btn] { border-color: rgba(255,255,255,0.15) !important; background: rgba(255,255,255,0.06) !important; color: rgba(255,255,255,0.45) !important; }
+[data-va=root].va-dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+[data-va=root].va-dark [data-va=conv-header] { background: #0d1117 !important; border-color: rgba(255,255,255,0.08) !important; }

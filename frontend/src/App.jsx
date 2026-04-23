@@ -20,6 +20,7 @@ export default function App() {
       <Route path="/" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/demo" element={<VoiceAgent />} />
+      <Route path="/demo-dashboard" element={<DashboardPage demoMode />} />
       <Route path="/VoiceAgent" element={<VoiceAgent />} />
       <Route path="/chat" element={<VoiceAgent />} />
       <Route
