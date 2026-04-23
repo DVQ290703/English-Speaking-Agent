@@ -19,7 +19,9 @@ from app.api.schemas import (
     LoginRequest,
     LoginResponse,
     MessageOut,
+    PhonemeResult,
     RegisterRequest,
+    SyllableResult,
     UserOut,
     WordResult,
 )
@@ -474,12 +476,6 @@ def assess_pronunciation(
     try:
         audio_bytes = audio_file.file.read(_MAX_AUDIO_BYTES + 1)
     finally:
-        # Truncate the SpooledTemporaryFile buffer before closing to release
-        # memory immediately rather than waiting for GC under high concurrency.
-        try:
-            audio_file.file.truncate(0)
-        except Exception:
-            pass
         audio_file.file.close()
 
     if not audio_bytes:
@@ -523,8 +519,20 @@ def assess_pronunciation(
                 word=w.get("Word", ""),
                 accuracy_score=w.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
                 error_type=w.get("PronunciationAssessment", {}).get("ErrorType", "None"),
-                syllables=w.get("Syllables") or [],
-                phonemes=w.get("Phonemes") or [],
+                syllables=[
+                    SyllableResult(
+                        syllable=s.get("Syllable", ""),
+                        accuracy_score=s.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                    )
+                    for s in (w.get("Syllables") or [])
+                ],
+                phonemes=[
+                    PhonemeResult(
+                        phoneme=p.get("Phoneme", ""),
+                        accuracy_score=p.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+                    )
+                    for p in (w.get("Phonemes") or [])
+                ],
             )
             for w in result.get("Words", [])
         ]

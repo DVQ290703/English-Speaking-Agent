@@ -67,12 +67,22 @@ class ConversationMessagesResponse(BaseModel):
     messages: list[MessageOut]
 
 
+class SyllableResult(BaseModel):
+    syllable: str
+    accuracy_score: float
+
+
+class PhonemeResult(BaseModel):
+    phoneme: str
+    accuracy_score: float
+
+
 class WordResult(BaseModel):
     word: str
     accuracy_score: float
     error_type: Literal["None", "Omission", "Insertion", "Mispronunciation", "UnexpectedBreak", "MissingBreak", "Monotone"]
-    syllables: list[dict]
-    phonemes: list[dict]
+    syllables: list[SyllableResult]
+    phonemes: list[PhonemeResult]
 
 
 class AssessmentResponse(BaseModel):
