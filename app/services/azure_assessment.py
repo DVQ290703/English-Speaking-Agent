@@ -104,6 +104,7 @@ class AzureAssessmentService:
             finally:
                 del recognizer
                 del audio_config
+                del speech_config
         finally:
             del stream
 
