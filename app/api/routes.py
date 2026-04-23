@@ -487,8 +487,8 @@ def assess_pronunciation(
                 word=w.get("Word", ""),
                 accuracy_score=w.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
                 error_type=w.get("PronunciationAssessment", {}).get("ErrorType", "None"),
-                syllables=w.get("Syllables", []),
-                phonemes=w.get("Phonemes", []),
+                syllables=w.get("Syllables") or [],
+                phonemes=w.get("Phonemes") or [],
             )
             for w in result.get("Words", [])
         ]
