@@ -98,7 +98,10 @@ class AzureAssessmentService:
         )
         pronunciation_config.apply_to(recognizer)
 
-        result = recognizer.recognize_once()
+        try:
+            result = recognizer.recognize_once()
+        finally:
+            del recognizer
 
         if result.reason == speechsdk.ResultReason.RecognizedSpeech:
             json_str = result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
