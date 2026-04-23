@@ -166,6 +166,42 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return { display_name: u.display_name || u.name || u.email || "User", email: u.email };
   });
   const [topic, setTopic] = useState<TopicId>("daily");
+  const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("topic") || sessionStorage.getItem("va_selected_topic");
+      if (!raw) return;
+      sessionStorage.removeItem("va_selected_topic");
+
+      const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
+        "Daily Conversation": "daily",
+        "IELTS Part 1": "ielts1",
+        "IELTS Part 2": "ielts2",
+        "Academic Discussion": "ielts3",
+        "Describe a person": "ielts2",
+        "Describe a place": "ielts2",
+        "Job Interview": "career",
+        "Office Meeting": "career",
+        "Presentations": "career",
+        "Negotiation": "career",
+        "Email & Phone": "career",
+        "Shopping": "daily",
+        "Healthcare": "health",
+        "Family & Friends": "daily",
+        "Hobbies": "daily",
+        "Travel & Tourism": "travel",
+        "Food & Restaurant": "travel",
+        "Hotel & Booking": "travel",
+        "Culture & Customs": "travel",
+        "Airport English": "travel",
+      };
+      const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
+      if (mappedId) setTopic(mappedId);
+      setCustomTopicLabel(raw);
+    } catch {}
+  }, []);
 
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [micEnabled, setMicEnabled] = useState(true);
@@ -725,7 +761,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-700">Description</span>
           <span className="text-gray-400">·</span>
-          <span className="text-gray-700">{TOPICS.find((t) => t.id === topic)?.label ?? "Daily Conversation"}</span>
+          <span className="text-gray-700">{customTopicLabel ?? TOPICS.find((t) => t.id === topic)?.label ?? "Daily Conversation"}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1049,7 +1085,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               {TOPICS.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => { setTopic(t.id); setShowSettings(false); }}
+                  onClick={() => {
+                    setTopic(t.id);
+                    setCustomTopicLabel(null);
+                    setShowSettings(false);
+                    try {
+                      const url = new URL(window.location.href);
+                      url.searchParams.set("topic", t.label);
+                      window.history.replaceState({}, "", url.toString());
+                    } catch {}
+                  }}
                   className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
                     topic === t.id
                       ? "bg-blue-100 border border-blue-300 text-blue-200"

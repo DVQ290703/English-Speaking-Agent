@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { fetchMe } from "../api/auth";
@@ -26,40 +26,63 @@ const TOPIC_ICONS = {
   "Travel & Tourism":    "✈️",
 };
 
-const PRACTICE_TOPICS = [
+const TOPIC_CATEGORIES = [
   {
-    key: "Daily Conversation",
-    icon: "💬",
-    title: "Daily Conversation",
-    desc: "Casual everyday topics — hobbies, family, weekend plans, food.",
-    level: "Beginner → Intermediate",
-    color: "from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400",
+    name: "IELTS Speaking",
+    desc: "Practise official IELTS-style speaking parts.",
+    accent: "blue",
+    topics: [
+      { key: "IELTS Part 1",         icon: "🎤", title: "IELTS Part 1 — Intro",      desc: "Personal questions about you and familiar topics.",     level: "All levels" },
+      { key: "IELTS Part 2",         icon: "📋", title: "IELTS Part 2 — Long turn",   desc: "Speak for 1-2 minutes from a cue card.",                level: "Intermediate+" },
+      { key: "Academic Discussion",  icon: "🎓", title: "Academic Discussion",        desc: "Part 3 style — opinions, comparisons, abstract topics.", level: "Advanced" },
+      { key: "Describe a person",    icon: "🧑", title: "Describe a Person",          desc: "Vocabulary for character, appearance, relationships.",  level: "Intermediate" },
+      { key: "Describe a place",     icon: "🏞️", title: "Describe a Place",          desc: "City, country, landmark, favourite location.",          level: "Intermediate" },
+    ],
   },
   {
-    key: "Job Interview",
-    icon: "💼",
-    title: "Job Interview",
-    desc: "Practise common interview questions and professional answers.",
-    level: "Intermediate → Advanced",
-    color: "from-violet-50 to-violet-100 border-violet-200 hover:border-violet-400",
+    name: "Business & Career",
+    desc: "Workplace English and professional speaking.",
+    accent: "violet",
+    topics: [
+      { key: "Job Interview",     icon: "💼", title: "Job Interview",        desc: "Common questions and structured answers.",   level: "Intermediate+" },
+      { key: "Office Meeting",    icon: "🗂️", title: "Office Meeting",      desc: "Discuss projects, share opinions, agree/disagree.", level: "Intermediate" },
+      { key: "Presentations",     icon: "📊", title: "Presentations",        desc: "Open, structure, and close a short talk.",   level: "Advanced" },
+      { key: "Negotiation",       icon: "🤝", title: "Negotiation",          desc: "Bargain politely, propose terms, reach agreement.", level: "Advanced" },
+      { key: "Email & Phone",     icon: "📞", title: "Phone & Email Talk",   desc: "Professional phone calls and follow-ups.",   level: "Intermediate" },
+    ],
   },
   {
-    key: "Academic Discussion",
-    icon: "🎓",
-    title: "Academic Discussion",
-    desc: "IELTS Part 3 style — opinions, comparisons, abstract topics.",
-    level: "Advanced",
-    color: "from-emerald-50 to-emerald-100 border-emerald-200 hover:border-emerald-400",
+    name: "Daily Life",
+    desc: "Everyday situations you face all the time.",
+    accent: "emerald",
+    topics: [
+      { key: "Daily Conversation", icon: "💬", title: "Daily Conversation", desc: "Hobbies, family, weekend plans, weather.",     level: "Beginner+" },
+      { key: "Shopping",           icon: "🛍️", title: "Shopping",           desc: "Ask prices, compare items, return products.",  level: "Beginner" },
+      { key: "Healthcare",         icon: "🏥", title: "Healthcare",          desc: "Doctor visits, symptoms, pharmacy talk.",      level: "Intermediate" },
+      { key: "Family & Friends",   icon: "👨‍👩‍👧", title: "Family & Friends",    desc: "Relationships, gatherings, personal stories.", level: "Beginner+" },
+      { key: "Hobbies",            icon: "🎨", title: "Hobbies & Interests", desc: "Talk about passions and free time activities.", level: "Beginner+" },
+    ],
   },
   {
-    key: "Travel & Tourism",
-    icon: "✈️",
-    title: "Travel & Tourism",
-    desc: "Booking, directions, cultural experiences, holiday stories.",
-    level: "Beginner → Intermediate",
-    color: "from-amber-50 to-amber-100 border-amber-200 hover:border-amber-400",
+    name: "Travel & Culture",
+    desc: "From booking flights to cross-cultural chats.",
+    accent: "amber",
+    topics: [
+      { key: "Travel & Tourism",  icon: "✈️", title: "Travel & Tourism",   desc: "Booking, directions, holiday stories.",       level: "Beginner+" },
+      { key: "Food & Restaurant", icon: "🍽️", title: "Food & Restaurant", desc: "Order, describe taste, ask about dishes.",    level: "Beginner+" },
+      { key: "Hotel & Booking",   icon: "🏨", title: "Hotel & Booking",   desc: "Check-in, request services, handle problems.", level: "Intermediate" },
+      { key: "Culture & Customs", icon: "🌏", title: "Culture & Customs", desc: "Compare traditions and cross-cultural topics.", level: "Advanced" },
+      { key: "Airport English",   icon: "🛫", title: "Airport English",    desc: "Check-in, security, customs vocabulary.",      level: "Beginner+" },
+    ],
   },
 ];
+
+const ACCENT_STYLES = {
+  blue:    { card: "from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400",       chip: "bg-blue-100 text-blue-700" },
+  violet:  { card: "from-violet-50 to-violet-100 border-violet-200 hover:border-violet-400", chip: "bg-violet-100 text-violet-700" },
+  emerald: { card: "from-emerald-50 to-emerald-100 border-emerald-200 hover:border-emerald-400", chip: "bg-emerald-100 text-emerald-700" },
+  amber:   { card: "from-amber-50 to-amber-100 border-amber-200 hover:border-amber-400",   chip: "bg-amber-100 text-amber-700" },
+};
 
 function scoreColor(s) {
   if (s >= 85) return { color: "#15803d", bg: "rgba(34,197,94,0.10)", border: "rgba(34,197,94,0.30)" };
@@ -85,22 +108,66 @@ function StatCard({ icon, label, value, sub }) {
   );
 }
 
-function TopicCard({ topic, onStart }) {
+function TopicCard({ topic, accent, onStart }) {
+  const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.blue;
   return (
     <button
       onClick={onStart}
-      className={`text-left bg-linear-to-br ${topic.color} rounded-2xl border-2 p-5 transition-all hover:shadow-md hover:-translate-y-0.5 group`}
+      className={`shrink-0 w-65 snap-start text-left bg-linear-to-br ${styles.card} rounded-2xl border-2 p-5 transition-all hover:shadow-md hover:-translate-y-0.5 group`}
     >
       <div className="flex items-start justify-between mb-3">
-        <span className="text-4xl leading-none">{topic.icon}</span>
+        <span className="text-3xl leading-none">{topic.icon}</span>
         <span className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm font-semibold">
           Start →
         </span>
       </div>
       <div className="text-base font-bold text-gray-900 mb-1.5">{topic.title}</div>
-      <div className="text-sm text-gray-600 leading-relaxed mb-3">{topic.desc}</div>
-      <div className="text-xs text-gray-500 font-medium">{topic.level}</div>
+      <div className="text-sm text-gray-600 leading-relaxed mb-3 line-clamp-2 min-h-10">{topic.desc}</div>
+      <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${styles.chip}`}>{topic.level}</span>
     </button>
+  );
+}
+
+function CategoryTabsRow({ categories, onStart }) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const scrollerRef = useRef(null);
+  const active = categories[activeIdx];
+  const scroll = (dir) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * 320, behavior: "smooth" });
+  };
+  useEffect(() => {
+    if (scrollerRef.current) scrollerRef.current.scrollTo({ left: 0, behavior: "smooth" });
+  }, [activeIdx]);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <div className="flex gap-2 overflow-x-auto scrollbar-none">
+          {categories.map((cat, i) => (
+            <button
+              key={cat.name}
+              onClick={() => setActiveIdx(i)}
+              className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
+                activeIdx === i ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {cat.name}
+            </button>
+          ))}
+        </div>
+        <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+          <button onClick={() => scroll(-1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-800 transition-colors flex items-center justify-center" aria-label="Scroll left">‹</button>
+          <button onClick={() => scroll(1)} className="w-9 h-9 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-800 transition-colors flex items-center justify-center" aria-label="Scroll right">›</button>
+        </div>
+      </div>
+      <p className="text-sm text-gray-500 mb-3 px-1">{active.desc}</p>
+      <div ref={scrollerRef} className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1">
+        {active.topics.map((t) => (
+          <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key)} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -170,8 +237,7 @@ export default function DashboardPage({ demoMode = false }) {
   const handleLogout = () => { clearAuthSession(); navigate("/", { replace: true }); };
 
   const startSession = (topicKey) => {
-    try { sessionStorage.setItem("va_selected_topic", topicKey); } catch {}
-    navigate("/VoiceAgent");
+    navigate(`/VoiceAgent?topic=${encodeURIComponent(topicKey)}`);
   };
 
   const filtered = activeTab === "All"
@@ -256,15 +322,11 @@ export default function DashboardPage({ demoMode = false }) {
         <section className="mb-10">
           <div className="flex items-end justify-between mb-5">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Chọn chủ đề luyện tập</h2>
-              <p className="text-sm text-gray-500 mt-1">Pick a topic and start speaking with your AI coach.</p>
+              <h2 className="text-2xl font-bold text-gray-900">Chọn chủ đề luyện tập</h2>
+              <p className="text-sm text-gray-500 mt-1">Browse by category and pick what you want to practise today.</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {PRACTICE_TOPICS.map((t) => (
-              <TopicCard key={t.key} topic={t} onStart={() => startSession(t.key)} />
-            ))}
-          </div>
+          <CategoryTabsRow categories={TOPIC_CATEGORIES} onStart={startSession} />
         </section>
 
         {/* History section */}
