@@ -34,6 +34,18 @@ def get_stt_service():
     return service
 
 
+@lru_cache(maxsize=1)
+def get_assessment_service():
+    """Lazily initialize and cache the Azure pronunciation assessment service."""
+    from app.services.azure_assessment import AzureAssessmentService
+
+    language = os.getenv("AZURE_SPEECH_LANGUAGE", "en-US")
+    logger.info("Initializing AzureAssessmentService language=%s", language)
+    service = AzureAssessmentService(language=language)
+    logger.info("AzureAssessmentService initialized and cached")
+    return service
+
+
 def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
     """Convert raw UI history JSON into a compact list of prompt-ready conversation lines."""
     history_lines: list[str] = []
