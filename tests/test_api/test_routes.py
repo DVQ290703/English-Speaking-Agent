@@ -582,14 +582,21 @@ class TestAssessRoute:
         assert resp.status_code == 422
 
     def test_empty_audio_returns_400(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
-            mock_get.return_value.assess.side_effect = ValueError("audio_bytes must not be empty")
-            resp = client.post(
-                "/api/assess",
-                headers=self._headers(auth_headers),
-                files={"audio_file": ("test.wav", b"", "audio/wav")},
-            )
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            files={"audio_file": ("test.wav", b"", "audio/wav")},
+        )
         assert resp.status_code == 400
+
+    def test_oversized_audio_returns_413(self, client, auth_headers):
+        oversized = b"x" * (25 * 1024 * 1024 + 1)
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            files={"audio_file": ("big.wav", oversized, "audio/wav")},
+        )
+        assert resp.status_code == 413
 
     def test_unscripted_assess_returns_200(self, client, auth_headers):
         with patch("app.api.routes.get_assessment_service") as mock_get:
