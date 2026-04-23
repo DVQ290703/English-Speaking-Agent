@@ -26,6 +26,41 @@ const TOPIC_ICONS = {
   "Travel & Tourism":    "✈️",
 };
 
+const PRACTICE_TOPICS = [
+  {
+    key: "Daily Conversation",
+    icon: "💬",
+    title: "Daily Conversation",
+    desc: "Casual everyday topics — hobbies, family, weekend plans, food.",
+    level: "Beginner → Intermediate",
+    color: "from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400",
+  },
+  {
+    key: "Job Interview",
+    icon: "💼",
+    title: "Job Interview",
+    desc: "Practise common interview questions and professional answers.",
+    level: "Intermediate → Advanced",
+    color: "from-violet-50 to-violet-100 border-violet-200 hover:border-violet-400",
+  },
+  {
+    key: "Academic Discussion",
+    icon: "🎓",
+    title: "Academic Discussion",
+    desc: "IELTS Part 3 style — opinions, comparisons, abstract topics.",
+    level: "Advanced",
+    color: "from-emerald-50 to-emerald-100 border-emerald-200 hover:border-emerald-400",
+  },
+  {
+    key: "Travel & Tourism",
+    icon: "✈️",
+    title: "Travel & Tourism",
+    desc: "Booking, directions, cultural experiences, holiday stories.",
+    level: "Beginner → Intermediate",
+    color: "from-amber-50 to-amber-100 border-amber-200 hover:border-amber-400",
+  },
+];
+
 function scoreColor(s) {
   if (s >= 85) return { color: "#15803d", bg: "rgba(34,197,94,0.10)", border: "rgba(34,197,94,0.30)" };
   if (s >= 70) return { color: "#b45309", bg: "rgba(245,158,11,0.10)", border: "rgba(245,158,11,0.30)" };
@@ -39,53 +74,72 @@ function fmtDate(str) {
 
 function StatCard({ icon, label, value, sub }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center gap-4 shadow-sm">
-      <div className="text-2xl leading-none">{icon}</div>
+    <div className="bg-white rounded-2xl border border-gray-200 px-6 py-5 flex items-center gap-4 shadow-sm">
+      <div className="text-3xl leading-none">{icon}</div>
       <div>
-        <div className="text-xl font-bold text-gray-900">{value}</div>
-        <div className="text-xs text-gray-500 mt-0.5">{label}</div>
-        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
+        <div className="text-2xl font-bold text-gray-900">{value}</div>
+        <div className="text-sm text-gray-500 mt-0.5">{label}</div>
+        {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
       </div>
     </div>
+  );
+}
+
+function TopicCard({ topic, onStart }) {
+  return (
+    <button
+      onClick={onStart}
+      className={`text-left bg-linear-to-br ${topic.color} rounded-2xl border-2 p-5 transition-all hover:shadow-md hover:-translate-y-0.5 group`}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <span className="text-4xl leading-none">{topic.icon}</span>
+        <span className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm font-semibold">
+          Start →
+        </span>
+      </div>
+      <div className="text-base font-bold text-gray-900 mb-1.5">{topic.title}</div>
+      <div className="text-sm text-gray-600 leading-relaxed mb-3">{topic.desc}</div>
+      <div className="text-xs text-gray-500 font-medium">{topic.level}</div>
+    </button>
   );
 }
 
 function SessionCard({ session, onView }) {
   const sc = scoreColor(session.avgScore);
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
          onClick={onView}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-lg leading-none">{TOPIC_ICONS[session.topic] || "💬"}</span>
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl leading-none">{TOPIC_ICONS[session.topic] || "💬"}</span>
           <div>
-            <div className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+            <div className="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
               {session.topic}
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">{fmtDate(session.date)}</div>
+            <div className="text-sm text-gray-400 mt-0.5">{fmtDate(session.date)}</div>
           </div>
         </div>
         <span
           style={{ color: sc.color, background: sc.bg, border: `1px solid ${sc.border}` }}
-          className="text-xs font-bold px-2.5 py-0.5 rounded-full"
+          className="text-sm font-bold px-3 py-1 rounded-full"
         >
           {session.avgScore}
         </span>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-gray-500">
+      <div className="flex items-center gap-4 text-sm text-gray-500">
         <span>⏱ {session.duration}</span>
         <span>💬 {session.messages} turns</span>
         <span>✏️ {session.corrections} fixes</span>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
-        <span className="text-xs text-blue-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+        <span className="text-sm text-blue-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
           View transcript →
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); }}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
         >
           Replay
         </button>
@@ -114,6 +168,11 @@ export default function DashboardPage({ demoMode = false }) {
   }, [navigate, session, demoMode]);
 
   const handleLogout = () => { clearAuthSession(); navigate("/", { replace: true }); };
+
+  const startSession = (topicKey) => {
+    try { sessionStorage.setItem("va_selected_topic", topicKey); } catch {}
+    navigate("/VoiceAgent");
+  };
 
   const filtered = activeTab === "All"
     ? MOCK_SESSIONS
@@ -151,64 +210,79 @@ export default function DashboardPage({ demoMode = false }) {
     <div className="min-h-screen bg-[#f5f7fa] text-gray-900">
 
       {/* Top bar */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
-            <span className="text-[10px] font-black text-white leading-none">VIN</span>
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
+            <span className="text-[11px] font-black text-white leading-none">VIN</span>
           </div>
-          <span className="text-sm font-semibold text-gray-800">IELTS Speaking Coach</span>
+          <span className="text-base font-semibold text-gray-800">IELTS Speaking Coach</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 hidden sm:block">{displayName}</span>
+          <span className="text-sm text-gray-500 hidden sm:block">{displayName}</span>
           <button
             onClick={() => navigate("/VoiceAgent")}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
           >
             + New Session
           </button>
           <button
             onClick={handleLogout}
-            className="text-xs text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors"
+            className="text-sm text-gray-500 hover:text-gray-800 px-3 py-2 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors"
           >
             Sign out
           </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-6 py-10">
 
         {/* Welcome */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
+        <div className="mb-10">
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
             Xin chào, {displayName.split(" ").slice(-1)[0]} 👋
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Here's your learning progress and session history.</p>
+          <p className="text-base text-gray-500 mt-2">Here's your learning progress and session history.</p>
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
           <StatCard icon="🎙️" label="Total sessions"     value={totalSessions}    sub="all time" />
           <StatCard icon="⭐" label="Average score"       value={avgScore}         sub="across all topics" />
           <StatCard icon="⏱"  label="Practice time"       value={`${totalMins} min`} sub="total" />
           <StatCard icon="🔥" label="Current streak"      value={`${streak} days`} sub="keep it up!" />
         </div>
 
+        {/* Choose a topic */}
+        <section className="mb-10">
+          <div className="flex items-end justify-between mb-5">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Chọn chủ đề luyện tập</h2>
+              <p className="text-sm text-gray-500 mt-1">Pick a topic and start speaking with your AI coach.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {PRACTICE_TOPICS.map((t) => (
+              <TopicCard key={t.key} topic={t} onStart={() => startSession(t.key)} />
+            ))}
+          </div>
+        </section>
+
         {/* History section */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
 
           {/* Section header */}
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-800">Session History</h2>
-            <span className="text-xs text-gray-400">{filtered.length} sessions</span>
+          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">Session History</h2>
+            <span className="text-sm text-gray-400">{filtered.length} sessions</span>
           </div>
 
           {/* Topic tabs */}
-          <div className="px-5 py-3 border-b border-gray-100 flex gap-2 overflow-x-auto scrollbar-none">
+          <div className="px-6 py-4 border-b border-gray-100 flex gap-2 overflow-x-auto scrollbar-none">
             {TOPICS.map((t) => (
               <button
                 key={t}
                 onClick={() => setActiveTab(t)}
-                className={`whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                className={`whitespace-nowrap text-sm font-medium px-4 py-2 rounded-full transition-colors ${
                   activeTab === t
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -220,11 +294,11 @@ export default function DashboardPage({ demoMode = false }) {
           </div>
 
           {/* Cards grid */}
-          <div className="p-5">
+          <div className="p-6">
             {filtered.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-sm">No sessions yet for this topic.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filtered.map((s) => (
                   <SessionCard
                     key={s.id}
@@ -237,11 +311,11 @@ export default function DashboardPage({ demoMode = false }) {
           </div>
 
           {/* Footer CTA */}
-          <div className="px-5 py-4 border-t border-gray-100 bg-linear-to-r from-blue-50 to-violet-50 flex items-center justify-between">
-            <p className="text-xs text-gray-500">Ready to practise? Start a new session.</p>
+          <div className="px-6 py-5 border-t border-gray-100 bg-linear-to-r from-blue-50 to-violet-50 flex items-center justify-between">
+            <p className="text-sm text-gray-600">Ready to practise? Start a new session.</p>
             <button
               onClick={() => navigate("/VoiceAgent")}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition-colors"
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors"
             >
               Start speaking →
             </button>
