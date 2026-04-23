@@ -103,6 +103,7 @@ class AzureAssessmentService:
                 result = recognizer.recognize_once()
             finally:
                 del recognizer
+                del audio_config
         finally:
             del stream
 
