@@ -39,6 +39,10 @@ if not os.getenv("MINIO_SECRET_KEY") and not os.getenv("MINIO_ROOT_PASSWORD"):
         stacklevel=2,
     )
 
+# ── Azure Cognitive Services ──────────────────────────────────────────────────
+AZURE_SUBSCRIPTION_ID = os.getenv("AZURE_SUBSCRIPTION_ID", "")
+AZURE_SERVICE_REGION = os.getenv("AZURE_SERVICE_REGION", "")
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CORS_ORIGINS: list[str] = [o.strip() for o in _cors_env.split(",") if o.strip()]
