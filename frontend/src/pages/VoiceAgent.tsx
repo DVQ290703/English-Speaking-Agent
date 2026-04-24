@@ -1,6 +1,22 @@
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut, Moon, Sun } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Settings,
+  Circle,
+  SendHorizontal,
+  AlertCircle,
+  BookOpen,
+  Volume2,
+  Zap,
+  CheckCircle2,
+  LogIn,
+  UserPlus,
+  LogOut,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { SiOpenai } from "react-icons/si";
 
 import { chatRespond, assessPronunciation } from "../api/chat";
@@ -22,7 +38,11 @@ interface AuthUser {
 type ConnectionStatus = "disconnected" | "connecting" | "connected";
 type Gender = "Male" | "Female";
 type Language = "English" | "Vietnamese";
-type Model = "OpenAI GPT 5" | "OpenAI GPT 4o" | "Claude 3.5 Sonnet" | "Gemini 1.5 Pro";
+type Model =
+  | "OpenAI GPT 5"
+  | "OpenAI GPT 4o"
+  | "Claude 3.5 Sonnet"
+  | "Gemini 1.5 Pro";
 
 type FeedbackType = "grammar" | "vocabulary" | "pronunciation" | "fluency";
 
@@ -35,11 +55,34 @@ interface FeedbackItem {
   timestamp: Date;
 }
 
-const FEEDBACK_ICON: Record<FeedbackType, { icon: typeof AlertCircle; color: string; bg: string; label: string }> = {
-  grammar:       { icon: AlertCircle,    color: "text-red-500",    bg: "bg-red-50 border-red-200",    label: "Grammar"       },
-  vocabulary:    { icon: BookOpen,       color: "text-yellow-500", bg: "bg-yellow-50 border-yellow-200", label: "Vocabulary"  },
-  pronunciation: { icon: Volume2,        color: "text-purple-600", bg: "bg-violet-50 border-purple-500/25", label: "Pronunciation" },
-  fluency:       { icon: Zap,            color: "text-blue-600",   bg: "bg-blue-50 border-blue-200",  label: "Fluency"       },
+const FEEDBACK_ICON: Record<
+  FeedbackType,
+  { icon: typeof AlertCircle; color: string; bg: string; label: string }
+> = {
+  grammar: {
+    icon: AlertCircle,
+    color: "text-red-500",
+    bg: "bg-red-50 border-red-200",
+    label: "Grammar",
+  },
+  vocabulary: {
+    icon: BookOpen,
+    color: "text-yellow-500",
+    bg: "bg-yellow-50 border-yellow-200",
+    label: "Vocabulary",
+  },
+  pronunciation: {
+    icon: Volume2,
+    color: "text-purple-600",
+    bg: "bg-violet-50 border-purple-500/25",
+    label: "Pronunciation",
+  },
+  fluency: {
+    icon: Zap,
+    color: "text-blue-600",
+    bg: "bg-blue-50 border-blue-200",
+    label: "Fluency",
+  },
 };
 
 const AUTO_FEEDBACKS: Omit<FeedbackItem, "id" | "timestamp">[] = [
@@ -47,58 +90,80 @@ const AUTO_FEEDBACKS: Omit<FeedbackItem, "id" | "timestamp">[] = [
     type: "grammar",
     original: "He don't like coffee.",
     corrected: "He doesn't like coffee.",
-    explanation: "Third-person singular (he/she/it) uses \"doesn't\" not \"don't\" in negative sentences.",
+    explanation:
+      'Third-person singular (he/she/it) uses "doesn\'t" not "don\'t" in negative sentences.',
   },
   {
     type: "vocabulary",
     original: "I want to make my English better.",
     corrected: "I want to improve / enhance my English.",
-    explanation: "\"Make better\" is informal. Prefer \"improve\" or \"enhance\" for more natural, sophisticated English.",
+    explanation:
+      '"Make better" is informal. Prefer "improve" or "enhance" for more natural, sophisticated English.',
   },
   {
     type: "fluency",
     original: "I... uh... I think that... um... it is good.",
     corrected: "I think it is good.",
-    explanation: "Try to reduce filler words (uh, um). Pausing briefly is better than filling silence with sounds.",
+    explanation:
+      "Try to reduce filler words (uh, um). Pausing briefly is better than filling silence with sounds.",
   },
   {
     type: "grammar",
     original: "She is more taller than her sister.",
     corrected: "She is taller than her sister.",
-    explanation: "Do not use \"more\" with one-syllable adjectives. \"Taller\" is already comparative — \"more taller\" is a double comparative.",
+    explanation:
+      'Do not use "more" with one-syllable adjectives. "Taller" is already comparative — "more taller" is a double comparative.',
   },
   {
     type: "pronunciation",
-    original: "\"Wednesday\" /wɛdnɛsdei/",
-    corrected: "\"Wednesday\" /ˈwɛnzdeɪ/",
-    explanation: "The 'd' in Wednesday is silent. Pronounced as WEN-z-day, not Wed-nes-day.",
+    original: '"Wednesday" /wɛdnɛsdei/',
+    corrected: '"Wednesday" /ˈwɛnzdeɪ/',
+    explanation:
+      "The 'd' in Wednesday is silent. Pronounced as WEN-z-day, not Wed-nes-day.",
   },
   {
     type: "vocabulary",
     original: "The problem is very big.",
     corrected: "The problem is significant / substantial.",
-    explanation: "Instead of \"very + adjective\", use stronger single words: \"significant\", \"substantial\", or \"considerable\".",
+    explanation:
+      'Instead of "very + adjective", use stronger single words: "significant", "substantial", or "considerable".',
   },
 ];
 
 const LANGUAGES: Language[] = ["English", "Vietnamese"];
-const MODELS: Model[] = ["OpenAI GPT 5", "OpenAI GPT 4o", "Claude 3.5 Sonnet", "Gemini 1.5 Pro"];
+const MODELS: Model[] = [
+  "OpenAI GPT 5",
+  "OpenAI GPT 4o",
+  "Claude 3.5 Sonnet",
+  "Gemini 1.5 Pro",
+];
 const GENDERS: Gender[] = ["Male", "Female"];
 
 const TOPICS = [
-  { id: "daily",       label: "Daily Conversation",     desc: "Giao tiếp hàng ngày" },
-  { id: "ielts1",      label: "IELTS Speaking Part 1",  desc: "Giới thiệu bản thân, cuộc sống" },
-  { id: "ielts2",      label: "IELTS Speaking Part 2",  desc: "Nói dài về một chủ đề" },
-  { id: "ielts3",      label: "IELTS Speaking Part 3",  desc: "Thảo luận ý kiến, phân tích" },
-  { id: "travel",      label: "Travel & Tourism",        desc: "Du lịch, khám phá" },
-  { id: "career",      label: "Work & Career",           desc: "Công việc, sự nghiệp" },
-  { id: "education",   label: "Education",               desc: "Giáo dục, học tập" },
-  { id: "environment", label: "Environment",             desc: "Môi trường, thiên nhiên" },
-  { id: "technology",  label: "Technology",              desc: "Công nghệ, đổi mới" },
-  { id: "health",      label: "Health & Lifestyle",      desc: "Sức khỏe, lối sống" },
+  { id: "daily", label: "Daily Conversation", desc: "Giao tiếp hàng ngày" },
+  {
+    id: "ielts1",
+    label: "IELTS Speaking Part 1",
+    desc: "Giới thiệu bản thân, cuộc sống",
+  },
+  {
+    id: "ielts2",
+    label: "IELTS Speaking Part 2",
+    desc: "Nói dài về một chủ đề",
+  },
+  {
+    id: "ielts3",
+    label: "IELTS Speaking Part 3",
+    desc: "Thảo luận ý kiến, phân tích",
+  },
+  { id: "travel", label: "Travel & Tourism", desc: "Du lịch, khám phá" },
+  { id: "career", label: "Work & Career", desc: "Công việc, sự nghiệp" },
+  { id: "education", label: "Education", desc: "Giáo dục, học tập" },
+  { id: "environment", label: "Environment", desc: "Môi trường, thiên nhiên" },
+  { id: "technology", label: "Technology", desc: "Công nghệ, đổi mới" },
+  { id: "health", label: "Health & Lifestyle", desc: "Sức khỏe, lối sống" },
 ];
-type TopicId = typeof TOPICS[number]["id"];
-
+type TopicId = (typeof TOPICS)[number]["id"];
 
 const MICROPHONES = [
   "Microphone Array (AMD Audio Device)",
@@ -121,7 +186,9 @@ interface ISpeechRecognition extends EventTarget {
   onstart: ((this: ISpeechRecognition, ev: Event) => void) | null;
   onend: ((this: ISpeechRecognition, ev: Event) => void) | null;
   onerror: ((this: ISpeechRecognition, ev: Event) => void) | null;
-  onresult: ((this: ISpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onresult:
+    | ((this: ISpeechRecognition, ev: SpeechRecognitionEvent) => void)
+    | null;
 }
 
 type SpeechRecognitionCtor = new () => ISpeechRecognition;
@@ -148,10 +215,17 @@ interface VoiceAgentProps {
   onLogout?: () => void;
 }
 
-export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
+export default function VoiceAgent({
+  currentUser: initialUser = null,
+  onLogout,
+}: VoiceAgentProps) {
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState<boolean>(() => {
-    try { return localStorage.getItem("va-theme") === "dark"; } catch { return false; }
+    try {
+      return localStorage.getItem("va-theme") === "dark";
+    } catch {
+      return false;
+    }
   });
 
   useEffect(() => {
@@ -163,7 +237,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     const session = getAuthSession();
     if (!session?.user) return null;
     const u = session.user;
-    return { display_name: u.display_name || u.name || u.email || "User", email: u.email };
+    return {
+      display_name: u.display_name || u.name || u.email || "User",
+      email: u.email,
+    };
   });
   const [topic, setTopic] = useState<TopicId>("daily");
   const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(null);
@@ -173,7 +250,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const raw = params.get("topic") || sessionStorage.getItem("va_selected_topic");
+      const raw =
+        params.get("topic") || sessionStorage.getItem("va_selected_topic");
       if (!raw) return;
       sessionStorage.removeItem("va_selected_topic");
 
@@ -186,13 +264,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         "Describe a place": "ielts2",
         "Job Interview": "career",
         "Office Meeting": "career",
-        "Presentations": "career",
-        "Negotiation": "career",
+        Presentations: "career",
+        Negotiation: "career",
         "Email & Phone": "career",
-        "Shopping": "daily",
-        "Healthcare": "health",
+        Shopping: "daily",
+        Healthcare: "health",
         "Family & Friends": "daily",
-        "Hobbies": "daily",
+        Hobbies: "daily",
         "Travel & Tourism": "travel",
         "Food & Restaurant": "travel",
         "Hotel & Booking": "travel",
@@ -214,6 +292,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
+  const selectedMsg =
+    expandedMsgId !== null
+      ? (messages.find((m) => m.id === expandedMsgId) ?? null)
+      : null;
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
@@ -235,9 +318,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const audioChunksRef = useRef<BlobPart[]>([]);
   const localAudioUrlsRef = useRef<string[]>([]);
 
-  useEffect(() => { genderRef.current = gender; }, [gender]);
-  useEffect(() => { languageRef.current = language; }, [language]);
-  useEffect(() => { if (initialUser) setCurrentUser(initialUser); }, [initialUser]);
+  useEffect(() => {
+    genderRef.current = gender;
+  }, [gender]);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+  useEffect(() => {
+    if (initialUser) setCurrentUser(initialUser);
+  }, [initialUser]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -258,7 +347,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   }, []);
 
   const startUserAudioCapture = useCallback(async () => {
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    if (
+      typeof MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
       return;
     }
 
@@ -267,12 +359,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }
 
     if (!mediaStreamRef.current) {
-      mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
     }
 
     const preferredMimeType = "audio/webm;codecs=opus";
     const recorder = MediaRecorder.isTypeSupported(preferredMimeType)
-      ? new MediaRecorder(mediaStreamRef.current, { mimeType: preferredMimeType })
+      ? new MediaRecorder(mediaStreamRef.current, {
+          mimeType: preferredMimeType,
+        })
       : new MediaRecorder(mediaStreamRef.current);
 
     audioChunksRef.current = [];
@@ -286,7 +382,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     mediaRecorderRef.current = recorder;
   }, []);
 
-  const stopUserAudioCapture = useCallback(async (): Promise<Blob | undefined> => {
+  const stopUserAudioCapture = useCallback(async (): Promise<
+    Blob | undefined
+  > => {
     const recorder = mediaRecorderRef.current;
     if (!recorder) {
       return undefined;
@@ -297,7 +395,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       if (audioChunksRef.current.length === 0) {
         return undefined;
       }
-      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      const blob = new Blob(audioChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
       audioChunksRef.current = [];
       return blob.size > 0 ? blob : undefined;
     }
@@ -306,7 +406,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       recorder.onstop = () => {
         mediaRecorderRef.current = null;
         const blob = audioChunksRef.current.length
-          ? new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" })
+          ? new Blob(audioChunksRef.current, {
+              type: recorder.mimeType || "audio/webm",
+            })
           : undefined;
         audioChunksRef.current = [];
         resolve(blob && blob.size > 0 ? blob : undefined);
@@ -336,13 +438,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         if (filtered.length > 0) {
           const femaleKeywords = /female|woman|zira|samantha|nữ/i;
           const maleKeywords = /male|man|david|mark|nam/i;
-          const preferred = currentGender === "Female"
-            ? filtered.find((v) => femaleKeywords.test(v.name))
-              ?? filtered.find((v) => !maleKeywords.test(v.name))
-              ?? filtered[0]
-            : filtered.find((v) => maleKeywords.test(v.name))
-              ?? filtered.find((v) => !femaleKeywords.test(v.name))
-              ?? filtered[0];
+          const preferred =
+            currentGender === "Female"
+              ? (filtered.find((v) => femaleKeywords.test(v.name)) ??
+                filtered.find((v) => !maleKeywords.test(v.name)) ??
+                filtered[0])
+              : (filtered.find((v) => maleKeywords.test(v.name)) ??
+                filtered.find((v) => !femaleKeywords.test(v.name)) ??
+                filtered[0]);
           utt.voice = preferred;
         }
         ttsActiveRef.current = true;
@@ -370,46 +473,52 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         };
       }
     } else {
-      const speakEnd = setTimeout(() => setAgentSpeaking(false), Math.min(text.length * 35, 4000));
+      const speakEnd = setTimeout(
+        () => setAgentSpeaking(false),
+        Math.min(text.length * 35, 4000),
+      );
       timersRef.current.push(speakEnd);
     }
   }, []);
 
-  const playAgentAudio = useCallback((text: string, audioUrl?: string) => {
-    if (!audioUrl) {
-      speakText(text);
-      return undefined;
-    }
-
-    try {
-      window.speechSynthesis?.cancel();
-      const audio = new Audio(audioUrl);
-      ttsActiveRef.current = true;
-      setMicEnabled(false);
-      setAgentSpeaking(true);
-      audio.onended = () => {
-        ttsActiveRef.current = false;
-        setAgentSpeaking(false);
-        setMicEnabled(true);
-      };
-      audio.onerror = () => {
-        ttsActiveRef.current = false;
-        setAgentSpeaking(false);
-        setMicEnabled(true);
+  const playAgentAudio = useCallback(
+    (text: string, audioUrl?: string) => {
+      if (!audioUrl) {
         speakText(text);
-      };
-      void audio.play().catch(() => {
-        ttsActiveRef.current = false;
-        setAgentSpeaking(false);
-        setMicEnabled(true);
-        speakText(text);
-      });
-    } catch {
-      speakText(text);
-    }
+        return undefined;
+      }
 
-    return audioUrl;
-  }, [speakText]);
+      try {
+        window.speechSynthesis?.cancel();
+        const audio = new Audio(audioUrl);
+        ttsActiveRef.current = true;
+        setMicEnabled(false);
+        setAgentSpeaking(true);
+        audio.onended = () => {
+          ttsActiveRef.current = false;
+          setAgentSpeaking(false);
+          setMicEnabled(true);
+        };
+        audio.onerror = () => {
+          ttsActiveRef.current = false;
+          setAgentSpeaking(false);
+          setMicEnabled(true);
+          speakText(text);
+        };
+        void audio.play().catch(() => {
+          ttsActiveRef.current = false;
+          setAgentSpeaking(false);
+          setMicEnabled(true);
+          speakText(text);
+        });
+      } catch {
+        speakText(text);
+      }
+
+      return audioUrl;
+    },
+    [speakText],
+  );
 
   const generateScore = useCallback((text: string) => {
     const words = text.trim().split(/\s+/).length;
@@ -418,141 +527,300 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return Math.min(Math.round(base + bonus), 99);
   }, []);
 
-  const sendChatMessage = useCallback(async (text: string, audioBlob?: Blob) => {
-    const trimmed = text.trim();
-    if (!trimmed || agentTyping) return;
-
-    const session = getAuthSession();
-    const userId = msgCounterRef.current++;
-    const typingId = msgCounterRef.current++;
-    const score = generateScore(trimmed);
-
-    const userMsg: Message = {
-      id: userId,
-      role: "user",
-      text: trimmed,
-      timestamp: new Date(),
-      score,
-      userAudioUrl: audioBlob ? URL.createObjectURL(audioBlob) : undefined,
+  const generateScoreDetails = useCallback((overall: number) => {
+    const jitter = () => Math.floor(Math.random() * 11) - 5;
+    const clamp = (n: number) => Math.max(45, Math.min(99, n));
+    return {
+      overall,
+      pronunciation: clamp(overall + jitter()),
+      fluency: clamp(overall + jitter()),
+      accuracy: clamp(overall + jitter()),
     };
+  }, []);
 
-    if (userMsg.userAudioUrl) {
-      localAudioUrlsRef.current.push(userMsg.userAudioUrl);
-    }
+  const generateMistakes = useCallback((text: string, overall: number) => {
+    type MType = "Pronunciation" | "Grammar" | "Word choice" | "Fluency";
+    const tokens = text
+      .replace(/[.!?,;:"']/g, "")
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
+    if (tokens.length === 0) return [];
 
-    const historyPayload: { role: string; text: string }[] = [
-      ...messages.filter((message) => !message.typing).map((message) => ({
-        role: message.role === "agent" ? "assistant" : "user",
-        text: message.text,
-      })),
-      { role: "user", text: trimmed },
+    const target =
+      overall >= 92 ? 0 : overall >= 85 ? 1 : overall >= 75 ? 2 : 3;
+    const count = Math.min(target, tokens.length);
+    if (count === 0) return [];
+
+    const PRONUNCIATION_NOTES = [
+      "Stress the second syllable more clearly.",
+      "Soften the ending consonant for natural flow.",
+      "Lengthen the vowel sound slightly.",
+      "Don't drop the final 's' sound.",
+    ];
+    const GRAMMAR_PAIRS = [
+      {
+        wrong: "have went",
+        correct: "have gone",
+        note: "Past participle of 'go' is 'gone'.",
+      },
+      {
+        wrong: "more better",
+        correct: "better",
+        note: "'Better' is already comparative.",
+      },
+      {
+        wrong: "I am agree",
+        correct: "I agree",
+        note: "'Agree' is already a verb.",
+      },
+      {
+        wrong: "people is",
+        correct: "people are",
+        note: "'People' takes a plural verb.",
+      },
+    ];
+    const WORD_CHOICE_PAIRS = [
+      {
+        wrong: "very good",
+        correct: "excellent",
+        note: "Use a stronger adjective for variety.",
+      },
+      {
+        wrong: "a lot of",
+        correct: "numerous",
+        note: "More formal alternative.",
+      },
+      {
+        wrong: "thing",
+        correct: "aspect",
+        note: "Be more specific in academic contexts.",
+      },
+      {
+        wrong: "big",
+        correct: "significant",
+        note: "Stronger word for emphasis.",
+      },
+    ];
+    const FLUENCY_NOTES = [
+      "Try to reduce filler words like 'um' and 'uh'.",
+      "Pause briefly between clauses for rhythm.",
+      "Connect ideas with linking words (however, moreover).",
     ];
 
-    setMessages((prev: Message[]) => [
-      ...prev,
-      userMsg,
-      {
-        id: typingId,
-        role: "agent",
-        text: "",
-        timestamp: new Date(),
-        typing: true,
-      },
-    ]);
-    setChatInput("");
-    inputRef.current?.focus();
-    setAgentTyping(true);
+    const types: MType[] = [
+      "Pronunciation",
+      "Grammar",
+      "Word choice",
+      "Fluency",
+    ];
+    const used = new Set<number>();
+    const out: Array<{
+      wrong: string;
+      correct: string;
+      type: MType;
+      note?: string;
+    }> = [];
 
-    try {
-      if (session?.token) {
-        const data = await chatRespond({
-          token: session.token,
-          text: trimmed,
-          audioBlob,
-          history: historyPayload,
-          topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+    for (let i = 0; i < count; i++) {
+      const type = types[Math.floor(Math.random() * types.length)];
+      if (type === "Grammar") {
+        const pair =
+          GRAMMAR_PAIRS[Math.floor(Math.random() * GRAMMAR_PAIRS.length)];
+        out.push({ ...pair, type });
+      } else if (type === "Word choice") {
+        const pair =
+          WORD_CHOICE_PAIRS[
+            Math.floor(Math.random() * WORD_CHOICE_PAIRS.length)
+          ];
+        out.push({ ...pair, type });
+      } else if (type === "Pronunciation") {
+        let idx = Math.floor(Math.random() * tokens.length);
+        let guard = 0;
+        while (used.has(idx) && guard++ < 6)
+          idx = Math.floor(Math.random() * tokens.length);
+        used.add(idx);
+        const word = tokens[idx];
+        out.push({
+          wrong: word,
+          correct: word,
+          type,
+          note: PRONUNCIATION_NOTES[
+            Math.floor(Math.random() * PRONUNCIATION_NOTES.length)
+          ],
         });
-        
-        const pronunciationFeedback = await assessPronunciation({
-          token: session.token,
-          audioBlob,
-          language: 'en-US',
-        });
-
-        const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
-        
-        // audio_base64 is the real-time delivery format — always use it for
-        // immediate playback. assistant_audio_url is a MinIO presigned URL with
-        // a Docker-internal hostname (minio:9000) that the browser cannot reach;
-        // it is only useful for conversation history replay via the messages API.
-        let audioUrl: string | undefined;
-        if (data.audio_base64) {
-          audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
-        } else if (data.assistant_audio_url) {
-          audioUrl = data.assistant_audio_url;
-        }
-        
-        const audioToPlay = audioUrl;
-        const playedUrl = playAgentAudio(responseText, audioToPlay);
-
-        setMessages((prev: Message[]) =>
-          prev.map((message) => (
-            message.id === userId
-              ? {
-                  ...message,
-                  // Keep the local blob URL (created before the API call).
-                  // MinIO presigned URLs use the internal Docker hostname and
-                  // are unreachable from the browser.
-                  userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
-                }
-              : message.id === typingId
-                ? {
-                    ...message,
-                    text: responseText,
-                    typing: false,
-                    audioUrl: playedUrl,
-                    minioUrl: data.assistant_audio_url || undefined,
-                  }
-                : message
-          ))
-        );
       } else {
-        await new Promise<void>((res) => { timersRef.current.push(setTimeout(res, 700 + Math.random() * 600)); });
-        const reply = AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
-        playAgentAudio(reply);
-        setMessages((prev: Message[]) =>
-          prev.map((message) => (
-            message.id === typingId
-              ? { ...message, text: reply, typing: false }
-              : message
-          ))
-        );
+        out.push({
+          wrong: "—",
+          correct: "—",
+          type,
+          note: FLUENCY_NOTES[Math.floor(Math.random() * FLUENCY_NOTES.length)],
+        });
+      }
+    }
+    return out;
+  }, []);
+
+  const sendChatMessage = useCallback(
+    async (text: string, audioBlob?: Blob) => {
+      const trimmed = text.trim();
+      if (!trimmed || agentTyping) return;
+
+      const session = getAuthSession();
+      const userId = msgCounterRef.current++;
+      const typingId = msgCounterRef.current++;
+      const score = generateScore(trimmed);
+
+      const userMsg: Message = {
+        id: userId,
+        role: "user",
+        text: trimmed,
+        timestamp: new Date(),
+        score,
+        scoreDetails: generateScoreDetails(score),
+        mistakes: generateMistakes(trimmed, score),
+        userAudioUrl: audioBlob ? URL.createObjectURL(audioBlob) : undefined,
+      };
+
+      if (userMsg.userAudioUrl) {
+        localAudioUrlsRef.current.push(userMsg.userAudioUrl);
       }
 
-      const idx = autoFeedbackIndexRef.current % AUTO_FEEDBACKS.length;
-      autoFeedbackIndexRef.current++;
-      const fb = AUTO_FEEDBACKS[idx];
-      const newFb: FeedbackItem = {
-        ...fb,
-        id: feedbackCounterRef.current++,
-        timestamp: new Date(),
-      };
-      setFeedbacks((prev: FeedbackItem[]) => [newFb, ...prev]);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Chat request failed";
-      setMessages((prev: Message[]) =>
-        prev.map((message) => (
-          message.id === typingId
-            ? { ...message, text: `Agent error: ${errorMessage}`, typing: false }
-            : message
-        ))
-      );
-      setAgentSpeaking(false);
-      setMicEnabled(true);
-    } finally {
-      setAgentTyping(false);
-    }
-  }, [agentTyping, messages, playAgentAudio, topic, generateScore]);
+      const historyPayload: { role: string; text: string }[] = [
+        ...messages
+          .filter((message) => !message.typing)
+          .map((message) => ({
+            role: message.role === "agent" ? "assistant" : "user",
+            text: message.text,
+          })),
+        { role: "user", text: trimmed },
+      ];
+
+      setMessages((prev: Message[]) => [
+        ...prev,
+        userMsg,
+        {
+          id: typingId,
+          role: "agent",
+          text: "",
+          timestamp: new Date(),
+          typing: true,
+        },
+      ]);
+      setChatInput("");
+      inputRef.current?.focus();
+      setAgentTyping(true);
+
+      try {
+        if (session?.token) {
+          const data = await chatRespond({
+            token: session.token,
+            text: trimmed,
+            audioBlob,
+            history: historyPayload,
+            topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+          });
+
+          const pronunciationFeedback = await assessPronunciation({
+            token: session.token,
+            audioBlob,
+            language: "en-US",
+          });
+
+          const responseText =
+            String(data.response_text || "").trim() ||
+            "I am ready to help you practice.";
+
+          // audio_base64 is the real-time delivery format — always use it for
+          // immediate playback. assistant_audio_url is a MinIO presigned URL with
+          // a Docker-internal hostname (minio:9000) that the browser cannot reach;
+          // it is only useful for conversation history replay via the messages API.
+          let audioUrl: string | undefined;
+          if (data.audio_base64) {
+            audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
+          } else if (data.assistant_audio_url) {
+            audioUrl = data.assistant_audio_url;
+          }
+
+          const audioToPlay = audioUrl;
+          const playedUrl = playAgentAudio(responseText, audioToPlay);
+
+          setMessages((prev: Message[]) =>
+            prev.map((message) =>
+              message.id === userId
+                ? {
+                    ...message,
+                    // Keep the local blob URL (created before the API call).
+                    // MinIO presigned URLs use the internal Docker hostname and
+                    // are unreachable from the browser.
+                    userAudioUrl:
+                      message.userAudioUrl || data.user_audio_url || undefined,
+                  }
+                : message.id === typingId
+                  ? {
+                      ...message,
+                      text: responseText,
+                      typing: false,
+                      audioUrl: playedUrl,
+                      minioUrl: data.assistant_audio_url || undefined,
+                    }
+                  : message,
+            ),
+          );
+        } else {
+          await new Promise<void>((res) => {
+            timersRef.current.push(setTimeout(res, 700 + Math.random() * 600));
+          });
+          const reply =
+            AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
+          playAgentAudio(reply);
+          setMessages((prev: Message[]) =>
+            prev.map((message) =>
+              message.id === typingId
+                ? { ...message, text: reply, typing: false }
+                : message,
+            ),
+          );
+        }
+
+        const idx = autoFeedbackIndexRef.current % AUTO_FEEDBACKS.length;
+        autoFeedbackIndexRef.current++;
+        const fb = AUTO_FEEDBACKS[idx];
+        const newFb: FeedbackItem = {
+          ...fb,
+          id: feedbackCounterRef.current++,
+          timestamp: new Date(),
+        };
+        setFeedbacks((prev: FeedbackItem[]) => [newFb, ...prev]);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Chat request failed";
+        setMessages((prev: Message[]) =>
+          prev.map((message) =>
+            message.id === typingId
+              ? {
+                  ...message,
+                  text: `Agent error: ${errorMessage}`,
+                  typing: false,
+                }
+              : message,
+          ),
+        );
+        setAgentSpeaking(false);
+        setMicEnabled(true);
+      } finally {
+        setAgentTyping(false);
+      }
+    },
+    [
+      agentTyping,
+      messages,
+      playAgentAudio,
+      topic,
+      generateScore,
+      generateScoreDetails,
+      generateMistakes,
+    ],
+  );
 
   // Auto-start/stop recognition when mic toggle or connection changes
   useEffect(() => {
@@ -564,9 +832,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       return;
     }
 
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionAPI =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
-      alert("Trình duyệt không hỗ trợ nhận dạng giọng nói. Dùng Chrome hoặc Edge.");
+      alert(
+        "Trình duyệt không hỗ trợ nhận dạng giọng nói. Dùng Chrome hoặc Edge.",
+      );
       setMicEnabled(false);
       return;
     }
@@ -620,7 +891,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         if (err === "not-allowed") {
           stopped = true;
           setMicEnabled(false);
-          alert("Trình duyệt chặn micro. Hãy cho phép quyền micro trong thanh địa chỉ.");
+          alert(
+            "Trình duyệt chặn micro. Hãy cho phép quyền micro trong thanh địa chỉ.",
+          );
         }
         setIsRecording(false);
         void stopUserAudioCapture();
@@ -630,7 +903,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         setIsRecording(false);
         void stopUserAudioCapture();
         // auto restart after brief pause
-        setTimeout(() => { if (!stopped) startListening(); }, 200);
+        setTimeout(() => {
+          if (!stopped) startListening();
+        }, 200);
       };
 
       recognition.start();
@@ -646,16 +921,26 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setChatInput("");
       void stopUserAudioCapture();
     };
-  }, [status, micEnabled, language, sendChatMessage, startUserAudioCapture, stopUserAudioCapture]);
+  }, [
+    status,
+    micEnabled,
+    language,
+    sendChatMessage,
+    startUserAudioCapture,
+    stopUserAudioCapture,
+  ]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (chatInput.trim() && status === "connected" && !agentTyping) {
-        sendChatMessage(chatInput);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        if (chatInput.trim() && status === "connected" && !agentTyping) {
+          sendChatMessage(chatInput);
+        }
       }
-    }
-  }, [chatInput, status, agentTyping, sendChatMessage]);
+    },
+    [chatInput, status, agentTyping, sendChatMessage],
+  );
 
   const handleConnect = useCallback(() => {
     if (status === "connected") {
@@ -705,19 +990,29 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const isConnecting = status === "connecting";
 
   return (
-    <div data-va="root" className={`h-screen overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? " va-dark" : ""}`}>
+    <div
+      data-va="root"
+      className={`h-screen overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? " va-dark" : ""}`}
+    >
       {/* Top bar */}
-      <header data-va="header" className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]">
+      <header
+        data-va="header"
+        className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]"
+      >
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
-            <span className="text-[10px] font-black text-white leading-none">VIN</span>
+            <span className="text-[10px] font-black text-white leading-none">
+              VIN
+            </span>
           </div>
-          <span className="text-sm font-semibold text-gray-800">IELTS Speaking Coach</span>
+          <span className="text-sm font-semibold text-gray-800">
+            IELTS Speaking Coach
+          </span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsDark(v => !v)}
+            onClick={() => setIsDark((v) => !v)}
             className="w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
           >
@@ -733,25 +1028,50 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
                   {currentUser.display_name?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <span className="text-xs text-gray-700">{currentUser.display_name || currentUser.email || "User"}</span>
-                <svg className={`w-3 h-3 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg>
+                <span className="text-xs text-gray-700">
+                  {currentUser.display_name || currentUser.email || "User"}
+                </span>
+                <svg
+                  className={`w-3 h-3 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
               </button>
               {showUserMenu && (
                 <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setShowUserMenu(false)}
+                  />
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-40 overflow-hidden animate-fadeIn">
                     <div className="px-3 py-2.5 border-b border-gray-100">
-                      <div className="text-sm font-semibold text-gray-900 truncate">{currentUser.display_name || "User"}</div>
-                      <div className="text-xs text-gray-500 truncate">{currentUser.email}</div>
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {currentUser.display_name || "User"}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {currentUser.email}
+                      </div>
                     </div>
                     <button
-                      onClick={() => { setShowUserMenu(false); navigate("/dashboard"); }}
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        navigate("/dashboard");
+                      }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
                     >
                       <span>📊</span> Dashboard
                     </button>
                     <button
-                      onClick={() => { setShowUserMenu(false); setShowLogoutConfirm(true); }}
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowLogoutConfirm(true);
+                      }}
                       className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
                     >
                       <LogOut className="w-3.5 h-3.5" /> Đăng xuất
@@ -776,17 +1096,22 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               </button>
             </div>
           )}
-
-
         </div>
       </header>
 
       {/* Description bar */}
-      <div data-va="descbar" className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500">
+      <div
+        data-va="descbar"
+        className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
+      >
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-700">Description</span>
           <span className="text-gray-400">·</span>
-          <span className="text-gray-700">{customTopicLabel ?? TOPICS.find((t) => t.id === topic)?.label ?? "Daily Conversation"}</span>
+          <span className="text-gray-700">
+            {customTopicLabel ??
+              TOPICS.find((t) => t.id === topic)?.label ??
+              "Daily Conversation"}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -804,11 +1129,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               isConnected
                 ? "bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50"
                 : isConnecting
-                ? "bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed"
-                : "bg-white text-gray-900 hover:bg-gray-100 border border-gray-300"
+                  ? "bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed"
+                  : "bg-white text-gray-900 hover:bg-gray-100 border border-gray-300"
             }`}
           >
-            {isConnected ? "Disconnect" : isConnecting ? "Connecting..." : "Connect"}
+            {isConnected
+              ? "Disconnect"
+              : isConnecting
+                ? "Connecting..."
+                : "Connect"}
           </button>
         </div>
       </div>
@@ -816,30 +1145,48 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       {/* Main content */}
       <div data-va="content" className="flex flex-1 overflow-hidden">
         {/* Left panel: Audio & Video */}
-        <div data-va="left" className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-hidden">
+        <div
+          data-va="left"
+          className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-hidden"
+        >
           {/* Panel header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-            <span className="text-xs font-semibold text-gray-700 tracking-wide">Audio & Video</span>
-            <SelectDropdown value={gender} options={GENDERS} onChange={setGender} />
+            <span className="text-xs font-semibold text-gray-700 tracking-wide">
+              Audio & Video
+            </span>
+            <SelectDropdown
+              value={gender}
+              options={GENDERS}
+              onChange={setGender}
+            />
           </div>
 
           {/* Agent display */}
           <div className="bg-linear-to-b from-blue-50 to-indigo-50 mx-2 mt-2 rounded-md overflow-hidden border border-gray-200">
             <div className="flex flex-col items-center justify-center py-5 px-4 min-h-32.5">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
-                agentSpeaking
-                  ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200"
-                  : "bg-blue-100 border border-blue-200"
-              }`}>
-                <SiOpenai className={`w-6 h-6 transition-colors duration-300 ${agentSpeaking ? "text-blue-600" : "text-blue-600"}`} />
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
+                  agentSpeaking
+                    ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200"
+                    : "bg-blue-100 border border-blue-200"
+                }`}
+              >
+                <SiOpenai
+                  className={`w-6 h-6 transition-colors duration-300 ${agentSpeaking ? "text-blue-600" : "text-blue-600"}`}
+                />
               </div>
-              <span className="text-xs font-medium text-gray-700 mb-2">Agent</span>
-              {(isConnected || isConnecting) ? (
+              <span className="text-xs font-medium text-gray-700 mb-2">
+                Agent
+              </span>
+              {isConnected || isConnecting ? (
                 <AgentWaveform active={agentSpeaking} />
               ) : (
                 <div className="flex items-center gap-1 mt-1">
                   {Array.from({ length: 12 }).map((_, i) => (
-                    <div key={i} className="w-2 h-2 rounded-full bg-blue-500/30" />
+                    <div
+                      key={i}
+                      className="w-2 h-2 rounded-full bg-blue-500/30"
+                    />
                   ))}
                 </div>
               )}
@@ -849,7 +1196,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           {/* Microphone section */}
           <div className="px-2 mt-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">Microphone</span>
+              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
+                Microphone
+              </span>
               <div className="flex items-center gap-2">
                 <button
                   data-testid="button-mic-toggle"
@@ -858,13 +1207,21 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     isRecording
                       ? "text-red-400 hover:text-red-300 animate-pulse"
                       : micEnabled
-                      ? "text-blue-600 hover:text-blue-300"
-                      : "text-gray-400 hover:text-gray-500"
+                        ? "text-blue-600 hover:text-blue-300"
+                        : "text-gray-400 hover:text-gray-500"
                   }`}
                 >
-                  {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  {micEnabled ? (
+                    <Mic className="w-4 h-4" />
+                  ) : (
+                    <MicOff className="w-4 h-4" />
+                  )}
                 </button>
-                <DeviceSelect value={selectedMic} options={MICROPHONES} onChange={setSelectedMic} />
+                <DeviceSelect
+                  value={selectedMic}
+                  options={MICROPHONES}
+                  onChange={setSelectedMic}
+                />
               </div>
             </div>
             <div className="bg-linear-to-b from-blue-50 to-indigo-50 rounded-md border border-gray-200 py-2 px-2">
@@ -875,43 +1232,205 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           {/* AI Feedback Panel */}
           <div className="px-2 mt-3 flex-1 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">AI Feedback</span>
-              {feedbacks.length > 0 && (
+              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
+                AI Feedback
+              </span>
+              {selectedMsg ? (
+                <button
+                  type="button"
+                  onClick={() => setExpandedMsgId(null)}
+                  className="text-[9px] text-gray-500 hover:text-gray-800 underline"
+                >
+                  Clear
+                </button>
+              ) : feedbacks.length > 0 ? (
                 <span className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-200 rounded-full px-1.5 py-0.5">
                   {feedbacks.length}
                 </span>
-              )}
+              ) : null}
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin pr-0.5">
-              {feedbacks.length === 0 ? (
+              {selectedMsg ? (
+                <>
+                  <div className="rounded-md border border-violet-200 bg-violet-50 p-2 animate-fadeIn">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700">
+                        Selected sentence
+                      </span>
+                      {selectedMsg.userAudioUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            try {
+                              const audio = new Audio(selectedMsg.userAudioUrl);
+                              void audio.play();
+                            } catch {
+                              // ignore playback errors
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold text-violet-700 bg-white border border-violet-200 hover:bg-violet-100 transition-colors"
+                        >
+                          <Volume2 className="w-2.5 h-2.5" />
+                          Replay
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-800 italic leading-snug">
+                      "{selectedMsg.text}"
+                    </p>
+                  </div>
+
+                  {selectedMsg.scoreDetails && (
+                    <div className="rounded-md border border-gray-200 bg-white p-2 animate-fadeIn">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block mb-1.5">
+                        Score breakdown
+                      </span>
+                      <div className="flex flex-col gap-1">
+                        {(
+                          [
+                            ["Overall", selectedMsg.scoreDetails.overall],
+                            [
+                              "Pronunciation",
+                              selectedMsg.scoreDetails.pronunciation,
+                            ],
+                            ["Fluency", selectedMsg.scoreDetails.fluency],
+                            ["Accuracy", selectedMsg.scoreDetails.accuracy],
+                          ] as const
+                        ).map(([label, val]) => {
+                          const color =
+                            val >= 85
+                              ? "bg-green-500"
+                              : val >= 70
+                                ? "bg-yellow-500"
+                                : "bg-orange-500";
+                          return (
+                            <div
+                              key={label}
+                              className="flex items-center gap-1.5"
+                            >
+                              <span className="text-[9px] text-gray-600 w-16 shrink-0">
+                                {label}
+                              </span>
+                              <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full ${color} rounded-full`}
+                                  style={{ width: `${val}%` }}
+                                />
+                              </div>
+                              <span className="text-[9px] font-bold text-gray-700 w-5 text-right tabular-nums">
+                                {val}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block px-1">
+                    {selectedMsg.mistakes && selectedMsg.mistakes.length > 0
+                      ? `Errors (${selectedMsg.mistakes.length})`
+                      : "Errors"}
+                  </span>
+
+                  {!selectedMsg.mistakes ||
+                  selectedMsg.mistakes.length === 0 ? (
+                    <div className="rounded-md border border-green-200 bg-green-50 p-2 flex items-start gap-1.5 animate-fadeIn">
+                      <CheckCircle2 className="w-3 h-3 text-green-600 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-green-700 leading-snug">
+                        Great job! No issues detected in this sentence.
+                      </p>
+                    </div>
+                  ) : (
+                    selectedMsg.mistakes.map((m, i) => {
+                      const map: Record<typeof m.type, FeedbackType> = {
+                        Pronunciation: "pronunciation",
+                        Grammar: "grammar",
+                        "Word choice": "vocabulary",
+                        Fluency: "fluency",
+                      };
+                      const meta = FEEDBACK_ICON[map[m.type]];
+                      const Icon = meta.icon;
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded-md border p-2 ${meta.bg} animate-fadeIn`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Icon
+                              className={`w-3 h-3 shrink-0 ${meta.color}`}
+                            />
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}
+                            >
+                              {m.type}
+                            </span>
+                          </div>
+                          {m.wrong !== "—" && (
+                            <p className="text-[10px] text-red-500 opacity-80 line-through mb-0.5 leading-snug">
+                              {m.wrong}
+                            </p>
+                          )}
+                          {m.correct !== "—" && (
+                            <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">
+                              {m.correct}
+                            </p>
+                          )}
+                          {m.note && (
+                            <p className="text-[9px] text-gray-700 leading-relaxed">
+                              {m.note}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              ) : feedbacks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
                   <CheckCircle2 className="w-7 h-7 text-gray-400" />
                   <p className="text-[10px] text-gray-500 leading-relaxed px-2">
                     {isConnected
-                      ? "Listening for errors..."
+                      ? "Click any of your messages to see its feedback here."
                       : "Connect to see real-time English corrections"}
                   </p>
                 </div>
               ) : (
-                feedbacks.map((fb) => {
-                  const meta = FEEDBACK_ICON[fb.type];
-                  const Icon = meta.icon;
-                  return (
-                    <div
-                      key={fb.id}
-                      className={`rounded-md border p-2 ${meta.bg} animate-fadeIn`}
-                    >
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
-                        <span className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</span>
+                <>
+                  <p className="text-[9px] text-gray-500 italic px-1">
+                    Click any of your messages above to see its feedback. Recent
+                    automatic corrections:
+                  </p>
+                  {feedbacks.map((fb) => {
+                    const meta = FEEDBACK_ICON[fb.type];
+                    const Icon = meta.icon;
+                    return (
+                      <div
+                        key={fb.id}
+                        className={`rounded-md border p-2 ${meta.bg} animate-fadeIn`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
+                          <span
+                            className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}
+                          >
+                            {meta.label}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-red-500 opacity-75 line-through mb-0.5 leading-snug">
+                          {fb.original}
+                        </p>
+                        <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">
+                          {fb.corrected}
+                        </p>
+                        <p className="text-[9px] text-gray-700 leading-relaxed">
+                          {fb.explanation}
+                        </p>
                       </div>
-                      <p className="text-[10px] text-red-500 opacity-75 line-through mb-0.5 leading-snug">{fb.original}</p>
-                      <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">{fb.corrected}</p>
-                      <p className="text-[9px] text-gray-700 leading-relaxed">{fb.explanation}</p>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </>
               )}
             </div>
           </div>
@@ -922,12 +1441,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         {/* Right panel: Conversation transcript */}
         <div className="flex-1 flex flex-col">
           {/* Panel top bar */}
-          <div data-va="conv-header" className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+          <div
+            data-va="conv-header"
+            className="flex items-center justify-between px-4 py-2 border-b border-gray-200"
+          >
             <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-gray-700">Conversation</span>
+              <span className="text-xs font-semibold text-gray-700">
+                Conversation
+              </span>
               {isConnected && (
                 <div className="flex items-center gap-1.5">
-                  <Circle className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? "text-blue-600" : "text-green-400"}`} />
+                  <Circle
+                    className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? "text-blue-600" : "text-green-400"}`}
+                  />
                   <span className="text-[10px] text-gray-600">
                     {agentSpeaking ? "Agent speaking" : "Listening"}
                   </span>
@@ -937,14 +1463,25 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <SiOpenai className="w-4 h-4 text-gray-500" />
-                <SelectDropdown value={model} options={MODELS} onChange={setModel} />
+                <SelectDropdown
+                  value={model}
+                  options={MODELS}
+                  onChange={setModel}
+                />
               </div>
-              <SelectDropdown value={language} options={LANGUAGES} onChange={setLanguage} />
+              <SelectDropdown
+                value={language}
+                options={LANGUAGES}
+                onChange={setLanguage}
+              />
             </div>
           </div>
 
           {/* Messages area */}
-          <div data-va="messages" className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
+          <div
+            data-va="messages"
+            className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
+          >
             {status === "disconnected" && messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
@@ -952,9 +1489,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 </div>
                 <div className="space-y-1">
                   <p className="text-gray-600 text-sm">
-                    Click <span className="font-semibold text-gray-900">Connect</span> to start a session
+                    Click{" "}
+                    <span className="font-semibold text-gray-900">Connect</span>{" "}
+                    to start a session
                   </p>
-                  <p className="text-gray-400 text-xs">Conversation transcript will appear here</p>
+                  <p className="text-gray-400 text-xs">
+                    Conversation transcript will appear here
+                  </p>
                 </div>
               </div>
             )}
@@ -969,23 +1510,26 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     <div
                       key={i}
                       className="w-1.5 h-1.5 rounded-full bg-blue-500"
-                      style={{ animation: `dotPulse 1s ease-in-out ${i * 200}ms infinite` }}
+                      style={{
+                        animation: `dotPulse 1s ease-in-out ${i * 200}ms infinite`,
+                      }}
                     />
                   ))}
                 </div>
-                <p className="text-blue-600/70 text-xs">Establishing connection...</p>
+                <p className="text-blue-600/70 text-xs">
+                  Establishing connection...
+                </p>
               </div>
             )}
 
             {messages.map((msg) => {
-              const canReplay = msg.role === "agent" || Boolean(msg.userAudioUrl);
-              return (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  onReplay={canReplay ? () => {
+              const isUser = msg.role === "user";
+              const canReplay =
+                msg.role === "agent" || Boolean(msg.userAudioUrl);
+              const expandable = isUser && !msg.typing;
+              const replay = canReplay
+                ? () => {
                     if (msg.role === "agent") {
-                      // Use stored audio URL if available; fall back to TTS if not
                       const audioUrl = msg.minioUrl || msg.audioUrl;
                       if (audioUrl) {
                         playAgentAudio(msg.text, audioUrl);
@@ -994,16 +1538,31 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                       }
                       return;
                     }
-
                     if (!msg.userAudioUrl) return;
-
                     try {
                       const audio = new Audio(msg.userAudioUrl);
                       void audio.play();
                     } catch {
                       // Ignore playback failures for user recording replays.
                     }
-                  } : undefined}
+                  }
+                : undefined;
+
+              return (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onReplay={replay}
+                  expandable={expandable}
+                  expanded={expandedMsgId === msg.id}
+                  onToggleExpanded={
+                    expandable
+                      ? () =>
+                          setExpandedMsgId((prev) =>
+                            prev === msg.id ? null : msg.id,
+                          )
+                      : undefined
+                  }
                 />
               );
             })}
@@ -1012,7 +1571,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Chat input bar */}
-          <div data-va="input" className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa]">
+          <div
+            data-va="input"
+            className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa]"
+          >
             {!isConnected ? (
               <div className="flex items-center justify-center py-2 text-xs text-gray-400">
                 Connect to start chatting
@@ -1028,16 +1590,25 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     onChange={(e) => {
                       setChatInput(e.target.value);
                       e.target.style.height = "auto";
-                      e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                      e.target.style.height =
+                        Math.min(e.target.scrollHeight, 120) + "px";
                     }}
                     onKeyDown={handleKeyDown}
                     disabled={agentTyping}
-                    placeholder={isRecording ? "Đang nghe giọng nói..." : agentTyping ? "Agent is typing..." : "Type a message... (Enter to send)"}
+                    placeholder={
+                      isRecording
+                        ? "Đang nghe giọng nói..."
+                        : agentTyping
+                          ? "Agent is typing..."
+                          : "Type a message... (Enter to send)"
+                    }
                     rows={1}
-                    data-va="textarea" className={`w-full resize-none rounded-xl border px-3 py-2 text-sm bg-[#f1f5f9] text-gray-800 placeholder-gray-400 outline-none transition-all leading-relaxed
-                      ${agentTyping
-                        ? "border-gray-200 opacity-60 cursor-not-allowed"
-                        : "border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
+                    data-va="textarea"
+                    className={`w-full resize-none rounded-xl border px-3 py-2 text-sm bg-[#f1f5f9] text-gray-800 placeholder-gray-400 outline-none transition-all leading-relaxed
+                      ${
+                        agentTyping
+                          ? "border-gray-200 opacity-60 cursor-not-allowed"
+                          : "border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-200"
                       }`}
                     style={{ minHeight: "38px", maxHeight: "120px" }}
                   />
@@ -1047,7 +1618,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 <button
                   data-testid="button-send-chat"
                   onClick={() => {
-                    if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
+                    if (chatInput.trim() && !agentTyping)
+                      sendChatMessage(chatInput);
                   }}
                   disabled={!chatInput.trim() || agentTyping}
                   className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
@@ -1078,15 +1650,20 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                           }}
                         />
                       ))}
-                      <span className="ml-1 text-[10px] text-blue-600/80">Agent speaking</span>
+                      <span className="ml-1 text-[10px] text-blue-600/80">
+                        Agent speaking
+                      </span>
                     </div>
                   )}
                   {agentTyping && !agentSpeaking && (
-                    <span className="text-[10px] text-gray-500 italic">Agent is typing...</span>
+                    <span className="text-[10px] text-gray-500 italic">
+                      Agent is typing...
+                    </span>
                   )}
                 </div>
                 <span className="text-[10px] text-gray-600">
-                  {messages.filter((m) => !m.typing).length} messages • Enter to send, Shift+Enter for newline
+                  {messages.filter((m) => !m.typing).length} messages • Enter to
+                  send, Shift+Enter for newline
                 </span>
               </div>
             )}
@@ -1104,8 +1681,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             className="mt-18 mr-3 bg-white border border-gray-200 rounded-xl shadow-2xl w-80 p-4 text-sm"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-gray-800 mb-1 text-sm">Chủ đề luyện tập</h3>
-            <p className="text-[10px] text-gray-500 mb-3">Chọn chủ đề để AI tập trung hướng dẫn đúng hướng</p>
+            <h3 className="font-semibold text-gray-800 mb-1 text-sm">
+              Chủ đề luyện tập
+            </h3>
+            <p className="text-[10px] text-gray-500 mb-3">
+              Chọn chủ đề để AI tập trung hướng dẫn đúng hướng
+            </p>
             <div className="space-y-1">
               {TOPICS.map((t) => (
                 <button
@@ -1127,8 +1708,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                   }`}
                 >
                   <div>
-                    <div className="text-xs font-medium text-gray-800">{t.label}</div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">{t.desc}</div>
+                    <div className="text-xs font-medium text-gray-800">
+                      {t.label}
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      {t.desc}
+                    </div>
                   </div>
                   {topic === t.id && (
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
@@ -1141,30 +1726,42 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       )}
 
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
-             onClick={() => setShowLogoutConfirm(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-sm w-full p-6"
-               onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl shrink-0">👋</div>
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl shrink-0">
+                👋
+              </div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
-                <p className="text-sm text-gray-500 mt-1">Bạn có chắc muốn đăng xuất khỏi tài khoản không?</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Bạn có chắc muốn đăng xuất khỏi tài khoản không?
+                </p>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setShowLogoutConfirm(false)}
-                      className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
                 Hủy
               </button>
-              <button onClick={() => {
-                setShowLogoutConfirm(false);
-                clearAuthSession();
-                setCurrentUser(null);
-                if (onLogout) onLogout();
-                navigate("/", { replace: true });
-              }}
-                      className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">
+              <button
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  clearAuthSession();
+                  setCurrentUser(null);
+                  if (onLogout) onLogout();
+                  navigate("/", { replace: true });
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+              >
                 Đăng xuất
               </button>
             </div>
@@ -1172,6 +1769,5 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
       )}
     </div>
-
   );
 }
