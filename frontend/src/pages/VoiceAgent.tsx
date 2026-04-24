@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, Settings, Circle, SendHorizontal, AlertCircle, BookOpen, Volume2, Zap, CheckCircle2, LogIn, UserPlus, LogOut, Moon, Sun } from "lucide-react";
 import { SiOpenai } from "react-icons/si";
 
-import { chatRespond } from "../api/chat";
+import { chatRespond, assessPronunciation } from "../api/chat";
 import { getAuthSession, clearAuthSession } from "../auth/tokenStorage";
 import {
   AgentWaveform,
@@ -471,6 +471,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           audioBlob,
           history: historyPayload,
           topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+        });
+        
+        const pronunciationFeedback = await assessPronunciation({
+          token: session.token,
+          audioBlob,
+          language: 'en-US',
         });
 
         const responseText = String(data.response_text || "").trim() || "I am ready to help you practice.";
