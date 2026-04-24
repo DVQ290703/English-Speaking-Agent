@@ -1,11 +1,11 @@
 """Azure Cognitive Services pronunciation assessment service."""
 
 import json
-import os
 
 import azure.cognitiveservices.speech as speechsdk
 
 from app.core.logger import logger
+from app.core.settings import AZURE_SUBSCRIPTION_ID, AZURE_SERVICE_REGION
 
 
 class AzureAssessmentService:
@@ -16,12 +16,12 @@ class AzureAssessmentService:
     """
 
     def __init__(self, language: str = "en-US"):
-        self._key = os.getenv("AZURE_SPEECH_KEY")
-        self._region = os.getenv("AZURE_SPEECH_REGION")
+        self._key = AZURE_SUBSCRIPTION_ID
+        self._region = AZURE_SERVICE_REGION
         if not self._key:
-            raise ValueError("AZURE_SPEECH_KEY is missing. Set it in your environment or .env file.")
+            raise ValueError("AZURE_SUBSCRIPTION_ID is missing. Set it in your environment or .env file.")
         if not self._region:
-            raise ValueError("AZURE_SPEECH_REGION is missing. Set it in your environment or .env file.")
+            raise ValueError("AZURE_SERVICE_REGION is missing. Set it in your environment or .env file.")
         self.default_language = language
         logger.info("AzureAssessmentService ready language=%s region=%s", language, self._region)
 
@@ -122,7 +122,7 @@ class AzureAssessmentService:
             logger.warning("AzureAssessment NoMatch locale=%s", locale)
             raise RuntimeError("Speech was not recognized. Please check audio quality and try again.")
 
-        cancellation = speechsdk.CancellationDetails.from_result(result)
+        cancellation = speechsdk.CancellationDetails(result)
         logger.error(
             "AzureAssessment Canceled reason=%s error=%s",
             cancellation.reason, cancellation.error_details,
