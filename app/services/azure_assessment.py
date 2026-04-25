@@ -1,11 +1,16 @@
 """Azure Cognitive Services pronunciation assessment service."""
 
-import json
+from __future__ import annotations
 
-import azure.cognitiveservices.speech as speechsdk
+import json
+import os
 
 from app.core.logger import logger
-from app.core.settings import AZURE_SUBSCRIPTION_ID, AZURE_SERVICE_REGION
+
+try:
+    import azure.cognitiveservices.speech as speechsdk
+except ModuleNotFoundError:
+    speechsdk = None
 
 
 class AzureAssessmentService:
@@ -16,12 +21,12 @@ class AzureAssessmentService:
     """
 
     def __init__(self, language: str = "en-US"):
-        self._key = AZURE_SUBSCRIPTION_ID
-        self._region = AZURE_SERVICE_REGION
+        self._key = os.getenv("AZURE_SPEECH_KEY", os.getenv("AZURE_SUBSCRIPTION_ID", "")).strip()
+        self._region = os.getenv("AZURE_SPEECH_REGION", os.getenv("AZURE_SERVICE_REGION", "")).strip()
         if not self._key:
-            raise ValueError("AZURE_SUBSCRIPTION_ID is missing. Set it in your environment or .env file.")
+            raise ValueError("AZURE_SPEECH_KEY is missing. Set it in your environment or .env file.")
         if not self._region:
-            raise ValueError("AZURE_SERVICE_REGION is missing. Set it in your environment or .env file.")
+            raise ValueError("AZURE_SPEECH_REGION is missing. Set it in your environment or .env file.")
         self.default_language = language
         logger.info("AzureAssessmentService ready language=%s region=%s", language, self._region)
 
@@ -33,24 +38,14 @@ class AzureAssessmentService:
         granularity: str = "Phoneme",
         enable_prosody: bool = True,
     ) -> dict:
-        """Assess pronunciation of audio_bytes.
-
-        Args:
-            audio_bytes: Raw PCM audio (16 kHz, 16-bit, mono) or WAV file bytes.
-            reference_text: Target sentence for scripted mode. Omit for unscripted mode.
-            language: Locale override (e.g. "en-GB"). Defaults to self.default_language.
-            granularity: "Phoneme" (default, full detail), "Word", or "FullText".
-            enable_prosody: Enable prosody scoring. Only applied for en-US locale.
-
-        Returns:
-            dict — NBest[0] from Azure JSON response, plus "mode" and "display_text" keys.
-
-        Raises:
-            ValueError: audio_bytes is empty.
-            RuntimeError: Azure did not recognize speech or cancelled the request.
-        """
+        """Assess pronunciation of audio_bytes."""
         if not audio_bytes:
             raise ValueError("audio_bytes must not be empty")
+        if speechsdk is None:
+            raise RuntimeError(
+                "azure-cognitiveservices-speech is not installed. "
+                "Install dependencies from requirements.txt to enable pronunciation assessment."
+            )
 
         locale = language or self.default_language
         is_scripted = bool(reference_text and reference_text.strip())
@@ -61,14 +56,12 @@ class AzureAssessmentService:
             mode, locale, granularity, len(audio_bytes),
         )
 
-        # Wrap bytes in a push audio stream
         stream = speechsdk.audio.PushAudioInputStream()
         try:
             stream.write(audio_bytes)
             stream.close()
             audio_config = speechsdk.audio.AudioConfig(stream=stream)
 
-            # Map granularity string to SDK enum
             granularity_map = {
                 "Phoneme": speechsdk.PronunciationAssessmentGranularity.Phoneme,
                 "Word": speechsdk.PronunciationAssessmentGranularity.Word,
@@ -76,7 +69,7 @@ class AzureAssessmentService:
             }
             gran = granularity_map.get(granularity)
             if gran is None:
-                logger.warning("AzureAssessment unknown granularity=%r — falling back to Phoneme", granularity)
+                logger.warning("AzureAssessment unknown granularity=%r - falling back to Phoneme", granularity)
                 gran = speechsdk.PronunciationAssessmentGranularity.Phoneme
 
             pronunciation_config = speechsdk.PronunciationAssessmentConfig(
@@ -115,14 +108,14 @@ class AzureAssessmentService:
             if not nbest:
                 raise RuntimeError("Azure returned an empty NBest list")
             display_text = data.get("DisplayText", "")
-            logger.info("AzureAssessment done mode=%s display_text=%r", mode, display_text[:80])
+            logger.info("AzureAssessment done mode=%s display_text_length=%d", mode, len(display_text))
             return {"mode": mode, "display_text": display_text, **nbest[0]}
 
         if result.reason == speechsdk.ResultReason.NoMatch:
             logger.warning("AzureAssessment NoMatch locale=%s", locale)
             raise RuntimeError("Speech was not recognized. Please check audio quality and try again.")
 
-        cancellation = speechsdk.CancellationDetails(result)
+        cancellation = speechsdk.CancellationDetails.from_result(result)
         logger.error(
             "AzureAssessment Canceled reason=%s error=%s",
             cancellation.reason, cancellation.error_details,

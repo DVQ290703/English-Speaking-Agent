@@ -15,6 +15,7 @@ import base64
 import io
 import os
 import sys
+import tempfile
 import types
 import uuid
 from contextlib import contextmanager
@@ -31,16 +32,17 @@ sys.modules.setdefault("minio.error", _minio_error_stub)
 
 # ── Env BEFORE importing app ──────────────────────────────────────────────────
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only-xx")
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 os.environ.setdefault("POSTGRES_DB", "test_db")
 os.environ.setdefault("POSTGRES_USER", "test_user")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
-os.environ.setdefault("MINIO_SECRET_KEY", "minioadmin")
+os.environ.setdefault("MINIO_SECRET_KEY", "minio-test-secret-2026")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from tests.helpers.db_mocks import make_mock_connection
 
 # Import app ONCE — reused across all tests with per-test patches
@@ -59,6 +61,14 @@ from app.core.security import create_access_token, hash_password
 
 def _new_uuid() -> str:
     return str(uuid.uuid4())
+
+
+def _fake_wav_bytes() -> bytes:
+    return b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 32
+
+
+def _fake_webm_bytes() -> bytes:
+    return b"\x1A\x45\xDF\xA3" + b"\x00" * 16
 
 
 def _make_bearer(user_id: str, email: str = "user@example.com") -> dict:
@@ -138,6 +148,12 @@ class TestLogin:
             r = c.post("/api/auth/login", json={"email": self._email, "password": "WrongPass!"})
         assert r.status_code == 401
 
+    def test_login_invalid_stored_hash_returns_401(self):
+        conn = _make_conn(fetchone_side_effect=[(self._user_id, self._email, "not-a-bcrypt-hash", "Alice", "B2")])
+        with _client(conn) as (c, _):
+            r = c.post("/api/auth/login", json={"email": self._email, "password": self._password})
+        assert r.status_code == 401
+
     def test_login_invalid_email_format_returns_422(self):
         with _client() as (c, _):
             r = c.post("/api/auth/login", json={"email": "not-an-email", "password": "pass"})
@@ -156,7 +172,7 @@ class TestLogin:
 class TestRegister:
     _user_id = _new_uuid()
     _email = "bob@example.com"
-    _password = "Secure1Pass!"
+    _password = "Secure1Pass!AB"
 
     def _ok_conn(self):
         return _make_conn(
@@ -185,14 +201,14 @@ class TestRegister:
     def test_register_display_name_defaults_to_email_prefix(self):
         conn = _make_conn(fetchone_side_effect=[(_new_uuid(), "charlie@example.com", "charlie", None)])
         with _client(conn) as (c, _):
-            r = c.post("/api/auth/register", json={"email": "charlie@example.com", "password": "ValidPass1!"})
+            r = c.post("/api/auth/register", json={"email": "charlie@example.com", "password": "ValidPass1!XY"})
         assert r.status_code == 201
 
     def test_register_password_too_short_returns_400(self):
         with _client() as (c, _):
             r = c.post("/api/auth/register", json={"email": self._email, "password": "short"})
         assert r.status_code == 400
-        assert "8 characters" in r.json()["detail"]
+        assert "12 characters" in r.json()["detail"]
 
     def test_register_duplicate_email_returns_400(self):
         import psycopg2
@@ -328,7 +344,7 @@ class TestChatRespond:
             r = c.post(
                 "/api/chat/respond",
                 data={"topic": "daily"},
-                files={"audio_file": ("rec.webm", io.BytesIO(b"small-audio"), "audio/webm")},
+                files={"audio_file": ("rec.webm", io.BytesIO(_fake_webm_bytes()), "audio/webm")},
                 headers=self._headers(),
             )
         assert r.status_code == 200
@@ -518,6 +534,27 @@ class TestHealthCheck:
         assert r.status_code == 200
         assert r.json() == {"status": "ok"}
 
+    def test_health_check_includes_security_headers(self):
+        with _client() as (c, _):
+            r = c.get("/health")
+        assert r.headers["X-Content-Type-Options"] == "nosniff"
+        assert r.headers["X-Frame-Options"] == "DENY"
+        assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_read_and_close_upload_closes_temp_file():
+    from app.api.routes import _read_and_close_upload
+
+    upload_backing_file = tempfile.SpooledTemporaryFile()
+    upload_backing_file.write(_fake_webm_bytes())
+    upload_backing_file.seek(0)
+    upload = StarletteUploadFile(filename="rec.webm", file=upload_backing_file, headers={"content-type": "audio/webm"})
+
+    audio_bytes = _read_and_close_upload(upload)
+
+    assert audio_bytes == _fake_webm_bytes()
+    assert upload_backing_file.closed is True
+
 
 
 # ===========================================================================
@@ -557,7 +594,7 @@ class TestAssessRoute:
     def test_requires_auth(self, client):
         resp = client.post(
             "/api/assess",
-            files={"audio_file": ("test.wav", b"fake-audio", "audio/wav")},
+            files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
         )
         assert resp.status_code in (401, 403)
 
@@ -588,7 +625,7 @@ class TestAssessRoute:
             resp = client.post(
                 "/api/assess",
                 headers=self._headers(auth_headers),
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         assert resp.status_code == 200
         data = resp.json()
@@ -610,7 +647,7 @@ class TestAssessRoute:
                 "/api/assess",
                 headers=self._headers(auth_headers),
                 data={"reference_text": "Hello"},
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         assert resp.status_code == 200
         data = resp.json()
@@ -624,7 +661,7 @@ class TestAssessRoute:
                 "/api/assess",
                 headers=self._headers(auth_headers),
                 data={"reference_text": "Good morning"},
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         call_kwargs = mock_get.return_value.assess.call_args
         assert call_kwargs.kwargs["reference_text"] == "Good morning"
@@ -636,7 +673,7 @@ class TestAssessRoute:
                 "/api/assess",
                 headers=self._headers(auth_headers),
                 data={"language": "en-GB"},
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         call_kwargs = mock_get.return_value.assess.call_args
         assert call_kwargs.kwargs["language"] == "en-GB"
@@ -647,7 +684,7 @@ class TestAssessRoute:
             resp = client.post(
                 "/api/assess",
                 headers=self._headers(auth_headers),
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         assert resp.status_code == 502
         assert "Speech not recognized" in resp.json()["detail"]
@@ -671,6 +708,23 @@ class TestAssessRoute:
             resp = client.post(
                 "/api/assess",
                 headers=self._headers(auth_headers),
-                files={"audio_file": ("test.wav", b"fake-audio-bytes", "audio/wav")},
+                files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
             )
         assert resp.status_code == 502
+
+    def test_assess_invalid_language_returns_400(self, client, auth_headers):
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            data={"language": "fr-FR"},
+            files={"audio_file": ("test.wav", _fake_wav_bytes(), "audio/wav")},
+        )
+        assert resp.status_code == 400
+
+    def test_assess_rejects_mismatched_audio_signature(self, client, auth_headers):
+        resp = client.post(
+            "/api/assess",
+            headers=self._headers(auth_headers),
+            files={"audio_file": ("test.wav", b"not-a-real-wav", "audio/wav")},
+        )
+        assert resp.status_code == 415

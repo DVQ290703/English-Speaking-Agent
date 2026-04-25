@@ -44,5 +44,5 @@ class GroqSTTService:
             logger.warning("GroqSTT: unexpected response type %s", type(transcription).__name__)
             result = ""
 
-        logger.info("GroqSTT transcribe done transcript=%r (len=%d)", result[:80], len(result))
+        logger.info("GroqSTT transcribe done transcript_length=%d", len(result))
         return result

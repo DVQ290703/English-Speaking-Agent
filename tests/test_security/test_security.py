@@ -17,7 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 # ── env must be set before any app import ────────────────────────────────────
 import os
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only!")  # 32 bytes
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 
 from app.core.security import (
     create_access_token,

@@ -1,13 +1,13 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.settings import CORS_ORIGINS
-from app.core.logger import logger
-from app.core.database import init_db_pool
-from app.core.storage import init_storage
 from app.api.routes import router
+from app.core.database import init_db_pool
+from app.core.logger import logger
+from app.core.settings import CORS_ORIGINS
+from app.core.storage import init_storage
 
 
 @asynccontextmanager
@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing DB pool and storage...")
     init_db_pool()
     init_storage()
-    logger.info("Startup complete — ready to accept requests")
+    logger.info("Startup complete - ready to accept requests")
     yield
     logger.info("Shutting down")
 
@@ -30,6 +30,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "microphone=(self)")
+    response.headers.setdefault("Cache-Control", "no-store")
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 @app.get("/health")

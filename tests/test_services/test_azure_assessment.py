@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 os.environ.setdefault("AZURE_SPEECH_KEY", "test-azure-key")
 os.environ.setdefault("AZURE_SPEECH_REGION", "eastus")
 

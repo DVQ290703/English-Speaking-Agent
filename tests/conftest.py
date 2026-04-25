@@ -24,11 +24,11 @@ from fastapi.testclient import TestClient
 # Prevents real DB/MinIO/AI connections during import-time initialization.
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only!")  # 32 bytes
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 os.environ.setdefault("POSTGRES_DB", "test_db")
 os.environ.setdefault("POSTGRES_USER", "test_user")
 os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
-os.environ.setdefault("MINIO_SECRET_KEY", "minioadmin")
+os.environ.setdefault("MINIO_SECRET_KEY", "minio-test-secret-2026")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 
