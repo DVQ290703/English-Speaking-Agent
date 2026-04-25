@@ -14,7 +14,7 @@ import pytest
 from pydantic import ValidationError
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 
 from app.api.schemas import (
     AssessmentResponse,

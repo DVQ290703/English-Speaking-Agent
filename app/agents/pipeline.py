@@ -16,12 +16,12 @@ class VoiceAgentPipeline:
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response and update the running conversation history."""
-        logger.debug("respond_node start input=%r", state["user_input"][:80])
+        logger.debug("respond_node start input_length=%d", len(state["user_input"]))
         response_text = self.llm_service.generate_response(
             user_input=state["user_input"],
             history=state.get("history", []),
         )
-        logger.debug("respond_node done response=%r", response_text[:80])
+        logger.debug("respond_node done response_length=%d", len(response_text))
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
             f"Assistant: {response_text}",
@@ -30,7 +30,7 @@ class VoiceAgentPipeline:
 
     def _tts_node(self, state: AgentState) -> AgentState:
         """Convert the generated reply into speech and store the raw bytes in state."""
-        logger.debug("tts_node start text=%r", state["response_text"][:80])
+        logger.debug("tts_node start text_length=%d", len(state["response_text"]))
         audio_bytes = self.tts_service.convert_text_to_speech(state["response_text"])
         logger.debug("tts_node done audio_bytes=%d", len(audio_bytes))
         return {**state, "audio_bytes": audio_bytes}

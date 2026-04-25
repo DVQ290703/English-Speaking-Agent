@@ -7,7 +7,11 @@ HOOK_FILE=".git/hooks/pre-push"
 cat > "$HOOK_FILE" << 'EOF'
 #!/bin/bash
 # Submit AI logs to grading server before push
-if command -v py >/dev/null 2>&1; then
+if [ -x ".venv/Scripts/python.exe" ]; then
+	".venv/Scripts/python.exe" scripts/submit_log.py || true
+elif [ -x ".venv/bin/python" ]; then
+	".venv/bin/python" scripts/submit_log.py || true
+elif command -v py >/dev/null 2>&1; then
 	py -3 scripts/submit_log.py || true
 elif command -v python3 >/dev/null 2>&1; then
 	python3 scripts/submit_log.py || true

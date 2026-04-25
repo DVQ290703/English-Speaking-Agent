@@ -1,317 +1,218 @@
-# 📘 AI Speaking Coach – Unified Product & Technical Specification
+# AI Speaking Coach - Product and Technical Specification
 
----
+## 1. Project Overview
 
-# 1. 📌 Project Overview
+**Project name:** AI Speaking Coach  
+**Goal:** help learners practise spoken English through text/audio chat, AI replies, and pronunciation assessment.
 
-## 1.1 Project Name
-**AI Speaking Coach – IELTS Speaking Assistant**
+## 2. Product Goal
 
-## 1.2 Vision
-Giúp người học đạt khả năng nói **trôi chảy, tự nhiên, chính xác** thông qua feedback AI thời gian thực.
+The product is built around a short feedback loop:
 
-## 1.3 Mission
-- Phân tích lỗi ngay lập tức
-- Feedback rõ ràng, actionable
-- Giúp cải thiện mỗi ngày không cần giáo viên 1-1
+1. user sends text or audio
+2. backend generates an assistant response
+3. assistant audio is returned when available
+4. users can later review conversations and replay audio
+5. optional pronunciation assessment gives detailed word-level feedback
 
-## 1.4 Core Value
-> Feedback loop nhanh + rõ + actionable
+## 3. Current User Flow
 
----
+1. Register or log in
+2. Start a new conversation or continue an existing one
+3. Send either:
+   - text input
+   - audio input
+4. Receive:
+   - normalized user input
+   - assistant text
+   - optional assistant audio
+   - conversation id
+5. Optionally upload WAV/PCM audio to `/api/assess` for pronunciation scoring
+6. Review prior conversations and messages
 
-# 2. 🎯 Target Users
+## 4. Current Backend Architecture
 
-## Primary Users
-- IELTS Speaking band 5.0 – 6.5
+### Runtime stack
 
-## Pain Reality
-- Thiếu phản xạ
-- Không biết sai ở đâu
-- Ngại nói
+- FastAPI app in `app/main.py`
+- routes in `app/api/routes.py`
+- PostgreSQL for relational data
+- MinIO for audio objects
+- Groq for STT and LLM
+- ElevenLabs for TTS
+- Azure Speech for pronunciation assessment
 
----
+### Main backend flow
 
-# 3. 🧠 Problem Definition
+`route -> validation -> DB ownership checks -> AI services -> MinIO upload -> DB persistence -> response`
 
-## Core Loop
-> Nói sai → Không ai sửa → Ngại nói → Không tiến bộ
+## 5. Current API Surface
 
-## Pain Points
-- Không có môi trường luyện chuẩn
-- Không có feedback chi tiết
-- Không đo lường tiến bộ
+### Public endpoints
 
----
+- `GET /health`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
 
-# 4. 💡 Solution Overview
+### Authenticated endpoints
 
-## Product Concept
-- Record / Chat
-- Phân tích lỗi real-time
-- Gợi ý câu tốt hơn
-- Nghe lại giọng chuẩn
+- `GET /api/auth/me`
+- `POST /api/chat/respond`
+- `POST /api/assess`
+- `GET /api/conversations`
+- `GET /api/conversations/{conversation_id}/messages`
 
----
+This is the current API. Older endpoints such as `/chat/text`, `/chat/audio`, `/config/model`, `/config/voice`, `/topics`, and `/evaluation/{id}` are not part of the active FastAPI routes.
 
-# 5. 🧠 User Flow (Final)
+## 6. Core Request Modes
 
-1. Chọn topic (IELTS Part 1/2/3)
-2. Input:
-   - Text → chỉ chấm grammar
-   - Audio → full scoring
-3. AI xử lý
-4. Hiển thị chat + score từng câu
-5. Click message → xem analysis
-6. Nghe lại audio (user + agent)
-7. Lưu lịch sử
+### Chat mode
 
----
+`POST /api/chat/respond`
 
-# 6. 🎨 UI/UX (Streamlit MVP)
+Accepts:
 
-## Layout
-- Left: Analysis panel
-- Center: Chat
-- Bottom: Input (text + record)
+- text
+- optional history
+- optional topic
+- optional audio file
+- optional conversation id
 
-## Key Features
-- Chat history
-- Score badge per message
-- Click → show breakdown
-- Replay audio (user + AI)
+Returns:
 
-## UX Principles
-- < 7s feedback
-- Highlight lỗi rõ ràng
-- 1 screen, low friction
+- `user_input`
+- `response_text`
+- `audio_base64` when inline audio is small enough
+- `user_audio_url`
+- `assistant_audio_url`
+- `conversation_id`
 
----
+### Pronunciation mode
 
-# 7. 🏗️ MVP Scope
+`POST /api/assess`
 
-## In Scope
-- Text + Audio input
-- STT (Whisper)
-- Grammar/Vocab/Fluency scoring
-- TTS
-- Chat UI
-- Lưu history
+Accepts:
 
-## Out of Scope
-- Gamification
-- Social
-- Deep personalization
+- WAV/PCM audio
+- optional `reference_text`
+- optional `language` (`en-US` or `en-GB`)
 
----
+Returns:
 
-# 8. 🧠 AI Pipeline
+- overall pronunciation metrics
+- recognized text
+- per-word detail
+- syllable and phoneme detail
 
-## Text Mode
-Text → LLM → Grammar scoring
+## 7. Database Model
 
-## Audio Mode
-Audio → STT → Text → LLM → Analysis → TTS
+Current relational model is conversation-based.
 
-## Output Structure
-- transcript
-- grammar_score
-- vocabulary_score
-- pronunciation_score
-- corrected_text
-- feedback
+### Main tables
 
----
+- `users`
+- `auth_sessions`
+- `topics`
+- `user_topic_preferences`
+- `conversations`
+- `turns`
+- `messages`
+- `audio_assets`
+- `pronunciation_assessments`
+- `pronunciation_word_details`
+- `agent_feedback`
+- `daily_progress`
 
-# 9. 🎤 Speech Tech Decision
+### Important modeling note
 
-| Option | Ưu | Nhược |
-|------|----|------|
-| Azure | Pronunciation tốt | Cost |
-| Whisper local | Free | Cần GPU |
-| Whisper API | Dễ dùng | Không có pronunciation |
+The active backend does **not** use the older `practice_sessions` / `message_evaluations` structure described in some legacy documents. The current code works with:
 
-## Decision
-- MVP: Whisper API
-- Phase sau: Azure scoring
+- conversations
+- turns
+- messages
+- audio assets
+- pronunciation assessments
 
----
+## 8. Storage Model
 
-# 10. 🧩 Backend (FastAPI)
+Audio is stored in object storage, not local disk.
 
-## Endpoints
+Current behavior:
 
-### /chat/text
-- Input: text
-- Output: grammar_score
+- user audio uploaded to MinIO
+- assistant TTS audio uploaded to MinIO
+- API returns presigned URLs for replay
+- depending on MinIO endpoint/network configuration, those URLs may not always be directly reachable from the browser
 
-### /chat/audio
-- Input: audio
-- Output: full analysis
+## 9. Security and Validation
 
-### /config/model
-- chọn model
+Current backend hardening includes:
 
-### /config/voice
-- chọn giọng
+- JWT required claims: `sub`, `email`, `iat`, `nbf`, `exp`
+- stronger registration password policy
+- audio content-type validation
+- audio file signature validation
+- text/history/topic/reference length limits
+- ownership checks for conversations
+- security headers on HTTP responses
+- reduced logging of raw transcript/response content
 
-### /audio/{id}
-- trả audio agent
+## 10. Testing Strategy
 
-### /evaluation/{id}
-- trả phân tích
+### Current approach
 
----
+- unit and route tests first
+- mock external services by default
+- isolate DB and storage dependencies in tests
 
-# 11. 🗄️ Database Design
+### Test modules currently present
 
-## topics
-- id, slug, title, system_prompt, description
+| Module | Count |
+| --- | ---: |
+| `tests/test_security/test_security.py` | 23 |
+| `tests/test_ai_services/test_ai_services.py` | 25 |
+| `tests/test_api/test_schemas.py` | 30 |
+| `tests/test_api/test_routes.py` | 51 |
+| `tests/test_api/test_user_data_flow.py` | 18 |
+| `tests/test_services/test_azure_assessment.py` | 18 |
+| Total defined test functions | 165 |
 
-## messages
-- id, user_id, topic_id
-- role
-- content_text
-- audio_path
-- created_at
+### Verified local result
 
-## message_evaluations
-- message_id
-- grammar_score
-- vocabulary_score
-- pronunciation_score
-- corrected_text
-- feedback
+In the current environment, the following verified subset passes:
 
----
+- security
+- routes
+- schemas
+- AI services
+- user data flow
 
-# 12. ☁️ Storage
+Azure service tests require the Azure Speech SDK dependency to be installed before they can be collected and executed.
 
-- Cloud storage cho audio
-- Path: audios/{user}/{topic}/{message}.mp3
+## 11. Current Frontend/Backend Contract Notes
 
----
+- frontend still uses `/api/chat/respond` and `/api/assess`
+- `audio_base64` must be treated as optional
+- `assistant_audio_url` is deployment-dependent and should not be assumed browser-reachable in every environment
+- register flow now has stricter password requirements than legacy docs suggested
 
-# 13. 🔄 Data Flow
+## 12. Risks and Constraints
 
-1. Input user
-2. Audio → upload → STT
-3. LLM analysis
-4. Save DB
-5. Generate agent response
-6. TTS
-7. Return UI
+### Known operational constraints
 
----
+- pronunciation assessment depends on Azure configuration
+- object URL reachability depends on MinIO/network deployment setup
+- frontend latency may increase if chat and pronunciation assessment are run sequentially on the same user turn
+- current frontend still performs chat first and pronunciation assessment afterward on audio turns, so user-perceived latency can be higher than necessary
 
-# 14. 🧪 Testing Strategy
+## 13. Source of Truth
 
-## Triết lý
+For implementation truth, prefer:
 
-- **Unit test thuần túy** — không gọi dịch vụ thật, không cần Docker
-- **Mock hoàn toàn** — DB, MinIO, Groq LLM, ElevenLabs TTS đều được giả lập
-- **Chạy nhanh** — toàn bộ 109 test < 10 giây
+- `app/main.py`
+- `app/api/routes.py`
+- `app/api/schemas.py`
+- `db_schema/schema.sql`
+- `API.md`
 
-## Phạm vi hiện tại
-
-| Layer | Module | Số test |
-|-------|--------|---------|
-| Security | `app/core/security.py` | 22 |
-| AI Services | `app/core/ai_services.py` | 21 |
-| API Schemas | `app/api/schemas.py` | 22 |
-| API Routes | `app/api/routes.py` | 44 |
-| User Data Flows | `test_user_data_flow.py` | 18 |
-| **Tổng** | | **127** |
-
-## Scenarios được cover
-
-- ✅ Happy path (thành công)
-- ✅ Auth token thiếu / sai / hết hạn → 401
-- ✅ Resource không tồn tại → 404
-- ✅ Input validation lỗi → 400 / 422
-- ✅ Duplicate dữ liệu → 400
-- ✅ File upload quá lớn → 413
-- ✅ Service lỗi → fallback xử lý
-- ✅ **User isolation**: user B không thấy data của user A
-- ✅ **Full lifecycle**: register → login → chat → lịch sử → messages
-- ✅ **Turn number** tăng đúng khi tiếp tục conversation
-
-## Chạy test
-
-```powershell
-# PowerShell
-python -m pytest tests/ -v
-
-# Git Bash
-python -m pytest tests/ -v
-```
-
-**Kết quả:** `127 passed, 0 warnings`
-
-## Tài liệu chi tiết
-
-Xem: [`document/Backend_Test_Suite_Documentation.md`](Backend_Test_Suite_Documentation.md)
-
----
-
-# 15. 📊 Success Metrics
-
-## Product
-- DAU
-- Retention
-
-## Learning
-- WPM ↑
-- Grammar errors ↓
-- Vocabulary ↑
-
----
-
-# 16. ⚠️ Risks
-
-## AI sai
-→ Hybrid rule + LLM
-
-## Latency
-→ async + streaming
-
-## Drop user
-→ UX đơn giản
-
----
-
-# 17. 🚀 Roadmap
-
-## Phase 1
-- MVP core
-
-## Phase 2
-- Progress tracking
-
-## Phase 3
-- Conversation AI
-
-## Phase 4
-- Full test
-
----
-
-# 18. 🏗️ Tech Stack
-
-- Python 3.10
-- uv (package manager)
-- FastAPI
-- Streamlit
-- LangGraph
-
----
-
-# 19. 📌 Conclusion
-
-System tập trung vào:
-- Feedback nhanh
-- Phân tích rõ
-- Improve liên tục
-
-→ Optimize cho IELTS Speaking outcome
-
+This document is a product/technical summary, not the canonical API contract.

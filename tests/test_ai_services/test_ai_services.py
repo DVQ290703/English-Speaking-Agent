@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch, call
 import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
-os.environ.setdefault("POSTGRES_PASSWORD", "test-password")
+os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 

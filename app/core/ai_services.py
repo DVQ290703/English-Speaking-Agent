@@ -54,17 +54,17 @@ def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
         history_lines.append(f"Topic: {topic.strip()}")
 
     if not history_raw:
-        logger.debug("normalize_history — no history provided topic=%r", topic)
+        logger.debug("normalize_history no history provided topic_present=%s", bool(topic and topic.strip()))
         return history_lines
 
     try:
         parsed = json.loads(history_raw)
     except json.JSONDecodeError:
-        logger.warning("normalize_history — failed to parse history JSON (len=%d)", len(history_raw))
+        logger.warning("normalize_history failed to parse history JSON len=%d", len(history_raw))
         return history_lines
 
     if not isinstance(parsed, list):
-        logger.warning("normalize_history — history JSON is not a list, got %s", type(parsed).__name__)
+        logger.warning("normalize_history history JSON is not a list got=%s", type(parsed).__name__)
         return history_lines
 
     for item in parsed[-10:]:
@@ -76,7 +76,7 @@ def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
         elif isinstance(item, str) and item.strip():
             history_lines.append(item.strip())
 
-    logger.debug("normalize_history — produced %d lines from %d history items", len(history_lines), len(parsed))
+    logger.debug("normalize_history produced_lines=%d source_items=%d", len(history_lines), len(parsed))
     return history_lines
 
 
@@ -85,7 +85,7 @@ def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
     logger.info("transcribe_audio start filename=%r size=%d bytes", filename, len(audio_bytes))
     try:
         transcript = get_stt_service().transcribe(audio_bytes, filename=filename)
-        logger.info("transcribe_audio done transcript=%r (len=%d)", transcript[:80], len(transcript))
+        logger.info("transcribe_audio done transcript_length=%d", len(transcript))
         return transcript
     except Exception:
         logger.exception("STT transcription failed filename=%r size=%d", filename, len(audio_bytes))
@@ -94,28 +94,27 @@ def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
 
 def _synthesize_audio_bytes(text: str) -> bytes:
     """Synthesize *text* via the cached pipeline's TTS service and return raw bytes."""
-    logger.info("_synthesize_audio_bytes start text=%r (len=%d)", text[:80], len(text))
+    logger.info("_synthesize_audio_bytes start text_length=%d", len(text))
     try:
         audio = get_voice_agent_pipeline().tts_service.convert_text_to_speech(text)
         if audio is None:
-            logger.warning("_synthesize_audio_bytes received None from TTS for text=%r", text[:80])
+            logger.warning("_synthesize_audio_bytes received None from TTS")
             return b""
-
         if not audio:
-            logger.warning("_synthesize_audio_bytes returned empty bytes for text=%r", text[:80])
+            logger.warning("_synthesize_audio_bytes returned empty bytes")
             return b""
 
         logger.info("_synthesize_audio_bytes done size=%d bytes", len(audio))
         return audio
     except Exception:
-        logger.exception("Direct TTS synthesis failed for text: %.80s", text)
+        logger.exception("Direct TTS synthesis failed text_length=%d", len(text))
         return b""
 
 
 def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tuple[str, bytes]:
     """Run the conversation pipeline and return (response_text, audio_bytes)."""
     history = history or []
-    logger.info("run_langraph_agent start user_input=%r history_lines=%d", user_input[:80], len(history))
+    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d", len(user_input), len(history))
     try:
         pipeline = get_voice_agent_pipeline()
         result = pipeline.run(user_input=user_input, history=history)
@@ -123,20 +122,20 @@ def run_langraph_agent(user_input: str, history: list[str] | None = None) -> tup
         audio_bytes: bytes = result.get("audio_bytes") or b""
 
         logger.info(
-            "Pipeline run complete response_text=%r (len=%d) audio_bytes=%d",
-            response_text[:80], len(response_text), len(audio_bytes),
+            "Pipeline run complete response_text_length=%d audio_bytes=%d",
+            len(response_text),
+            len(audio_bytes),
         )
 
         if response_text:
             if not audio_bytes:
-                logger.warning("Pipeline returned text but empty audio — retrying TTS directly")
+                logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text)
             return response_text, audio_bytes
 
-        logger.warning("Pipeline returned empty response_text — using fallback")
-
+        logger.warning("Pipeline returned empty response_text - using fallback")
     except Exception:
-        logger.exception("LangGraph agent pipeline failed for user_input=%r", user_input[:80])
+        logger.exception("LangGraph agent pipeline failed user_input_length=%d", len(user_input))
 
     fallback_text = "Sorry, I couldn't process your request right now."
     logger.info("Returning fallback response")

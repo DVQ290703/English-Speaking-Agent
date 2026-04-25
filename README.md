@@ -1,25 +1,25 @@
 # A20-App-014
 
-Latest setup and run instructions for team members.
+Setup and run guide for the current AI Speaking Coach project.
 
 ## Prerequisites
 
 - Python 3.10+
-- uv
+- `uv`
 - Node.js 18+
 - Docker Desktop
 - Git
 
-## 1. Clone and move into project
+## 1. Clone the repo
 
 ```bash
 git clone <your-repo-url>
 cd A20-App-014
 ```
 
-## 2. Python environment (local tools/tests)
+## 2. Python environment
 
-Create and activate a virtual environment:
+Create the virtual environment:
 
 ```bash
 uv venv
@@ -37,15 +37,16 @@ Git Bash:
 source .venv/Scripts/activate
 ```
 
-Install Python dependencies:
+Install dependencies:
 
 ```bash
 uv pip install -r requirements.txt
+uv pip install -r requirements-test.txt
 ```
 
 ## 3. Environment variables
 
-Create .env from .env.example:
+Create `.env` from `.env.example`.
 
 PowerShell:
 
@@ -59,31 +60,37 @@ Git Bash:
 cp .env.example .env
 ```
 
-Open .env and set required values:
+Required values for local development:
 
-- GROQ_API_KEY
-- ELEVENLABS_API_KEY
-- ELEVENLABS_VOICE_ID
-- ELEVENLABS_MODEL_ID
-- JWT_SECRET_KEY
-- POSTGRES_DB
-- POSTGRES_USER
-- POSTGRES_PASSWORD
+- `JWT_SECRET_KEY`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `MINIO_ACCESS_KEY`
+- `MINIO_SECRET_KEY`
+- `GROQ_API_KEY`
+- `ELEVENLABS_API_KEY`
+- `ELEVENLABS_VOICE_ID`
+- `ELEVENLABS_MODEL_ID`
 
-Notes:
+Optional if you use pronunciation assessment:
 
-- VITE_API_BASE_URL should stay http://localhost:8000 for local frontend.
-- In Docker Compose, backend connects to database using service host postgres automatically.
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_SERVICE_REGION`
 
-## 4. Start backend stack (Docker Compose)
+Security notes:
 
-This starts backend API, PostgreSQL, and pgAdmin:
+- use a strong `JWT_SECRET_KEY` with at least 32 characters
+- avoid default credentials for PostgreSQL and MinIO outside local development
+- Docker Compose maps `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` into the MinIO container automatically
+
+## 4. Start the backend stack
 
 ```bash
 docker compose up -d --build
 ```
 
-Check running containers:
+Check status:
 
 ```bash
 docker compose ps
@@ -91,15 +98,14 @@ docker compose ps
 
 Expected services:
 
-- voice_agent_backend
-- voice_agent_postgres
-- voice_agent_pgadmin
+- `voice_agent_backend`
+- `voice_agent_postgres`
+- `voice_agent_pgadmin`
+- `voice_agent_minio`
 
 ## 5. Seed PostgreSQL data
 
-Run seed from file (safe method):
-
-PowerShell (recommended):
+PowerShell:
 
 ```powershell
 Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
@@ -111,17 +117,29 @@ Git Bash:
 docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent < db_schema/seed.sql
 ```
 
-Important:
+Seeded demo users:
 
-- Do not paste bcrypt hashes directly into shell SQL strings, because special characters like $ can be altered by shell expansion.
-- Always seed from file as shown above.
+- `alice@example.com / Password123!`
+- `bob@example.com / Password123!`
+- `charlie@example.com / Password123!`
 
-## 6. Verify backend and database
+Note:
 
-Backend health check:
+- these seeded passwords exist for local demo data only
+- new registrations through the API now require a stronger password policy: at least 12 characters with uppercase, lowercase, digit, and symbol
+
+## 6. Verify the backend
+
+Health check:
 
 ```bash
 curl http://localhost:8000/health
+```
+
+Expected:
+
+```json
+{"status":"ok"}
 ```
 
 Database quick check:
@@ -130,15 +148,7 @@ Database quick check:
 docker exec -it voice_agent_postgres psql -U voice_user -d voice_agent -c "SELECT email, length(password_hash) FROM users ORDER BY email;"
 ```
 
-For seeded users, password hash length should be 60.
-
-Default seeded login:
-
-- alice@example.com / Password123!
-- bob@example.com / Password123!
-- charlie@example.com / Password123!
-
-## 7. Run frontend locally
+## 7. Run the frontend locally
 
 ```bash
 cd frontend
@@ -146,72 +156,73 @@ npm install
 npm run dev
 ```
 
-App URL:
+Frontend URL:
 
-- http://localhost:5173
+- `http://localhost:5173`
 
-Production build commands:
+Production build:
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## 8. Run backend unit tests (không cần Docker)
+## 8. Run tests
 
-Toàn bộ test chạy offline — không cần DB, MinIO hay API keys thật.
-
-Kích hoạt venv trước (xem bước 2), sau đó:
+Main backend test commands:
 
 PowerShell:
 
 ```powershell
-# Chạy toàn bộ suite
-python -m pytest tests/ -v
-
-# Chạy nhanh
-python -m pytest tests/ -q
-
-# Chạy một module
-python -m pytest tests/test_api/ -v
-
-# Filter theo tên
-python -m pytest tests/ -k "login" -v
-
-# Dừng ngay khi fail
-python -m pytest tests/ -x
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
 Git Bash:
 
 ```bash
-python -m pytest tests/ -v
-python -m pytest tests/ -q
-python -m pytest tests/test_api/ -v
-python -m pytest tests/ -k "login" -v
-python -m pytest tests/ -x
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
-Kết quả mong đợi:
+Current test layout contains:
 
-```
-127 passed in ~11s
-```
+- security tests
+- API route tests
+- schema tests
+- AI service tests
+- user data flow tests
+- Azure assessment tests
 
-Xem tài liệu chi tiết: [`document/Backend_Test_Suite_Documentation.md`](document/Backend_Test_Suite_Documentation.md)
+Important:
 
----
+- the Azure assessment test module requires `azure-cognitiveservices-speech`
+- in a stripped local environment, that module may fail to collect until the package is installed
 
-## 9. Optional pgAdmin
+Detailed guide:
 
-- URL: http://localhost:5050
-- Email: admin@local.dev
-- Password: admin123
-- DB host inside Docker network: postgres
+- [`document/Backend_Test_Suite_Documentation.md`](document/Backend_Test_Suite_Documentation.md)
 
-## Useful Docker commands
+## 9. API reference
 
-Start or rebuild services:
+See:
+
+- [`document/API.md`](document/API.md)
+
+The current backend exposes:
+
+- `/health`
+- `/api/auth/register`
+- `/api/auth/login`
+- `/api/auth/me`
+- `/api/chat/respond`
+- `/api/assess`
+- `/api/conversations`
+- `/api/conversations/{conversation_id}/messages`
+
+## 10. Useful Docker commands
+
+Start or rebuild:
 
 ```bash
 docker compose up -d --build
@@ -237,3 +248,22 @@ docker compose down -v
 docker compose up -d --build
 Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
 ```
+
+## 11. Optional pgAdmin
+
+- URL: `http://localhost:5050`
+- Email: `admin@local.dev`
+- Password: `admin123`
+- DB host inside Docker network: `postgres`
+
+## 12. Optional MinIO console
+
+- API endpoint: `http://localhost:9000`
+- Console: `http://localhost:9001`
+- Root user: value from `MINIO_ACCESS_KEY`
+- Root password: value from `MINIO_SECRET_KEY`
+
+Note:
+
+- backend-generated presigned URLs may use Docker-internal hostnames depending on environment variables
+- validate browser reachability in your deployment before treating MinIO URLs as a direct frontend playback source
