@@ -43,7 +43,12 @@ class GroqLLMService:
     def generate_response(self, user_input: str, history: list[str] | None = None) -> str:
         """Generate a reply using the system prompt and properly-structured conversation history."""
         history = history or []
-        logger.info("GroqLLM generate_response model=%s history_lines=%d input=%r", self.model_name, len(history), user_input[:80])
+        logger.info(
+            "GroqLLM generate_response model=%s history_lines=%d input_length=%d",
+            self.model_name,
+            len(history),
+            len(user_input),
+        )
 
         messages: list = [SystemMessage(content=SYSTEM_PROMPT)]
 
@@ -51,7 +56,7 @@ class GroqLLMService:
             topic_line = next((ln for ln in history if ln.startswith("Topic:")), None)
             if topic_line:
                 messages.append(SystemMessage(content=f"Practice topic: {topic_line[6:].strip()}"))
-                logger.debug("GroqLLM injecting topic: %s", topic_line)
+                logger.debug("GroqLLM injecting topic line")
 
             for line in history[-8:]:
                 if line.startswith("User:"):
@@ -68,5 +73,5 @@ class GroqLLMService:
         else:
             result = str(response)
 
-        logger.info("GroqLLM response=%r (len=%d)", result[:80], len(result))
+        logger.info("GroqLLM response_length=%d", len(result))
         return result

@@ -5,11 +5,16 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.settings import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET_KEY
 from app.core.logger import logger
+from app.core.settings import JWT_ALGORITHM, JWT_EXPIRE_MINUTES, JWT_SECRET_KEY
 
 
 security = HTTPBearer()
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"constant-login-timing-padding", bcrypt.gensalt())
+
+
+def _bcrypt_check(plain_password: str, hashed_password: bytes) -> bool:
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password)
 
 
 def hash_password(plain_password: str) -> str:
@@ -21,8 +26,23 @@ def hash_password(plain_password: str) -> str:
 def verify_password(plain_password: str, password_hash: str) -> bool:
     """Check a plaintext password against the stored bcrypt hash."""
     try:
-        return bcrypt.checkpw(plain_password.encode("utf-8"), password_hash.encode("utf-8"))
+        return _bcrypt_check(plain_password, password_hash.encode("utf-8"))
     except ValueError:
+        return False
+
+
+def verify_password_with_padding(plain_password: str, password_hash: str | None) -> bool:
+    """Always execute a bcrypt check to reduce user-enumeration timing differences."""
+    candidate_hash = _DUMMY_PASSWORD_HASH
+    if password_hash:
+        try:
+            candidate_hash = password_hash.encode("utf-8")
+        except UnicodeEncodeError:
+            candidate_hash = _DUMMY_PASSWORD_HASH
+    try:
+        return _bcrypt_check(plain_password, candidate_hash)
+    except ValueError:
+        _bcrypt_check(plain_password, _DUMMY_PASSWORD_HASH)
         return False
 
 
@@ -34,6 +54,7 @@ def create_access_token(user_id: str, email: str) -> tuple[str, int]:
         "sub": user_id,
         "email": email,
         "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
     }
     token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
@@ -44,7 +65,12 @@ def create_access_token(user_id: str, email: str) -> tuple[str, int]:
 def decode_token(token: str):
     """Validate and decode a JWT payload for authenticated requests."""
     try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"require": ["sub", "email", "iat", "nbf", "exp"]},
+        )
     except jwt.InvalidTokenError as exc:
         logger.warning("JWT decode failed: %s", exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc

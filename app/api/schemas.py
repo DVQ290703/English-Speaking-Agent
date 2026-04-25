@@ -1,19 +1,41 @@
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, field_validator, model_validator
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-class LoginRequest(BaseModel):
-    email: EmailStr
+class _EmailValidatedModel(BaseModel):
+    @staticmethod
+    def _normalize_and_validate_email(value: str) -> str:
+        normalized = value.strip().lower()
+        if not _EMAIL_RE.match(normalized):
+            raise ValueError("Invalid email address")
+        return normalized
+
+
+class LoginRequest(_EmailValidatedModel):
+    email: str
     password: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return cls._normalize_and_validate_email(value)
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
+
+class RegisterRequest(_EmailValidatedModel):
+    email: str
     password: str
     display_name: str | None = None
     english_level: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return cls._normalize_and_validate_email(value)
 
 
 class UserOut(BaseModel):
@@ -46,7 +68,7 @@ class MessageOut(BaseModel):
     input_mode: str | None
     text_content: str | None
     created_at: datetime
-    audio_url: str | None = None  # presigned URL, generated on demand
+    audio_url: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -71,10 +93,30 @@ class SyllableResult(BaseModel):
     syllable: str
     accuracy_score: float
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_azure_shape(cls, value):
+        if isinstance(value, dict) and "Syllable" in value:
+            return {
+                "syllable": value.get("Syllable", ""),
+                "accuracy_score": value.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+            }
+        return value
+
 
 class PhonemeResult(BaseModel):
     phoneme: str
     accuracy_score: float
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_azure_shape(cls, value):
+        if isinstance(value, dict) and "Phoneme" in value:
+            return {
+                "phoneme": value.get("Phoneme", ""),
+                "accuracy_score": value.get("PronunciationAssessment", {}).get("AccuracyScore", 0.0),
+            }
+        return value
 
 
 class WordResult(BaseModel):
