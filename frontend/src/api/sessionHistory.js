@@ -39,6 +39,47 @@ function yieldToBrowser() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+// Serialise concurrent writes so two rapid saveSession calls (e.g. one from
+// `beforeunload` and one from `visibilitychange` firing back-to-back) can't
+// interleave their async retries and let stale data clobber fresh data.
+//
+// We only ever care about the *latest* queued payload — any intermediate
+// queued writes would be immediately overwritten by the next one, so we
+// drop them and only commit the most recent state.
+let writeChain = Promise.resolve();
+let pendingPayload = null;
+let pendingResolvers = [];
+
+function scheduleWrite(next) {
+  pendingPayload = next;
+  return new Promise((resolve) => {
+    pendingResolvers.push(resolve);
+    writeChain = writeChain.then(async () => {
+      // Snapshot whatever is queued *now* — earlier callers will all be
+      // resolved with this same result since later writes supersede them.
+      if (pendingPayload === null) {
+        const resolvers = pendingResolvers;
+        pendingResolvers = [];
+        resolvers.forEach((r) => r(null));
+        return;
+      }
+      const toWrite = pendingPayload;
+      const resolvers = pendingResolvers;
+      pendingPayload = null;
+      pendingResolvers = [];
+      try {
+        const result = await writeSessions(toWrite);
+        resolvers.forEach((r) => r(result));
+      } catch (err) {
+        if (typeof console !== "undefined") {
+          console.warn("[sessionHistory] write chain rejected:", err);
+        }
+        resolvers.forEach((r) => r(null));
+      }
+    });
+  });
+}
+
 // Try to write `next` to localStorage. If we hit a quota error, shed data
 // using a binary-shrink strategy so the worst case is only a handful of
 // stringify+setItem passes (each one on a smaller payload than the last) —
@@ -129,9 +170,10 @@ export function saveSession(session) {
   };
   const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
-  // Fire-and-forget: callers don't need to await persistence. Errors are
-  // already surfaced via console inside writeSessions().
-  void writeSessions(next);
+  // Fire-and-forget: callers don't need to await persistence. The write
+  // queue ensures concurrent calls run sequentially and only the latest
+  // payload is committed.
+  void scheduleWrite(next);
   return entry;
 }
 
@@ -155,8 +197,9 @@ export function pruneOldestSessions(keepRatio = 0.5) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    // If even the trimmed list won't fit, fall back through writeSessions.
-    void writeSessions(next);
+    // If even the trimmed list won't fit, fall back through the write
+    // queue so it can shrink/retry without racing other writers.
+    void scheduleWrite(next);
   }
   return removed;
 }
