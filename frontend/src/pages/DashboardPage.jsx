@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { LogOut, Mic } from "lucide-react";
 
 import { fetchMe } from "../api/auth";
@@ -444,13 +444,25 @@ function CategoryTabsRow({ categories, onStart }) {
   );
 }
 
-function SessionCard({ session, onView, onDelete }) {
+function SessionCard({ session, onView, onDelete, highlight = false }) {
   const sc = scoreColor(session.avgScore);
   return (
     <div
-      className="relative bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+      id={`session-card-${session.id}`}
+      className={`relative bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group ${
+        highlight
+          ? "session-card-highlight border-blue-400"
+          : "border-gray-200 hover:border-blue-200"
+      }`}
       onClick={onView}
     >
+      {highlight && (
+        <span
+          className="absolute -top-2 left-4 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-sm animate-fadeIn"
+        >
+          Just saved
+        </span>
+      )}
       {session.isReal && onDelete && (
         <button
           type="button"
@@ -543,6 +555,7 @@ function SessionCard({ session, onView, onDelete }) {
 
 export default function DashboardPage({ demoMode = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -550,7 +563,31 @@ export default function DashboardPage({ demoMode = false }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
+  const [highlightId, setHighlightId] = useState(
+    () => location.state?.highlightSessionId ?? null,
+  );
   const session = useMemo(() => getAuthSession(), []);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    setActiveTab("All");
+    setSearchQuery("");
+    if (location.state?.highlightSessionId) {
+      window.history.replaceState({}, "");
+    }
+    const scrollTimer = window.setTimeout(() => {
+      const el = document.getElementById(`session-card-${highlightId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 80);
+    const clearTimer = window.setTimeout(() => setHighlightId(null), 4200);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId]);
 
   const realSessions = useMemo(() => {
     return getSessions().map((s, idx) => ({
@@ -889,6 +926,7 @@ export default function DashboardPage({ demoMode = false }) {
                   <SessionCard
                     key={s.id}
                     session={s}
+                    highlight={s.id === highlightId}
                     onView={() => {
                       if (s.isReal) {
                         navigate(
