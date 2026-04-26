@@ -170,11 +170,24 @@ export function saveSession(session) {
   };
   const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
-  // Fire-and-forget: callers don't need to await persistence. The write
-  // queue ensures concurrent calls run sequentially and only the latest
-  // payload is committed.
-  void scheduleWrite(next);
-  return entry;
+
+  // Fast path: try a fully synchronous write first. This is the >99% case
+  // (no quota issues) and is critical for tab-close scenarios — `beforeunload`
+  // and `visibilitychange(hidden)` won't wait for any async retry chain to
+  // resolve, so we MUST commit synchronously before returning whenever we
+  // can. If this succeeds, durability is guaranteed even if the tab dies
+  // immediately afterwards.
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    return entry;
+  } catch {
+    // Quota hit — fall back to the async write queue which can yield to
+    // the browser between binary-shrink retries. This branch may not
+    // complete if the tab closes mid-retry, but the synchronous fast path
+    // would also have failed in that case, so we're no worse off.
+    void scheduleWrite(next);
+    return entry;
+  }
 }
 
 export function clearSessions() {
