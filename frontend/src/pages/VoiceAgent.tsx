@@ -1156,11 +1156,28 @@ export default function VoiceAgent({
     [chatInput, status, agentTyping, sendChatMessage],
   );
 
+  // Mirror the values persistSession needs into refs that update synchronously
+  // during render. This way persistSession itself can be stable (no deps) and
+  // window event handlers / cleanup callbacks always see the latest committed
+  // values — no closure can ever go stale, even on rapid disconnects.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const sessionSummaryRef = useRef(sessionSummary);
+  sessionSummaryRef.current = sessionSummary;
+  const topicRef = useRef(topic);
+  topicRef.current = topic;
+  const customTopicLabelRef = useRef(customTopicLabel);
+  customTopicLabelRef.current = customTopicLabel;
+
   const persistSession = useCallback(() => {
-    if (!messages.length) return;
+    const currentMessages = messagesRef.current;
+    if (!currentMessages.length) return;
+    const currentSummary = sessionSummaryRef.current;
+    const currentTopic = topicRef.current;
+    const currentCustomTopicLabel = customTopicLabelRef.current;
     const topicLabel =
-      customTopicLabel ??
-      TOPICS.find((t) => t.id === topic)?.label ??
+      currentCustomTopicLabel ??
+      TOPICS.find((t) => t.id === currentTopic)?.label ??
       "Daily Conversation";
     const startedAt = sessionStartRef.current ?? Date.now();
     if (!sessionIdRef.current) {
@@ -1169,16 +1186,16 @@ export default function VoiceAgent({
     saveSessionHistory({
       id: sessionIdRef.current,
       topic: topicLabel,
-      topicKey: topic,
-      avgScore: sessionSummary?.scores.overall ?? 0,
-      sentenceCount: sessionSummary?.sentenceCount ?? 0,
-      corrections: sessionSummary?.totalErrors ?? 0,
+      topicKey: currentTopic,
+      avgScore: currentSummary?.scores.overall ?? 0,
+      sentenceCount: currentSummary?.sentenceCount ?? 0,
+      corrections: currentSummary?.totalErrors ?? 0,
       durationMs: Date.now() - startedAt,
-      scores: sessionSummary?.scores ?? null,
-      topErrors: sessionSummary?.topErrors ?? [],
-      messages,
+      scores: currentSummary?.scores ?? null,
+      topErrors: currentSummary?.topErrors ?? [],
+      messages: currentMessages,
     });
-  }, [messages, sessionSummary, topic, customTopicLabel]);
+  }, []);
 
   const startNewSession = useCallback(() => {
     window.speechSynthesis?.cancel();
