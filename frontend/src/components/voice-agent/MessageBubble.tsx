@@ -63,8 +63,8 @@ function ScoreBadge({ score }: { score: number }) {
       title="Pronunciation score"
       className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border text-[10px] font-bold leading-4 tracking-wide select-none ${cls}`}
     >
-      {score}
-      <span className="text-black/30 font-normal text-[9px]">/100</span>
+      <span className="tabular-nums font-bold">{score}</span>
+      <span data-score-suffix className="text-black/30 font-normal text-[9px] ml-0.5">/<span className="font-semibold">100</span></span>
     </span>
   );
 }
@@ -74,7 +74,7 @@ function ReplayButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       title="Replay"
-      className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border border-black/15 bg-black/[0.04] text-black/35 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35"
+      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35"
     >
       <Play className="w-2 h-2 fill-current" />
     </button>
@@ -89,7 +89,11 @@ export default function MessageBubble({
   onToggleExpanded,
 }: MessageBubbleProps) {
   const isAgent = message.role === "agent";
-  const timeStr = message.timestamp.toLocaleTimeString([], {
+  const tsDate =
+    message.timestamp instanceof Date
+      ? message.timestamp
+      : new Date(message.timestamp as unknown as string | number);
+  const timeStr = tsDate.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
