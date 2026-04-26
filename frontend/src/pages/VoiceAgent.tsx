@@ -1242,11 +1242,18 @@ export default function VoiceAgent({
     autoFeedbackIndexRef.current = 0;
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
+    // Eagerly update the ref BEFORE calling setStatus so that handleConnect
+    // called synchronously in the same event-loop tick (before React re-renders
+    // and updates statusRef.current via `statusRef.current = status`) already
+    // sees "connecting" and correctly skips both its if-branches instead of
+    // re-entering the "connected" branch and cancelling this new session.
+    statusRef.current = "connecting";
     setStatus("connecting");
 
     const t0 = setTimeout(() => {
       // Bail out if a newer session/connect has superseded this one.
       if (sessionVersionRef.current !== myVersion) return;
+      statusRef.current = "connected";
       setStatus("connected");
       setAgentTyping(false);
       setAgentSpeaking(false);
@@ -1271,6 +1278,10 @@ export default function VoiceAgent({
       window.speechSynthesis?.cancel();
       ttsActiveRef.current = false;
       setSummaryDismissed(false);
+      // Eagerly mirror the state change into statusRef so that any handleConnect
+      // call dispatched in the same tick (before the next React render) sees the
+      // new value and doesn't enter a stale branch.
+      statusRef.current = "disconnected";
       setStatus("disconnected");
       setAgentSpeaking(false);
       setAgentTyping(false);
@@ -1288,10 +1299,15 @@ export default function VoiceAgent({
       if (sessionStartRef.current === null) {
         sessionStartRef.current = Date.now();
       }
+      // Eagerly mirror into statusRef so that startNewSession or another
+      // handleConnect call dispatched in the same tick can see the pending
+      // status before React re-renders.
+      statusRef.current = "connecting";
       setStatus("connecting");
 
       const t0 = setTimeout(() => {
         if (sessionVersionRef.current !== myVersion) return;
+        statusRef.current = "connected";
         setStatus("connected");
         setAgentTyping(false);
         setAgentSpeaking(false);
