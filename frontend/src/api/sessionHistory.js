@@ -2,12 +2,44 @@ const STORAGE_KEY = "vt_session_history_v1";
 const MAX_SESSIONS = 50;
 const MAX_MESSAGES_PER_SESSION = 200;
 
+// ---------------------------------------------------------------------------
+// Read cache
+// ---------------------------------------------------------------------------
+// getSessions() is called from saveSession, deleteSession, getSession,
+// pruneOldestSessions, and getStorageUsage on every user interaction. Each
+// call previously re-read + JSON.parsed the full history, which for 50
+// sessions × 200 messages each can visibly block the main thread.
+//
+// The cache is keyed on the raw localStorage string. Because JS is
+// single-threaded and localStorage is synchronous, the raw string can only
+// change when our own code calls localStorage.setItem / removeItem, so we
+// simply call invalidateSessionsCache() after every write.
+let _cachedRaw = /** @type {string|null} */ (null); // null = cache miss
+let _cachedSessions = /** @type {any[]|null} */ (null);
+
+function invalidateSessionsCache() {
+  _cachedRaw = null;
+  _cachedSessions = null;
+}
+
 export function getSessions() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      // Nothing stored — keep cache cleared so writes after clearing
+      // also start fresh.
+      _cachedRaw = null;
+      _cachedSessions = null;
+      return [];
+    }
+    // Cache hit: same raw string means the data hasn't changed.
+    if (raw === _cachedRaw && _cachedSessions !== null) {
+      return _cachedSessions;
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    _cachedSessions = Array.isArray(parsed) ? parsed : [];
+    _cachedRaw = raw;
+    return _cachedSessions;
   } catch {
     return [];
   }
@@ -21,6 +53,7 @@ export function deleteSession(id) {
   const next = getSessions().filter((s) => s.id !== id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    invalidateSessionsCache();
   } catch {
     // ignore
   }
@@ -126,6 +159,7 @@ async function writeSessions(next) {
     lastSize = attempt.length;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(attempt));
+      invalidateSessionsCache();
       if (i > 0 && typeof console !== "undefined") {
         console.warn(
           `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} retr${i === 1 ? "y" : "ies"}.`,
@@ -171,57 +205,60 @@ export function saveSession(session) {
   const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
 
-  // Fast path: attempt a fully synchronous write using the same staged-shrink
-  // strategy as `writeSessions`, but without any async yields. This is critical
-  // for `beforeunload` / `visibilitychange(hidden)` callers — the browser will
-  // not wait for any promise to settle after those events fire, so we MUST
-  // commit synchronously. The previous approach fell back to async scheduleWrite
-  // on the first QuotaExceededError, meaning data was silently lost whenever
-  // the tab closed while over quota.
-  const syncStages = [
-    (arr) => arr,
-    (arr) =>
-      arr.map((s) => ({
-        ...s,
-        messages: Array.isArray(s.messages)
-          ? s.messages.map(trimMessage)
-          : s.messages,
-      })),
-    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
-    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
-    (arr) => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
-  ];
+  // Fast path: attempt a fully synchronous write, which is critical for
+  // `beforeunload` / `visibilitychange(hidden)` callers — the browser will
+  // not wait for any promise to settle after those events fire.
+  //
+  // We intentionally limit the sync path to TWO attempts instead of the
+  // five used by the async `writeSessions` path. Each attempt calls
+  // JSON.stringify on potentially large data; browsers grant only ~50 ms
+  // to beforeunload handlers, and running five expensive serialisations on
+  // a history of 50 × 200 messages can exceed that budget and silently drop
+  // the write entirely. Two attempts — full data, then the smallest possible
+  // emergency payload — gives the best chance of saving something useful
+  // within the time budget.
+  //
+  // 1st attempt: full payload (>99 % of calls succeed here).
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    invalidateSessionsCache();
+    return entry;
+  } catch {
+    // Quota exceeded — fall through to the emergency minimal save.
+  }
 
-  for (let i = 0; i < syncStages.length; i++) {
-    const attempt = syncStages[i](next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(attempt));
-      if (i > 0 && typeof console !== "undefined") {
-        console.warn(
-          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} sync shrink(s).`,
-        );
-      }
-      return entry;
-    } catch {
-      // Try the next (smaller) stage.
+  // 2nd attempt: keep only the newest session, no transcript at all.
+  // This is always tiny (<1 KB) so the write is fast and quota-safe.
+  const emergency = next.length > 0 ? [{ ...next[0], messages: [] }] : next;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(emergency));
+    invalidateSessionsCache();
+    if (typeof console !== "undefined") {
+      console.warn(
+        "[sessionHistory] storage quota tight — saved only latest session without transcript.",
+      );
     }
+    return entry;
+  } catch {
+    // Storage is completely full — fall back to the async write queue
+    // which can yield between intermediate-shrink retries. This write
+    // may not complete if the tab closes immediately afterwards, but
+    // both synchronous attempts already failed, so there is nothing
+    // more we can do synchronously.
+    if (typeof console !== "undefined") {
+      console.warn(
+        "[sessionHistory] sync write failed entirely — falling back to async write queue.",
+      );
+    }
+    void scheduleWrite(next);
+    return entry;
   }
-
-  // All synchronous stages failed (extremely full storage). Fall back to the
-  // async write queue which can yield between retries, but acknowledge that
-  // this write may not complete if the tab closes immediately afterwards.
-  if (typeof console !== "undefined") {
-    console.warn(
-      "[sessionHistory] all sync shrink stages failed — falling back to async write queue.",
-    );
-  }
-  void scheduleWrite(next);
-  return entry;
 }
 
 export function clearSessions() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    invalidateSessionsCache();
   } catch {
     // ignore
   }
@@ -238,6 +275,7 @@ export function pruneOldestSessions(keepRatio = 0.5) {
   const next = all.slice(0, keep);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    invalidateSessionsCache();
   } catch {
     // If even the trimmed list won't fit, fall back through the write
     // queue so it can shrink/retry without racing other writers.

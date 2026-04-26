@@ -1193,11 +1193,24 @@ export default function VoiceAgent({
   topicRef.current = topic;
   const customTopicLabelRef = useRef(customTopicLabel);
   customTopicLabelRef.current = customTopicLabel;
-  // Same pattern for `status` so handleConnect can read the latest committed
-  // status from a ref instead of a closure — eliminates the rapid-click race
-  // where two clicks dispatched in the same tick both see the previous value.
-  const statusRef = useRef(status);
-  statusRef.current = status;
+  // ---------------------------------------------------------------------------
+  // statusRef + setStatusSync
+  // ---------------------------------------------------------------------------
+  // statusRef always holds the *latest intended* status — it is updated
+  // synchronously by setStatusSync so that handleConnect / startNewSession
+  // called in the same event-loop tick (before React re-renders) always read
+  // the correct value.
+  //
+  // IMPORTANT: never call setStatus() directly. Always go through
+  // setStatusSync so the ref and React state are kept in sync atomically.
+  // Scattering `statusRef.current = X; setStatus(X)` across multiple
+  // call-sites risks the two diverging if a future edit updates one but not
+  // the other. Using a single helper eliminates that class of bug entirely.
+  const statusRef = useRef<ConnectionStatus>(status);
+  const setStatusSync = useCallback((next: ConnectionStatus) => {
+    statusRef.current = next; // synchronous — readable by same-tick callers
+    setStatus(next);          // triggers async React re-render
+  }, []); // stable: closes only over refs and the React state setter (both stable)
 
   const persistSession = useCallback(() => {
     const currentMessages = messagesRef.current;
@@ -1242,25 +1255,18 @@ export default function VoiceAgent({
     autoFeedbackIndexRef.current = 0;
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
-    // Eagerly update the ref BEFORE calling setStatus so that handleConnect
-    // called synchronously in the same event-loop tick (before React re-renders
-    // and updates statusRef.current via `statusRef.current = status`) already
-    // sees "connecting" and correctly skips both its if-branches instead of
-    // re-entering the "connected" branch and cancelling this new session.
-    statusRef.current = "connecting";
-    setStatus("connecting");
+    setStatusSync("connecting");
 
     const t0 = setTimeout(() => {
       // Bail out if a newer session/connect has superseded this one.
       if (sessionVersionRef.current !== myVersion) return;
-      statusRef.current = "connected";
-      setStatus("connected");
+      setStatusSync("connected");
       setAgentTyping(false);
       setAgentSpeaking(false);
     }, 600);
 
     timersRef.current.push(t0);
-  }, [clearTimers, clearLocalAudioUrls]);
+  }, [clearTimers, clearLocalAudioUrls, setStatusSync]);
 
   const handleConnect = useCallback(() => {
     // Read status from a ref so rapid clicks within a single event-loop
@@ -1278,11 +1284,7 @@ export default function VoiceAgent({
       window.speechSynthesis?.cancel();
       ttsActiveRef.current = false;
       setSummaryDismissed(false);
-      // Eagerly mirror the state change into statusRef so that any handleConnect
-      // call dispatched in the same tick (before the next React render) sees the
-      // new value and doesn't enter a stale branch.
-      statusRef.current = "disconnected";
-      setStatus("disconnected");
+      setStatusSync("disconnected");
       setAgentSpeaking(false);
       setAgentTyping(false);
       setExpandedMsgId(null);
@@ -1299,16 +1301,11 @@ export default function VoiceAgent({
       if (sessionStartRef.current === null) {
         sessionStartRef.current = Date.now();
       }
-      // Eagerly mirror into statusRef so that startNewSession or another
-      // handleConnect call dispatched in the same tick can see the pending
-      // status before React re-renders.
-      statusRef.current = "connecting";
-      setStatus("connecting");
+      setStatusSync("connecting");
 
       const t0 = setTimeout(() => {
         if (sessionVersionRef.current !== myVersion) return;
-        statusRef.current = "connected";
-        setStatus("connected");
+        setStatusSync("connected");
         setAgentTyping(false);
         setAgentSpeaking(false);
       }, 600);
@@ -1321,6 +1318,7 @@ export default function VoiceAgent({
     sessionSummary,
     customTopicLabel,
     topic,
+    setStatusSync,
   ]);
 
   const persistSessionRef = useRef(persistSession);
