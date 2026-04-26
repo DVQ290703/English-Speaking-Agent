@@ -33,6 +33,12 @@ function trimMessage(m) {
   return rest;
 }
 
+// Yield to the browser between heavy stringify+setItem passes so the UI
+// thread can repaint between retries on lower-end devices.
+function yieldToBrowser() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 // Try to write `next` to localStorage. If we hit a quota error, shed data
 // using a binary-shrink strategy so the worst case is only a handful of
 // stringify+setItem passes (each one on a smaller payload than the last) —
@@ -45,8 +51,12 @@ function trimMessage(m) {
 //   3. Keep only the newest quarter of sessions.
 //   4. Keep only the newest single session with no transcript.
 //
-// Returns the list actually persisted, or null if everything failed.
-function writeSessions(next) {
+// On the happy path (no quota error) this is a single synchronous write,
+// completing before the function even awaits. On the quota path, each
+// retry awaits a 0ms timer so the browser can repaint between large
+// serialisations. Returns the list actually persisted, or null if every
+// fallback failed.
+async function writeSessions(next) {
   const stages = [
     (arr) => arr,
     (arr) =>
@@ -65,6 +75,9 @@ function writeSessions(next) {
   let lastError = null;
   let lastSize = -1;
   for (let i = 0; i < stages.length; i++) {
+    // Yield before every retry (but not before the first attempt) so the
+    // browser can paint between potentially-expensive serialisations.
+    if (i > 0) await yieldToBrowser();
     attempt = stages[i](attempt);
     // Skip a redundant attempt if shrinking didn't actually reduce size
     // (e.g. halving a 1-item array). Avoids wasted serialise+setItem work.
@@ -116,7 +129,9 @@ export function saveSession(session) {
   };
   const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
-  writeSessions(next);
+  // Fire-and-forget: callers don't need to await persistence. Errors are
+  // already surfaced via console inside writeSessions().
+  void writeSessions(next);
   return entry;
 }
 
@@ -141,7 +156,7 @@ export function pruneOldestSessions(keepRatio = 0.5) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
     // If even the trimmed list won't fit, fall back through writeSessions.
-    writeSessions(next);
+    void writeSessions(next);
   }
   return removed;
 }
