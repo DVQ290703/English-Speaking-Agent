@@ -1,4 +1,11 @@
-import { useState, useEffect, useRef, useCallback, KeyboardEvent } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  KeyboardEvent,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Mic,
@@ -16,10 +23,19 @@ import {
   LogOut,
   Moon,
   Sun,
+  User,
+  Sparkles,
+  Trophy,
+  RefreshCw,
+  X,
 } from "lucide-react";
 import { SiOpenai } from "react-icons/si";
 
 import { chatRespond, assessPronunciation } from "../api/chat";
+import {
+  saveSession as saveSessionHistory,
+  getSession as getSessionHistory,
+} from "../api/sessionHistory";
 import { getAuthSession, clearAuthSession } from "../auth/tokenStorage";
 import {
   AgentWaveform,
@@ -250,6 +266,10 @@ export default function VoiceAgent({
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
+      if (params.get("session") && initialMessagesAndId.topic) {
+        setTopic(initialMessagesAndId.topic);
+        return;
+      }
       const raw =
         params.get("topic") || sessionStorage.getItem("va_selected_topic");
       if (!raw) return;
@@ -291,12 +311,114 @@ export default function VoiceAgent({
   const [selectedMic, setSelectedMic] = useState(MICROPHONES[0]);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const initialMessagesAndId = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sid = params.get("session");
+      if (sid) {
+        const saved = getSessionHistory(sid);
+        if (saved) {
+          const rehydrated = ((saved.messages as Message[]) ?? []).map((m) => ({
+            ...m,
+            timestamp:
+              m.timestamp instanceof Date
+                ? m.timestamp
+                : new Date(m.timestamp as unknown as string | number),
+            audioUrl: undefined,
+          }));
+          return {
+            messages: rehydrated,
+            sessionId: sid,
+            topic: saved.topicKey as TopicId | null,
+          };
+        }
+      }
+    } catch {}
+    return {
+      messages: [] as Message[],
+      sessionId: null as string | null,
+      topic: null as TopicId | null,
+    };
+  })();
+  const [messages, setMessages] = useState<Message[]>(
+    initialMessagesAndId.messages,
+  );
+  const sessionIdRef = useRef<string | null>(initialMessagesAndId.sessionId);
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
   const selectedMsg =
     expandedMsgId !== null
       ? (messages.find((m) => m.id === expandedMsgId) ?? null)
       : null;
+  const latestUserMsg = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "user" && (m.scoreDetails || m.mistakes)) return m;
+    }
+    return null;
+  })();
+  const displayMsg = selectedMsg ?? latestUserMsg;
+  const isAutoLatest = !selectedMsg && !!latestUserMsg;
+
+  const sessionSummary = useMemo(() => {
+    const userMsgs = messages.filter(
+      (m) => m.role === "user" && m.scoreDetails,
+    );
+    if (userMsgs.length === 0) return null;
+    const avg = (key: "overall" | "pronunciation" | "fluency" | "accuracy") =>
+      Math.round(
+        userMsgs.reduce((s, m) => s + (m.scoreDetails?.[key] ?? 0), 0) /
+          userMsgs.length,
+      );
+    const scores = {
+      overall: avg("overall"),
+      pronunciation: avg("pronunciation"),
+      fluency: avg("fluency"),
+      accuracy: avg("accuracy"),
+    };
+    const errorCounts: Record<string, number> = {};
+    let totalErrors = 0;
+    for (const m of userMsgs) {
+      for (const mk of m.mistakes ?? []) {
+        errorCounts[mk.type] = (errorCounts[mk.type] ?? 0) + 1;
+        totalErrors++;
+      }
+    }
+    const topErrors = Object.entries(errorCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    const weakest = (["pronunciation", "fluency", "accuracy"] as const).reduce(
+      (w, k) => (scores[k] < scores[w] ? k : w),
+      "pronunciation" as "pronunciation" | "fluency" | "accuracy",
+    );
+    const tipMap: Record<typeof weakest, string> = {
+      pronunciation:
+        "Practice tricky sounds with shadowing — repeat after the agent right after each reply.",
+      fluency:
+        "Try speaking in longer 2-3 sentence chunks without pausing — record and replay yourself.",
+      accuracy:
+        "Slow down slightly and self-correct grammar before sending — focus on tense and articles.",
+    };
+    const tips: string[] = [tipMap[weakest]];
+    if (topErrors[0]) {
+      tips.push(
+        `You made ${topErrors[0][1]} ${topErrors[0][0].toLowerCase()} mistake${topErrors[0][1] > 1 ? "s" : ""} — review them in your messages.`,
+      );
+    }
+    return {
+      sentenceCount: userMsgs.length,
+      totalErrors,
+      scores,
+      topErrors,
+      tips,
+    };
+  }, [messages]);
+
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
+  const showSessionSummary =
+    status === "disconnected" &&
+    messages.length > 0 &&
+    sessionSummary !== null &&
+    !summaryDismissed;
   const [chatInput, setChatInput] = useState("");
   const [agentTyping, setAgentTyping] = useState(false);
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
@@ -306,11 +428,19 @@ export default function VoiceAgent({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const msgCounterRef = useRef(100);
+  const msgCounterRef = useRef(
+    Math.max(
+      100,
+      ...initialMessagesAndId.messages.map((m) =>
+        typeof m.id === "number" ? m.id : 0,
+      ),
+    ) + 1,
+  );
   const feedbackCounterRef = useRef(200);
   const autoFeedbackIndexRef = useRef(0);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const ttsActiveRef = useRef(false);
+  const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -720,11 +850,13 @@ export default function VoiceAgent({
             topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
           });
 
-          const pronunciationFeedback = await assessPronunciation({
-            token: session.token,
-            audioBlob,
-            language: "en-US",
-          });
+          const pronunciationFeedback = audioBlob 
+          ? await assessPronunciation({
+              token: session.token,
+              audioBlob: audioBlob!, 
+              language: "en-US",
+            })
+          : null;
 
           const responseText =
             String(data.response_text || "").trim() ||
@@ -942,27 +1074,75 @@ export default function VoiceAgent({
     [chatInput, status, agentTyping, sendChatMessage],
   );
 
+  const persistSession = useCallback(() => {
+    if (!messages.length) return;
+    const topicLabel =
+      customTopicLabel ??
+      TOPICS.find((t) => t.id === topic)?.label ??
+      "Daily Conversation";
+    const startedAt = sessionStartRef.current ?? Date.now();
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    saveSessionHistory({
+      id: sessionIdRef.current,
+      topic: topicLabel,
+      topicKey: topic,
+      avgScore: sessionSummary?.scores.overall ?? 0,
+      sentenceCount: sessionSummary?.sentenceCount ?? 0,
+      corrections: sessionSummary?.totalErrors ?? 0,
+      durationMs: Date.now() - startedAt,
+      scores: sessionSummary?.scores ?? null,
+      topErrors: sessionSummary?.topErrors ?? [],
+      messages,
+    });
+  }, [messages, sessionSummary, topic, customTopicLabel]);
+
+  const startNewSession = useCallback(() => {
+    window.speechSynthesis?.cancel();
+    ttsActiveRef.current = false;
+    setMessages([]);
+    setExpandedMsgId(null);
+    setSummaryDismissed(false);
+    clearLocalAudioUrls();
+    setFeedbacks([]);
+    autoFeedbackIndexRef.current = 0;
+    clearTimers();
+    sessionStartRef.current = Date.now();
+    sessionIdRef.current = null;
+    setStatus("connecting");
+
+    const t0 = setTimeout(() => {
+      setStatus("connected");
+      setAgentTyping(false);
+      setAgentSpeaking(false);
+    }, 600);
+
+    timersRef.current.push(t0);
+  }, [clearTimers, clearLocalAudioUrls]);
+
   const handleConnect = useCallback(() => {
     if (status === "connected") {
       window.speechSynthesis?.cancel();
       ttsActiveRef.current = false;
+      setSummaryDismissed(false);
       setStatus("disconnected");
       setAgentSpeaking(false);
       setAgentTyping(false);
-      setMessages([]);
-      clearLocalAudioUrls();
-      setFeedbacks([]);
+      setExpandedMsgId(null);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
+      persistSession();
       return;
     }
     if (status === "disconnected") {
-      setStatus("connecting");
-      setMessages([]);
-      clearLocalAudioUrls();
-      setFeedbacks([]);
+      setSummaryDismissed(true);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
+      if (sessionStartRef.current === null) {
+        sessionStartRef.current = Date.now();
+      }
+      setStatus("connecting");
 
       const t0 = setTimeout(() => {
         setStatus("connected");
@@ -972,10 +1152,40 @@ export default function VoiceAgent({
 
       timersRef.current.push(t0);
     }
-  }, [status, clearTimers, clearLocalAudioUrls]);
+  }, [
+    status,
+    clearTimers,
+    persistSession,
+    sessionSummary,
+    customTopicLabel,
+    topic,
+  ]);
+
+  const persistSessionRef = useRef(persistSession);
+  useEffect(() => {
+    persistSessionRef.current = persistSession;
+  }, [persistSession]);
+
+  useEffect(() => {
+    const onHide = () => {
+      try {
+        persistSessionRef.current?.();
+      } catch {}
+    };
+    window.addEventListener("beforeunload", onHide);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") onHide();
+    });
+    return () => {
+      window.removeEventListener("beforeunload", onHide);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
+      try {
+        persistSessionRef.current?.();
+      } catch {}
       clearTimers();
       clearLocalAudioUrls();
       if (mediaRecorderRef.current?.state === "recording") {
@@ -1074,7 +1284,7 @@ export default function VoiceAgent({
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
                     >
-                      <LogOut className="w-3.5 h-3.5" /> Đăng xuất
+                      <LogOut className="w-3.5 h-3.5" /> Sign out
                     </button>
                   </div>
                 </>
@@ -1147,12 +1357,12 @@ export default function VoiceAgent({
         {/* Left panel: Audio & Video */}
         <div
           data-va="left"
-          className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-hidden"
+          className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-visible"
         >
           {/* Panel header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
             <span className="text-xs font-semibold text-gray-700 tracking-wide">
-              Audio & Video
+              Audio Settings
             </span>
             <SelectDropdown
               value={gender}
@@ -1161,71 +1371,104 @@ export default function VoiceAgent({
             />
           </div>
 
-          {/* Agent display */}
-          <div className="bg-linear-to-b from-blue-50 to-indigo-50 mx-2 mt-2 rounded-md overflow-hidden border border-gray-200">
-            <div className="flex flex-col items-center justify-center py-5 px-4 min-h-32.5">
+          {/* Agent row */}
+          <div className="px-2 mt-2 space-y-2">
+            <div className="bg-linear-to-r from-blue-50 to-indigo-50 rounded-md border border-gray-200 flex items-center gap-2.5 px-2 py-2">
               <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center mb-2 transition-all duration-500 ${
+                className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${
                   agentSpeaking
                     ? "bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200"
                     : "bg-blue-100 border border-blue-200"
                 }`}
               >
-                <SiOpenai
-                  className={`w-6 h-6 transition-colors duration-300 ${agentSpeaking ? "text-blue-600" : "text-blue-600"}`}
-                />
+                <SiOpenai className="w-5 h-5 text-blue-600" />
               </div>
-              <span className="text-xs font-medium text-gray-700 mb-2">
-                Agent
-              </span>
-              {isConnected || isConnecting ? (
-                <AgentWaveform active={agentSpeaking} />
-              ) : (
-                <div className="flex items-center gap-1 mt-1">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-2 h-2 rounded-full bg-blue-500/30"
-                    />
-                  ))}
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium text-gray-700 mb-1">
+                  Agent
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Microphone section */}
-          <div className="px-2 mt-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
-                Microphone
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  data-testid="button-mic-toggle"
-                  onClick={() => setMicEnabled((v) => !v)}
-                  className={`p-1 rounded transition-colors ${
-                    isRecording
-                      ? "text-red-400 hover:text-red-300 animate-pulse"
-                      : micEnabled
-                        ? "text-blue-600 hover:text-blue-300"
-                        : "text-gray-400 hover:text-gray-500"
-                  }`}
-                >
-                  {micEnabled ? (
-                    <Mic className="w-4 h-4" />
-                  ) : (
-                    <MicOff className="w-4 h-4" />
-                  )}
-                </button>
-                <DeviceSelect
-                  value={selectedMic}
-                  options={MICROPHONES}
-                  onChange={setSelectedMic}
-                />
+                {isConnected || isConnecting ? (
+                  <AgentWaveform active={agentSpeaking} />
+                ) : (
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 14 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-blue-500/30"
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="bg-linear-to-b from-blue-50 to-indigo-50 rounded-md border border-gray-200 py-2 px-2">
-              <MicWaveform active={micEnabled && isConnected} />
+
+            {/* Microphone selector */}
+            <div className="px-2 py-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
+                  Microphone
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    data-testid="button-mic-toggle"
+                    onClick={() => setMicEnabled((v) => !v)}
+                    className={`p-1 rounded transition-colors ${
+                      isRecording
+                        ? "text-red-400 hover:text-red-300 animate-pulse"
+                        : micEnabled
+                          ? "text-blue-600 hover:text-blue-300"
+                          : "text-gray-400 hover:text-gray-500"
+                    }`}
+                  >
+                    {micEnabled ? (
+                      <Mic className="w-4 h-4" />
+                    ) : (
+                      <MicOff className="w-4 h-4" />
+                    )}
+                  </button>
+                  <DeviceSelect
+                    value={selectedMic}
+                    options={MICROPHONES}
+                    onChange={setSelectedMic}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* User row */}
+            <div className="bg-linear-to-r from-violet-50 to-purple-50 rounded-md border border-gray-200 flex items-center gap-2.5 px-2 py-2">
+              <div
+                className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${
+                  isRecording
+                    ? "bg-violet-600/30 border-2 border-violet-500/60 shadow-lg shadow-violet-200"
+                    : "bg-violet-100 border border-violet-200"
+                }`}
+              >
+                {currentUser?.display_name?.[0] ? (
+                  <span className="text-sm font-semibold text-violet-700">
+                    {currentUser.display_name[0].toUpperCase()}
+                  </span>
+                ) : (
+                  <User className="w-5 h-5 text-violet-700" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium text-gray-700 mb-1 truncate">
+                  {currentUser?.display_name || "You"}
+                </div>
+                {isConnected || isConnecting ? (
+                  <MicWaveform active={micEnabled && isConnected} />
+                ) : (
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 14 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-violet-500/30"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1241,29 +1484,29 @@ export default function VoiceAgent({
                   onClick={() => setExpandedMsgId(null)}
                   className="text-[9px] text-gray-500 hover:text-gray-800 underline"
                 >
-                  Clear
+                  Show latest
                 </button>
-              ) : feedbacks.length > 0 ? (
-                <span className="text-[9px] bg-blue-600/20 text-blue-400 border border-blue-200 rounded-full px-1.5 py-0.5">
-                  {feedbacks.length}
+              ) : isAutoLatest ? (
+                <span className="text-[9px] bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-1.5 py-0.5">
+                  Latest
                 </span>
               ) : null}
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin pr-0.5">
-              {selectedMsg ? (
+              {displayMsg ? (
                 <>
                   <div className="rounded-md border border-violet-200 bg-violet-50 p-2 animate-fadeIn">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700">
-                        Selected sentence
+                        {selectedMsg ? "Selected sentence" : "Latest sentence"}
                       </span>
-                      {selectedMsg.userAudioUrl && (
+                      {displayMsg.userAudioUrl && (
                         <button
                           type="button"
                           onClick={() => {
                             try {
-                              const audio = new Audio(selectedMsg.userAudioUrl);
+                              const audio = new Audio(displayMsg.userAudioUrl);
                               void audio.play();
                             } catch {
                               // ignore playback errors
@@ -1277,11 +1520,11 @@ export default function VoiceAgent({
                       )}
                     </div>
                     <p className="text-[11px] text-gray-800 italic leading-snug">
-                      "{selectedMsg.text}"
+                      "{displayMsg.text}"
                     </p>
                   </div>
 
-                  {selectedMsg.scoreDetails && (
+                  {displayMsg.scoreDetails && (
                     <div className="rounded-md border border-gray-200 bg-white p-2 animate-fadeIn">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block mb-1.5">
                         Score breakdown
@@ -1289,13 +1532,13 @@ export default function VoiceAgent({
                       <div className="flex flex-col gap-1">
                         {(
                           [
-                            ["Overall", selectedMsg.scoreDetails.overall],
+                            ["Overall", displayMsg.scoreDetails.overall],
                             [
                               "Pronunciation",
-                              selectedMsg.scoreDetails.pronunciation,
+                              displayMsg.scoreDetails.pronunciation,
                             ],
-                            ["Fluency", selectedMsg.scoreDetails.fluency],
-                            ["Accuracy", selectedMsg.scoreDetails.accuracy],
+                            ["Fluency", displayMsg.scoreDetails.fluency],
+                            ["Accuracy", displayMsg.scoreDetails.accuracy],
                           ] as const
                         ).map(([label, val]) => {
                           const color =
@@ -1329,13 +1572,12 @@ export default function VoiceAgent({
                   )}
 
                   <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block px-1">
-                    {selectedMsg.mistakes && selectedMsg.mistakes.length > 0
-                      ? `Errors (${selectedMsg.mistakes.length})`
+                    {displayMsg.mistakes && displayMsg.mistakes.length > 0
+                      ? `Errors (${displayMsg.mistakes.length})`
                       : "Errors"}
                   </span>
 
-                  {!selectedMsg.mistakes ||
-                  selectedMsg.mistakes.length === 0 ? (
+                  {!displayMsg.mistakes || displayMsg.mistakes.length === 0 ? (
                     <div className="rounded-md border border-green-200 bg-green-50 p-2 flex items-start gap-1.5 animate-fadeIn">
                       <CheckCircle2 className="w-3 h-3 text-green-600 shrink-0 mt-0.5" />
                       <p className="text-[10px] text-green-700 leading-snug">
@@ -1343,7 +1585,7 @@ export default function VoiceAgent({
                       </p>
                     </div>
                   ) : (
-                    selectedMsg.mistakes.map((m, i) => {
+                    displayMsg.mistakes.map((m, i) => {
                       const map: Record<typeof m.type, FeedbackType> = {
                         Pronunciation: "pronunciation",
                         Grammar: "grammar",
@@ -1387,50 +1629,15 @@ export default function VoiceAgent({
                     })
                   )}
                 </>
-              ) : feedbacks.length === 0 ? (
+              ) : (
                 <div className="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
                   <CheckCircle2 className="w-7 h-7 text-gray-400" />
                   <p className="text-[10px] text-gray-500 leading-relaxed px-2">
                     {isConnected
-                      ? "Click any of your messages to see its feedback here."
+                      ? "Send a message to see feedback for your latest sentence here."
                       : "Connect to see real-time English corrections"}
                   </p>
                 </div>
-              ) : (
-                <>
-                  <p className="text-[9px] text-gray-500 italic px-1">
-                    Click any of your messages above to see its feedback. Recent
-                    automatic corrections:
-                  </p>
-                  {feedbacks.map((fb) => {
-                    const meta = FEEDBACK_ICON[fb.type];
-                    const Icon = meta.icon;
-                    return (
-                      <div
-                        key={fb.id}
-                        className={`rounded-md border p-2 ${meta.bg} animate-fadeIn`}
-                      >
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}
-                          >
-                            {meta.label}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-red-500 opacity-75 line-through mb-0.5 leading-snug">
-                          {fb.original}
-                        </p>
-                        <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">
-                          {fb.corrected}
-                        </p>
-                        <p className="text-[9px] text-gray-700 leading-relaxed">
-                          {fb.explanation}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </>
               )}
             </div>
           </div>
@@ -1496,6 +1703,126 @@ export default function VoiceAgent({
                   <p className="text-gray-400 text-xs">
                     Conversation transcript will appear here
                   </p>
+                </div>
+              </div>
+            )}
+
+            {showSessionSummary && sessionSummary && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center px-4 animate-fadeIn"
+                role="dialog"
+                aria-modal="true"
+              >
+                <div
+                  className="absolute inset-0 bg-black/30"
+                  onClick={() => setSummaryDismissed(true)}
+                />
+                <div className="relative w-full max-w-md rounded-xl border border-violet-200 bg-linear-to-br from-violet-50 via-white to-blue-50 shadow-2xl p-4">
+                  <button
+                    type="button"
+                    onClick={() => setSummaryDismissed(true)}
+                    className="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-start justify-between gap-3 mb-3 pr-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-full bg-violet-100 border border-violet-200 flex items-center justify-center">
+                        <Trophy className="w-5 h-5 text-violet-700" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900">
+                          Session summary
+                        </h3>
+                        <p className="text-[11px] text-gray-500">
+                          {sessionSummary.sentenceCount} sentence
+                          {sessionSummary.sentenceCount > 1 ? "s" : ""} • {sessionSummary.totalErrors} total error{sessionSummary.totalErrors === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSummaryDismissed(true);
+                        startNewSession();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      New session
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {(
+                      [
+                        ["Overall", sessionSummary.scores.overall],
+                        ["Pronunc.", sessionSummary.scores.pronunciation],
+                        ["Fluency", sessionSummary.scores.fluency],
+                        ["Accuracy", sessionSummary.scores.accuracy],
+                      ] as const
+                    ).map(([label, val]) => {
+                      const color =
+                        val >= 85
+                          ? "text-green-600"
+                          : val >= 70
+                            ? "text-yellow-600"
+                            : "text-orange-600";
+                      return (
+                        <div
+                          key={label}
+                          className="va-stat-card rounded-md bg-white border border-gray-200 px-2 py-1.5 text-center"
+                        >
+                          <div
+                            className={`va-stat-value text-lg font-bold tabular-nums ${color}`}
+                          >
+                            {val}
+                          </div>
+                          <div className="va-stat-label text-[9px] uppercase tracking-wider text-gray-500">
+                            {label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {sessionSummary.topErrors.length > 0 && (
+                    <div className="mb-3">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1.5">
+                        Top error types
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sessionSummary.topErrors.map(([type, count]) => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200"
+                          >
+                            {type}
+                            <span className="text-red-500/80">×{count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1.5 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-violet-600" />
+                      Practice tips
+                    </div>
+                    <ul className="space-y-1">
+                      {sessionSummary.tips.map((t, i) => (
+                        <li
+                          key={i}
+                          className="text-[11px] text-gray-700 leading-snug pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-violet-500"
+                        >
+                          {t}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}
@@ -1703,7 +2030,7 @@ export default function VoiceAgent({
                   }}
                   className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
                     topic === t.id
-                      ? "bg-blue-100 border border-blue-300 text-blue-200"
+                      ? "bg-blue-100 border border-blue-300 text-blue-700"
                       : "text-gray-600 hover:bg-gray-100 border border-transparent"
                   }`}
                 >

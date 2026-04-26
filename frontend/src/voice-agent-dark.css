@@ -46,7 +46,33 @@
 [data-va=root].va-dark .text-purple-600 { color: #c084fc !important; }
 [data-va=root].va-dark .bg-gradient-to-b,
 [data-va=root].va-dark .bg-linear-to-b { background: #0c1220 !important; }
+[data-va=root].va-dark .bg-linear-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)) !important; }
+
+/* Ensure gradient stop utilities used by Agent/User cards become dark in dark mode */
+[data-va=root].va-dark .from-blue-50 { --tw-gradient-from: #0f2436 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(7,16,32,0.6)) !important; }
+[data-va=root].va-dark .to-indigo-50 { --tw-gradient-to: #071027 !important; }
+[data-va=root].va-dark .from-violet-50 { --tw-gradient-from: #271631 !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(17,8,20,0.6)) !important; }
+[data-va=root].va-dark .to-purple-50 { --tw-gradient-to: #130b1a !important; }
 [data-va=root].va-dark [data-score-suffix] { color: rgba(255,255,255,0.35) !important; }
 [data-va=root].va-dark [data-replay-btn] { border-color: rgba(255,255,255,0.15) !important; background: rgba(255,255,255,0.06) !important; color: rgba(255,255,255,0.45) !important; }
 [data-va=root].va-dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 [data-va=root].va-dark [data-va=conv-header] { background: #0d1117 !important; border-color: rgba(255,255,255,0.08) !important; }
+
+/* Session summary specific dark adjustments */
+[data-va=root].va-dark .bg-linear-to-br { background: linear-gradient(135deg,#0b1220 0%, #0d1320 50%, #121216 100%) !important; }
+[data-va=root].va-dark .to-blue-50 { --tw-gradient-to: #071026 !important; }
+
+[data-va=root].va-dark .va-stat-card {
+	background: #0f1724 !important;
+	border-color: rgba(255,255,255,0.06) !important;
+	box-shadow: none !important;
+}
+
+[data-va=root].va-dark .va-stat-card .va-stat-value.text-green-600 { color: #4ade80 !important; }
+[data-va=root].va-dark .va-stat-card .va-stat-value.text-yellow-600 { color: #fbbf24 !important; }
+[data-va=root].va-dark .va-stat-card .va-stat-value.text-orange-600 { color: #fb923c !important; }
+
+[data-va=root].va-dark .va-stat-card .va-stat-label { color: #94a3b8 !important; }
+
+[data-va=root].va-dark .va-stat-card .text-lg { font-weight: 700; }
+
