@@ -311,7 +311,12 @@ export default function VoiceAgent({
   const [selectedMic, setSelectedMic] = useState(MICROPHONES[0]);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const initialMessagesAndId = (() => {
+  // Computed once via useMemo with empty deps — this hits localStorage and
+  // parses URL params, so we don't want to redo it on every render. Empty
+  // deps guarantee a single computation and a stable identity across all
+  // renders, so any code that closes over it (like the topic-init effect
+  // below) sees the exact same object that initialised state.
+  const initialMessagesAndId = useMemo(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const sid = params.get("session");
@@ -339,7 +344,8 @@ export default function VoiceAgent({
       sessionId: null as string | null,
       topic: null as TopicId | null,
     };
-  })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [messages, setMessages] = useState<Message[]>(
     initialMessagesAndId.messages,
   );
@@ -993,15 +999,34 @@ export default function VoiceAgent({
         );
         return false;
       }
+      // If we already hold a stream with at least one live track, reuse it
+      // instead of re-prompting. Otherwise stop any dead/old tracks first
+      // so the OS-level "mic in use" indicator goes away cleanly.
+      const existing = mediaStreamRef.current;
+      if (existing) {
+        const hasLiveTrack = existing
+          .getTracks()
+          .some((t) => t.readyState === "live");
+        if (hasLiveTrack) return true;
+        existing.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      }
       try {
         const probe = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
-        // Reuse this stream so we don't double-prompt.
-        if (!mediaStreamRef.current) {
-          mediaStreamRef.current = probe;
-        } else {
+        // Same liveness check on whatever we got: if a concurrent caller
+        // already populated the ref while we awaited, prefer that and stop
+        // our own probe to avoid leaving a second mic stream open.
+        if (
+          mediaStreamRef.current &&
+          mediaStreamRef.current
+            .getTracks()
+            .some((t) => t.readyState === "live")
+        ) {
           probe.getTracks().forEach((t) => t.stop());
+        } else {
+          mediaStreamRef.current = probe;
         }
         return true;
       } catch (err) {
