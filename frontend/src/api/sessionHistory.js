@@ -171,23 +171,52 @@ export function saveSession(session) {
   const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
 
-  // Fast path: try a fully synchronous write first. This is the >99% case
-  // (no quota issues) and is critical for tab-close scenarios — `beforeunload`
-  // and `visibilitychange(hidden)` won't wait for any async retry chain to
-  // resolve, so we MUST commit synchronously before returning whenever we
-  // can. If this succeeds, durability is guaranteed even if the tab dies
-  // immediately afterwards.
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    return entry;
-  } catch {
-    // Quota hit — fall back to the async write queue which can yield to
-    // the browser between binary-shrink retries. This branch may not
-    // complete if the tab closes mid-retry, but the synchronous fast path
-    // would also have failed in that case, so we're no worse off.
-    void scheduleWrite(next);
-    return entry;
+  // Fast path: attempt a fully synchronous write using the same staged-shrink
+  // strategy as `writeSessions`, but without any async yields. This is critical
+  // for `beforeunload` / `visibilitychange(hidden)` callers — the browser will
+  // not wait for any promise to settle after those events fire, so we MUST
+  // commit synchronously. The previous approach fell back to async scheduleWrite
+  // on the first QuotaExceededError, meaning data was silently lost whenever
+  // the tab closed while over quota.
+  const syncStages = [
+    (arr) => arr,
+    (arr) =>
+      arr.map((s) => ({
+        ...s,
+        messages: Array.isArray(s.messages)
+          ? s.messages.map(trimMessage)
+          : s.messages,
+      })),
+    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
+    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
+    (arr) => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
+  ];
+
+  for (let i = 0; i < syncStages.length; i++) {
+    const attempt = syncStages[i](next);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(attempt));
+      if (i > 0 && typeof console !== "undefined") {
+        console.warn(
+          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} sync shrink(s).`,
+        );
+      }
+      return entry;
+    } catch {
+      // Try the next (smaller) stage.
+    }
   }
+
+  // All synchronous stages failed (extremely full storage). Fall back to the
+  // async write queue which can yield between retries, but acknowledge that
+  // this write may not complete if the tab closes immediately afterwards.
+  if (typeof console !== "undefined") {
+    console.warn(
+      "[sessionHistory] all sync shrink stages failed — falling back to async write queue.",
+    );
+  }
+  void scheduleWrite(next);
+  return entry;
 }
 
 export function clearSessions() {
