@@ -1193,6 +1193,11 @@ export default function VoiceAgent({
   topicRef.current = topic;
   const customTopicLabelRef = useRef(customTopicLabel);
   customTopicLabelRef.current = customTopicLabel;
+  // Same pattern for `status` so handleConnect can read the latest committed
+  // status from a ref instead of a closure — eliminates the rapid-click race
+  // where two clicks dispatched in the same tick both see the previous value.
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   const persistSession = useCallback(() => {
     const currentMessages = messagesRef.current;
@@ -1251,7 +1256,18 @@ export default function VoiceAgent({
   }, [clearTimers, clearLocalAudioUrls]);
 
   const handleConnect = useCallback(() => {
-    if (status === "connected") {
+    // Read status from a ref so rapid clicks within a single event-loop
+    // tick (before React commits the next render) always see the very
+    // latest committed status — never a stale closure value.
+    const currentStatus = statusRef.current;
+    if (currentStatus === "connected") {
+      // Bump the version FIRST so any in-flight `connecting → connected`
+      // setTimeout from a prior handleConnect call is immediately
+      // invalidated by its own version-check guard. clearTimers() also
+      // cancels them, but bumping the version is belt-and-suspenders
+      // against a callback that already fired and is waiting in the
+      // microtask queue.
+      ++sessionVersionRef.current;
       window.speechSynthesis?.cancel();
       ttsActiveRef.current = false;
       setSummaryDismissed(false);
@@ -1264,7 +1280,7 @@ export default function VoiceAgent({
       persistSession();
       return;
     }
-    if (status === "disconnected") {
+    if (currentStatus === "disconnected") {
       setSummaryDismissed(true);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
@@ -1284,7 +1300,6 @@ export default function VoiceAgent({
       timersRef.current.push(t0);
     }
   }, [
-    status,
     clearTimers,
     persistSession,
     sessionSummary,
