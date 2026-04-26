@@ -7,6 +7,9 @@ import {
   getSessions,
   formatDuration,
   deleteSession,
+  getStorageUsage,
+  formatBytes,
+  pruneOldestSessions,
 } from "../api/sessionHistory";
 import { clearAuthSession, getAuthSession } from "../auth/tokenStorage";
 
@@ -553,6 +556,86 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
   );
 }
 
+function StorageUsageBar({ tick, onCleanup }) {
+  const usage = useMemo(() => getStorageUsage(), [tick]);
+  const [confirming, setConfirming] = useState(false);
+
+  if (usage.sessionCount === 0) return null;
+
+  const isCritical = usage.percent >= 80;
+  const isWarning = usage.percent >= 50 && usage.percent < 80;
+  const barColor = isCritical
+    ? "bg-red-500"
+    : isWarning
+      ? "bg-amber-500"
+      : "bg-emerald-500";
+  const cardBorder = isCritical
+    ? "border-red-200 bg-red-50/50"
+    : isWarning
+      ? "border-amber-200 bg-amber-50/50"
+      : "border-gray-200 bg-white";
+
+  const handlePrune = () => {
+    if (!confirming) {
+      setConfirming(true);
+      window.setTimeout(() => setConfirming(false), 4000);
+      return;
+    }
+    pruneOldestSessions(0.5);
+    setConfirming(false);
+    onCleanup?.();
+  };
+
+  return (
+    <div
+      className={`mb-10 rounded-xl border ${cardBorder} px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors`}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-3 mb-1.5">
+          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            {isCritical
+              ? "⚠ Storage almost full"
+              : isWarning
+                ? "Storage usage"
+                : "Storage usage"}
+          </span>
+          <span className="text-xs text-gray-500 tabular-nums">
+            {formatBytes(usage.bytes)} • {usage.sessionCount}/{usage.max}{" "}
+            sessions
+          </span>
+        </div>
+        <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+          <div
+            className={`h-full ${barColor} transition-all duration-500`}
+            style={{ width: `${Math.max(2, usage.percent)}%` }}
+          />
+        </div>
+        {isCritical && (
+          <p className="text-[11px] text-red-600 mt-1.5">
+            New sessions may start dropping audio or older history. Clean up to
+            free space.
+          </p>
+        )}
+      </div>
+      {usage.sessionCount > 1 && (
+        <button
+          type="button"
+          onClick={handlePrune}
+          className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+            confirming
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          {confirming
+            ? `Confirm: remove oldest ${Math.floor(usage.sessionCount / 2)}?`
+            : "Clean up old sessions"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage({ demoMode = false }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -791,7 +874,7 @@ export default function DashboardPage({ demoMode = false }) {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
           <StatCard
             icon="🎙️"
             label="Total sessions"
@@ -817,6 +900,12 @@ export default function DashboardPage({ demoMode = false }) {
             sub="keep it up!"
           />
         </div>
+
+        <StorageUsageBar
+          tick={historyTick}
+          onCleanup={() => setHistoryTick((t) => t + 1)}
+        />
+
 
         {/* Choose a topic */}
         <section className="mb-10">
