@@ -1162,9 +1162,10 @@ export default function VoiceAgent({
   ]);
 
   const persistSessionRef = useRef(persistSession);
-  useEffect(() => {
-    persistSessionRef.current = persistSession;
-  }, [persistSession]);
+  // Update synchronously during render so the ref always points at the
+  // latest closure (no race between a state change and an effect firing
+  // before a rapid unmount or visibility change).
+  persistSessionRef.current = persistSession;
 
   useEffect(() => {
     const onHide = () => {
@@ -1172,12 +1173,14 @@ export default function VoiceAgent({
         persistSessionRef.current?.();
       } catch {}
     };
-    window.addEventListener("beforeunload", onHide);
-    document.addEventListener("visibilitychange", () => {
+    const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") onHide();
-    });
+    };
+    window.addEventListener("beforeunload", onHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.removeEventListener("beforeunload", onHide);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
@@ -1271,7 +1274,15 @@ export default function VoiceAgent({
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        navigate("/dashboard");
+                        const hadMessages = messages.length > 0;
+                        if (hadMessages) {
+                          persistSession();
+                        }
+                        navigate("/dashboard", {
+                          state: hadMessages
+                            ? { highlightSessionId: sessionIdRef.current }
+                            : undefined,
+                        });
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
                     >
@@ -1742,17 +1753,32 @@ export default function VoiceAgent({
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSummaryDismissed(true);
-                        startNewSession();
-                      }}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      New session
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          persistSession();
+                          navigate("/dashboard", {
+                            state: { highlightSessionId: sessionIdRef.current },
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-violet-700 bg-white border border-violet-300 hover:bg-violet-50 transition-colors"
+                      >
+                        <span>📊</span>
+                        View on Dashboard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSummaryDismissed(true);
+                          startNewSession();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        New session
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-4 gap-2 mb-3">
