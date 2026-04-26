@@ -428,6 +428,11 @@ export default function VoiceAgent({
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Bumped every time we (re)start a connection. Pending timers compare
+  // against this and bail out if a newer session has been started, so
+  // rapid clicks on "New session" / Connect can never let a stale timer
+  // overwrite the current status / typing state.
+  const sessionVersionRef = useRef(0);
   const msgCounterRef = useRef(
     Math.max(
       100,
@@ -968,13 +973,54 @@ export default function VoiceAgent({
       window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
       alert(
-        "Trình duyệt không hỗ trợ nhận dạng giọng nói. Dùng Chrome hoặc Edge.",
+        "Trình duyệt không hỗ trợ nhận dạng giọng nói. Hãy dùng Chrome hoặc Edge trên máy tính.",
       );
       setMicEnabled(false);
       return;
     }
 
     let stopped = false;
+    let consecutiveErrors = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Pre-flight check: make sure we actually have mic permission in this
+    // browsing context. Inside cross-origin iframes (e.g. previews embedded
+    // in another site) the Speech API often fails silently without this.
+    const ensureMicPermission = async (): Promise<boolean> => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        alert(
+          "Trình duyệt này không hỗ trợ truy cập micro (cần HTTPS và Chrome/Edge mới).",
+        );
+        return false;
+      }
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        // Reuse this stream so we don't double-prompt.
+        if (!mediaStreamRef.current) {
+          mediaStreamRef.current = probe;
+        } else {
+          probe.getTracks().forEach((t) => t.stop());
+        }
+        return true;
+      } catch (err) {
+        const name = (err as { name?: string })?.name || "";
+        console.error("[VoiceAgent] getUserMedia failed:", err);
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          alert(
+            "Trình duyệt chặn micro. Nếu bạn đang xem app trong khung xem trước, hãy mở app ở tab mới rồi cho phép micro.",
+          );
+        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+          alert("Không tìm thấy thiết bị micro. Hãy cắm micro hoặc chọn thiết bị khác.");
+        } else if (name === "NotReadableError") {
+          alert("Micro đang bị app khác chiếm dụng. Đóng các app dùng micro khác rồi thử lại.");
+        } else {
+          alert("Không thể truy cập micro: " + (name || "lỗi không xác định"));
+        }
+        return false;
+      }
+    };
 
     function startListening() {
       if (stopped) return;
@@ -996,6 +1042,7 @@ export default function VoiceAgent({
       let hasSentFinal = false;
 
       recognition.onstart = () => {
+        consecutiveErrors = 0;
         setIsRecording(true);
         void startUserAudioCapture();
       };
@@ -1020,12 +1067,23 @@ export default function VoiceAgent({
 
       recognition.onerror = (event: Event) => {
         const err = (event as { error?: string }).error || "";
-        if (err === "not-allowed") {
+        // Always log so we can diagnose silent failures.
+        console.warn("[VoiceAgent] SpeechRecognition error:", err);
+        if (err === "not-allowed" || err === "service-not-allowed") {
           stopped = true;
           setMicEnabled(false);
           alert(
-            "Trình duyệt chặn micro. Hãy cho phép quyền micro trong thanh địa chỉ.",
+            "Trình duyệt chặn micro hoặc dịch vụ nhận dạng giọng nói. Nếu đang xem trong khung preview, hãy mở app ở tab mới và cho phép micro.",
           );
+        } else if (err === "audio-capture") {
+          stopped = true;
+          setMicEnabled(false);
+          alert("Không bắt được tín hiệu từ micro. Kiểm tra lại thiết bị thu âm.");
+        } else if (err === "network") {
+          // Speech API needs network for some engines; back off harder.
+          consecutiveErrors += 3;
+        } else if (err !== "no-speech" && err !== "aborted") {
+          consecutiveErrors += 1;
         }
         setIsRecording(false);
         void stopUserAudioCapture();
@@ -1034,19 +1092,43 @@ export default function VoiceAgent({
       recognition.onend = () => {
         setIsRecording(false);
         void stopUserAudioCapture();
-        // auto restart after brief pause
-        setTimeout(() => {
+        if (stopped) return;
+        // If we keep failing back-to-back, stop trying so we don't burn CPU
+        // in an infinite restart loop.
+        if (consecutiveErrors >= 4) {
+          stopped = true;
+          setMicEnabled(false);
+          console.error(
+            "[VoiceAgent] giving up after repeated SpeechRecognition errors",
+          );
+          alert(
+            "Nhận dạng giọng nói liên tục lỗi. Hãy thử mở app ở tab mới (Chrome/Edge) và cấp quyền micro.",
+          );
+          return;
+        }
+        // Back off a bit more on each error to be polite to the engine.
+        const delay = 200 + consecutiveErrors * 400;
+        restartTimer = setTimeout(() => {
           if (!stopped) startListening();
-        }, 200);
+        }, delay);
       };
 
-      recognition.start();
+      try {
+        recognition.start();
+      } catch (err) {
+        // start() throws if called while already started — log and let onend
+        // handle the restart cycle.
+        console.warn("[VoiceAgent] recognition.start() threw:", err);
+      }
     }
 
-    startListening();
+    void ensureMicPermission().then((ok) => {
+      if (ok && !stopped) startListening();
+    });
 
     return () => {
       stopped = true;
+      if (restartTimer) clearTimeout(restartTimer);
       recognitionRef.current?.stop();
       recognitionRef.current = null;
       setIsRecording(false);
@@ -1101,18 +1183,23 @@ export default function VoiceAgent({
   const startNewSession = useCallback(() => {
     window.speechSynthesis?.cancel();
     ttsActiveRef.current = false;
+    // Cancel any in-flight connect timers from a previous startNewSession /
+    // handleConnect call so they can't fire after we've moved on.
+    clearTimers();
+    const myVersion = ++sessionVersionRef.current;
     setMessages([]);
     setExpandedMsgId(null);
     setSummaryDismissed(false);
     clearLocalAudioUrls();
     setFeedbacks([]);
     autoFeedbackIndexRef.current = 0;
-    clearTimers();
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
     setStatus("connecting");
 
     const t0 = setTimeout(() => {
+      // Bail out if a newer session/connect has superseded this one.
+      if (sessionVersionRef.current !== myVersion) return;
       setStatus("connected");
       setAgentTyping(false);
       setAgentSpeaking(false);
@@ -1139,12 +1226,14 @@ export default function VoiceAgent({
       setSummaryDismissed(true);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
+      const myVersion = ++sessionVersionRef.current;
       if (sessionStartRef.current === null) {
         sessionStartRef.current = Date.now();
       }
       setStatus("connecting");
 
       const t0 = setTimeout(() => {
+        if (sessionVersionRef.current !== myVersion) return;
         setStatus("connected");
         setAgentTyping(false);
         setAgentSpeaking(false);
