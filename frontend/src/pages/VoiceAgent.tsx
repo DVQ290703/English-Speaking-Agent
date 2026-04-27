@@ -1,6 +1,7 @@
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
   useMemo,
@@ -461,16 +462,27 @@ export default function VoiceAgent({
   // overwrite the current status / typing state.
   const sessionVersionRef = useRef(0);
   const msgCounterRef = useRef(
-    Math.max(
-      100,
-      ...initialMessagesAndId.messages.map((m) =>
-        typeof m.id === "number" ? m.id : 0,
-      ),
-    ) + 1,
+    (() => {
+      // Math.max(...spread) returns -Infinity on an empty array and silently
+      // ignores non-numeric IDs mapped to 0, which could produce a counter
+      // lower than an existing string-form ID. Use reduce instead so we can
+      // explicitly skip non-finite values and always start above every
+      // existing message ID regardless of its original type.
+      const maxId = initialMessagesAndId.messages.reduce((max, m) => {
+        const id = typeof m.id === "number" ? m.id : Number(m.id);
+        return Number.isFinite(id) && id > 0 ? Math.max(max, id) : max;
+      }, 100);
+      return maxId + 1;
+    })(),
   );
   const feedbackCounterRef = useRef(200);
   const autoFeedbackIndexRef = useRef(0);
+  const micPermissionInFlightRef = useRef<Promise<boolean> | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+  // Guards against double-saving the same session when both visibilitychange
+  // and the unmount cleanup fire in rapid succession (e.g. tab close on
+  // mobile). Reset to false at the start of every new session.
+  const hasSavedCurrentSessionRef = useRef(false);
   const ttsActiveRef = useRef(false);
   const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
@@ -519,15 +531,20 @@ export default function VoiceAgent({
     }
   }, []);
 
+  // Keep a stable ref so the devicechange listener is registered exactly once
+  // with an empty-deps effect (same pattern as persistSessionRef). This makes
+  // the listener lifetime explicit and avoids any risk of stale closures or
+  // duplicate registrations if refreshMicDevices identity ever changes.
+  const refreshMicDevicesRef = useRef(refreshMicDevices);
+  refreshMicDevicesRef.current = refreshMicDevices;
+
   useEffect(() => {
-    void refreshMicDevices();
-    navigator.mediaDevices?.addEventListener("devicechange", refreshMicDevices);
+    void refreshMicDevicesRef.current();
+    const handler = () => void refreshMicDevicesRef.current();
+    navigator.mediaDevices?.addEventListener("devicechange", handler);
     return () =>
-      navigator.mediaDevices?.removeEventListener(
-        "devicechange",
-        refreshMicDevices,
-      );
-  }, [refreshMicDevices]);
+      navigator.mediaDevices?.removeEventListener("devicechange", handler);
+  }, []); // [] — stable handler, registered exactly once for the component lifetime
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1056,10 +1073,10 @@ export default function VoiceAgent({
     // Pre-flight check: make sure we actually have mic permission in this
     // browsing context. Inside cross-origin iframes (e.g. previews embedded
     // in another site) the Speech API often fails silently without this.
-    const ensureMicPermission = async (): Promise<boolean> => {
+    const ensureMicPermission = (): Promise<boolean> => {
       if (!navigator.mediaDevices?.getUserMedia) {
         alert(t("va.alert.noMicAPI"));
-        return false;
+        return Promise.resolve(false);
       }
       // If we already hold a stream with at least one live track, reuse it
       // instead of re-prompting. Otherwise stop any dead/old tracks first
@@ -1068,60 +1085,84 @@ export default function VoiceAgent({
       if (existing) {
         const hasLiveTrack = existing
           .getTracks()
-          .some((t) => t.readyState === "live");
-        if (hasLiveTrack) return true;
-        existing.getTracks().forEach((t) => t.stop());
+          .some((tr) => tr.readyState === "live");
+        if (hasLiveTrack) return Promise.resolve(true);
+        existing.getTracks().forEach((tr) => tr.stop());
         mediaStreamRef.current = null;
       }
-      try {
-        const deviceId = selectedMicIdRef.current;
-        const probe = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 48000,
-            channelCount: 1,
-          },
-        });
-        // Re-enumerate after a successful grant so device labels
-        // (empty strings before permission) get populated in the UI.
-        void refreshMicDevices();
-        // If a concurrent caller already populated the ref while we awaited,
-        // prefer that stream and stop our probe to avoid a second open stream.
-        if (
-          mediaStreamRef.current &&
-          mediaStreamRef.current
-            .getTracks()
-            .some((t) => t.readyState === "live")
-        ) {
-          probe.getTracks().forEach((t) => t.stop());
-        } else {
-          mediaStreamRef.current = probe;
-        }
-        return true;
-      } catch (err) {
-        const name = (err as { name?: string })?.name || "";
-        console.error("[VoiceAgent] getUserMedia failed:", err);
-        if (name === "NotAllowedError" || name === "SecurityError") {
-          alert(t("va.alert.micBlockedPreview"));
-        } else if (
-          name === "NotFoundError" ||
-          name === "OverconstrainedError"
-        ) {
-          alert(t("va.alert.micNotFound"));
-        } else if (name === "NotReadableError") {
-          alert(t("va.alert.micBusy"));
-        } else {
-          alert(
-            t("va.alert.micGeneric", {
-              detail: name || t("va.alert.unknownError"),
-            }),
-          );
-        }
-        return false;
+
+      // If a concurrent call is already waiting for getUserMedia, share its
+      // promise instead of opening a second hardware stream in parallel.
+      // This eliminates the race where two callers both pass the live-track
+      // check above before either has received a stream from the OS.
+      if (micPermissionInFlightRef.current) {
+        return micPermissionInFlightRef.current;
       }
+
+      const p = (async (): Promise<boolean> => {
+        try {
+          const deviceId = selectedMicIdRef.current;
+          const probe = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 48000,
+              channelCount: 1,
+            },
+          });
+          // If the session was stopped while we were awaiting (e.g. user
+          // clicked Disconnect during the OS permission prompt), discard the
+          // probe immediately so the hardware indicator turns off cleanly.
+          if (stopped) {
+            probe.getTracks().forEach((tr) => tr.stop());
+            return false;
+          }
+          // Re-enumerate after a successful grant so device labels
+          // (empty strings before permission) get populated in the UI.
+          void refreshMicDevicesRef.current();
+          // If a concurrent caller already populated the ref while we
+          // awaited, prefer that stream to avoid leaving two streams open.
+          if (
+            mediaStreamRef.current &&
+            mediaStreamRef.current
+              .getTracks()
+              .some((tr) => tr.readyState === "live")
+          ) {
+            probe.getTracks().forEach((tr) => tr.stop());
+          } else {
+            mediaStreamRef.current = probe;
+          }
+          return true;
+        } catch (err) {
+          const name = (err as { name?: string })?.name || "";
+          console.error("[VoiceAgent] getUserMedia failed:", err);
+          if (name === "NotAllowedError" || name === "SecurityError") {
+            alert(t("va.alert.micBlockedPreview"));
+          } else if (
+            name === "NotFoundError" ||
+            name === "OverconstrainedError"
+          ) {
+            alert(t("va.alert.micNotFound"));
+          } else if (name === "NotReadableError") {
+            alert(t("va.alert.micBusy"));
+          } else {
+            alert(
+              t("va.alert.micGeneric", {
+                detail: name || t("va.alert.unknownError"),
+              }),
+            );
+          }
+          return false;
+        } finally {
+          // Always release the lock so future calls can proceed normally.
+          micPermissionInFlightRef.current = null;
+        }
+      })();
+
+      micPermissionInFlightRef.current = p;
+      return p;
     };
 
     function startListening() {
@@ -1238,7 +1279,6 @@ export default function VoiceAgent({
     micEnabled,
     language,
     selectedMicId,
-    refreshMicDevices,
     sendChatMessage,
     startUserAudioCapture,
     stopUserAudioCapture,
@@ -1256,18 +1296,23 @@ export default function VoiceAgent({
     [chatInput, status, agentTyping, sendChatMessage],
   );
 
-  // Mirror the values persistSession needs into refs that update synchronously
-  // during render. This way persistSession itself can be stable (no deps) and
-  // window event handlers / cleanup callbacks always see the latest committed
-  // values — no closure can ever go stale, even on rapid disconnects.
+  // Mirror the values persistSession needs into refs. Using useLayoutEffect
+  // instead of bare render-body assignments ensures these refs are only
+  // updated when React actually commits the render to the DOM. In Concurrent
+  // Mode, React can render a component multiple times without committing
+  // (e.g. for priority-based preemption); bare assignments would leave refs
+  // holding values from an abandoned, never-committed render, which could
+  // cause persistSession to save stale data.
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
   const sessionSummaryRef = useRef(sessionSummary);
-  sessionSummaryRef.current = sessionSummary;
   const topicRef = useRef(topic);
-  topicRef.current = topic;
   const customTopicLabelRef = useRef(customTopicLabel);
-  customTopicLabelRef.current = customTopicLabel;
+  useLayoutEffect(() => {
+    messagesRef.current = messages;
+    sessionSummaryRef.current = sessionSummary;
+    topicRef.current = topic;
+    customTopicLabelRef.current = customTopicLabel;
+  }, [messages, sessionSummary, topic, customTopicLabel]);
   // ---------------------------------------------------------------------------
   // statusRef + setStatusSync
   // ---------------------------------------------------------------------------
@@ -1288,8 +1333,10 @@ export default function VoiceAgent({
   }, []); // stable: closes only over refs and the React state setter (both stable)
 
   const persistSession = useCallback(() => {
+    if (hasSavedCurrentSessionRef.current) return;
     const currentMessages = messagesRef.current;
     if (!currentMessages.length) return;
+    hasSavedCurrentSessionRef.current = true;
     const currentSummary = sessionSummaryRef.current;
     const currentTopic = topicRef.current;
     const currentCustomTopicLabel = customTopicLabelRef.current;
@@ -1318,6 +1365,8 @@ export default function VoiceAgent({
   const startNewSession = useCallback(() => {
     window.speechSynthesis?.cancel();
     ttsActiveRef.current = false;
+    // Allow the new session to be persisted when the time comes.
+    hasSavedCurrentSessionRef.current = false;
     // Cancel any in-flight connect timers from a previous startNewSession /
     // handleConnect call so they can't fire after we've moved on.
     clearTimers();
@@ -1372,6 +1421,8 @@ export default function VoiceAgent({
       setSummaryDismissed(true);
       autoFeedbackIndexRef.current = 0;
       clearTimers();
+      // Allow the upcoming session to be persisted when it ends.
+      hasSavedCurrentSessionRef.current = false;
       const myVersion = ++sessionVersionRef.current;
       if (sessionStartRef.current === null) {
         sessionStartRef.current = Date.now();
