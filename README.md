@@ -62,6 +62,7 @@ cp .env.example .env
 
 Required values for local development:
 
+- `APP_ENV`
 - `JWT_SECRET_KEY`
 - `POSTGRES_DB`
 - `POSTGRES_USER`
@@ -71,12 +72,15 @@ Required values for local development:
 - `GROQ_API_KEY`
 - `ELEVENLABS_API_KEY`
 - `ELEVENLABS_VOICE_ID`
+- `ELEVENLABS_VOICE_ID_male`
+- `ELEVENLABS_VOICE_ID_female`
 - `ELEVENLABS_MODEL_ID`
+- `VITE_API_BASE_URL`
 
 Optional if you use pronunciation assessment:
 
-- `AZURE_SUBSCRIPTION_ID`
-- `AZURE_SERVICE_REGION`
+- `AZURE_SPEECH_KEY`
+- `AZURE_SPEECH_REGION`
 
 Security notes:
 
@@ -108,13 +112,13 @@ Expected services:
 PowerShell:
 
 ```powershell
-Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
+Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U admin -d voice_agent
 ```
 
 Git Bash:
 
 ```bash
-docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent < db_schema/seed.sql
+docker exec -i voice_agent_postgres psql -U admin -d voice_agent < db_schema/seed.sql
 ```
 
 Seeded demo users:
@@ -145,7 +149,7 @@ Expected:
 Database quick check:
 
 ```bash
-docker exec -it voice_agent_postgres psql -U voice_user -d voice_agent -c "SELECT email, length(password_hash) FROM users ORDER BY email;"
+docker exec -it voice_agent_postgres psql -U admin -d voice_agent -c "SELECT email, length(password_hash) FROM users ORDER BY email;"
 ```
 
 ## 7. Run the frontend locally
@@ -243,17 +247,27 @@ docker compose down
 
 Reset database volume and reseed:
 
+PowerShell:
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U admin -d voice_agent
+```
+
+Git Bash:
+
 ```bash
 docker compose down -v
 docker compose up -d --build
-Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U voice_user -d voice_agent
+docker exec -i voice_agent_postgres psql -U admin -d voice_agent < db_schema/seed.sql
 ```
 
 ## 11. Optional pgAdmin
 
 - URL: `http://localhost:5050`
 - Email: `admin@local.dev`
-- Password: `admin123`
+- Password: value from `PGADMIN_DEFAULT_PASSWORD`
 - DB host inside Docker network: `postgres`
 
 ## 12. Optional MinIO console

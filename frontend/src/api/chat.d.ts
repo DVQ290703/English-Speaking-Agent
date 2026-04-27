@@ -4,6 +4,7 @@ export interface ChatRespondParams {
   audioBlob?: Blob;
   history?: Array<{ role: string; text: string }>;
   topic?: string;
+  voiceGender?: "Male" | "Female" | string;
 }
 
 export interface ChatRespondResult {

@@ -6,3 +6,4 @@ class AgentState(TypedDict):
     response_text: str
     audio_bytes: bytes   # raw MP3 bytes from TTS; empty on failure
     history: list[str]
+    voice_gender: str | None

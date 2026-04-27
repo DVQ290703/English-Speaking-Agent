@@ -944,6 +944,7 @@ export default function VoiceAgent({
             audioBlob,
             history: historyPayload,
             topic: TOPICS.find((item) => item.id === topic)?.label ?? topic,
+            voiceGender: gender,
           });
 
           const responseText =
