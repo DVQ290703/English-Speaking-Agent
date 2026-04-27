@@ -20,9 +20,17 @@ class AzureAssessmentService:
     Returns the raw NBest[0] dict from Azure augmented with 'mode' and 'display_text' keys.
     """
 
+    @staticmethod
+    def _first_env_value(*keys: str) -> str:
+        for key in keys:
+            value = os.getenv(key, "").strip()
+            if value:
+                return value
+        return ""
+
     def __init__(self, language: str = "en-US"):
-        self._key = os.getenv("AZURE_SPEECH_KEY", os.getenv("AZURE_SUBSCRIPTION_ID", "")).strip()
-        self._region = os.getenv("AZURE_SPEECH_REGION", os.getenv("AZURE_SERVICE_REGION", "")).strip()
+        self._key = self._first_env_value("AZURE_SPEECH_KEY", "AZURE_SUBSCRIPTION_ID")
+        self._region = self._first_env_value("AZURE_SPEECH_REGION", "AZURE_SERVICE_REGION")
         if not self._key:
             raise ValueError("AZURE_SPEECH_KEY is missing. Set it in your environment or .env file.")
         if not self._region:

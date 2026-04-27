@@ -162,6 +162,7 @@ Fields:
 - `text`: optional string
 - `history`: optional JSON-encoded array of prior messages
 - `topic`: optional topic label/code, max 80 chars
+- `voice_gender`: optional assistant voice selector, expected `Male` or `Female`
 - `audio_file`: optional uploaded audio
 - `conversation_id`: optional UUID to continue an existing conversation
 
@@ -193,7 +194,8 @@ Example with text:
 curl -X POST "http://127.0.0.1:8000/api/chat/respond" \
   -H "Authorization: Bearer <token>" \
   -F "text=Tell me about IELTS speaking" \
-  -F "topic=ielts1"
+  -F "topic=ielts1" \
+  -F "voice_gender=Female"
 ```
 
 Example with audio:

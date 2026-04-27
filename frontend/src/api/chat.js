@@ -1,6 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-export async function chatRespond({ token, text, audioBlob, history = [], topic = "" }) {
+export async function chatRespond({ token, text, audioBlob, history = [], topic = "", voiceGender = "" }) {
   const formData = new FormData();
 
   if (text && text.trim()) {
@@ -13,6 +13,10 @@ export async function chatRespond({ token, text, audioBlob, history = [], topic 
 
   if (topic && topic.trim()) {
     formData.append("topic", topic.trim());
+  }
+
+  if (voiceGender && voiceGender.trim()) {
+    formData.append("voice_gender", voiceGender.trim());
   }
 
   if (audioBlob) {

@@ -31,7 +31,10 @@ class VoiceAgentPipeline:
     def _tts_node(self, state: AgentState) -> AgentState:
         """Convert the generated reply into speech and store the raw bytes in state."""
         logger.debug("tts_node start text_length=%d", len(state["response_text"]))
-        audio_bytes = self.tts_service.convert_text_to_speech(state["response_text"])
+        audio_bytes = self.tts_service.convert_text_to_speech(
+            state["response_text"],
+            voice_gender=state.get("voice_gender"),
+        )
         logger.debug("tts_node done audio_bytes=%d", len(audio_bytes))
         return {**state, "audio_bytes": audio_bytes}
 
@@ -44,12 +47,18 @@ class VoiceAgentPipeline:
         graph.add_edge("tts", END)
         return graph.compile()
 
-    def run(self, user_input: str, history: list[str] | None = None) -> AgentState:
+    def run(
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        voice_gender: str | None = None,
+    ) -> AgentState:
         """Execute the pipeline for a single user message and return the final state."""
         initial_state: AgentState = {
             "user_input": user_input,
             "response_text": "",
             "audio_bytes": b"",
             "history": history or [],
+            "voice_gender": voice_gender,
         }
         return self.app.invoke(initial_state)
