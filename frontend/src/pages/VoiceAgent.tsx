@@ -183,13 +183,6 @@ const TOPICS = [
 ];
 type TopicId = (typeof TOPICS)[number]["id"];
 
-const MICROPHONES = [
-  "Microphone Array (AMD Audio Device)",
-  "USB Microphone",
-  "Built-in Microphone",
-  "External Microphone",
-];
-
 const LANGUAGE_CODES: Record<Language, string> = {
   English: "en-US",
   Vietnamese: "vi-VN",
@@ -326,7 +319,17 @@ export default function VoiceAgent({
     [setLang],
   );
   const [model, setModel] = useState<Model>("OpenAI GPT 5");
-  const [selectedMic, setSelectedMic] = useState(MICROPHONES[0]);
+
+  // Real mic devices enumerated from the browser — populated on mount and
+  // refreshed whenever the user plugs/unplugs hardware.
+  const [micDevices, setMicDevices] = useState<
+    { deviceId: string; label: string }[]
+  >([]);
+  // selectedMicId stores the real deviceId so getUserMedia can target it.
+  const [selectedMicId, setSelectedMicId] = useState<string>("");
+  // Stable ref so callbacks (e.g. startUserAudioCapture) always read the
+  // current deviceId without being recreated on every render.
+  const selectedMicIdRef = useRef<string>("");
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   // Computed once via useMemo with empty deps — this hits localStorage and
@@ -484,8 +487,47 @@ export default function VoiceAgent({
     languageRef.current = language;
   }, [language]);
   useEffect(() => {
+    selectedMicIdRef.current = selectedMicId;
+  }, [selectedMicId]);
+  useEffect(() => {
     if (initialUser) setCurrentUser(initialUser);
   }, [initialUser]);
+
+  // Enumerate real microphone devices and keep the list fresh whenever the
+  // user plugs/unplugs hardware. Device labels are empty strings until mic
+  // permission is granted, so we re-enumerate after a successful getUserMedia.
+  const refreshMicDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices
+        .filter((d) => d.kind === "audioinput")
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Microphone ${i + 1}`,
+        }));
+      setMicDevices(mics);
+      setSelectedMicId((prev) => {
+        const stillPresent = mics.some((m) => m.deviceId === prev);
+        if (stillPresent) return prev;
+        const first = mics[0]?.deviceId ?? "";
+        selectedMicIdRef.current = first;
+        return first;
+      });
+    } catch {
+      // enumerateDevices can throw in restricted contexts; ignore.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMicDevices();
+    navigator.mediaDevices?.addEventListener("devicechange", refreshMicDevices);
+    return () =>
+      navigator.mediaDevices?.removeEventListener(
+        "devicechange",
+        refreshMicDevices,
+      );
+  }, [refreshMicDevices]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -518,8 +560,16 @@ export default function VoiceAgent({
     }
 
     if (!mediaStreamRef.current) {
+      const deviceId = selectedMicIdRef.current;
       mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1,
+        },
       });
     }
 
@@ -984,6 +1034,13 @@ export default function VoiceAgent({
       return;
     }
 
+    // When the user switches mic, stop the current stream so ensureMicPermission
+    // opens a fresh one pointing at the newly selected device.
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+
     const SpeechRecognitionAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
@@ -1017,12 +1074,22 @@ export default function VoiceAgent({
         mediaStreamRef.current = null;
       }
       try {
+        const deviceId = selectedMicIdRef.current;
         const probe = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+          },
         });
-        // Same liveness check on whatever we got: if a concurrent caller
-        // already populated the ref while we awaited, prefer that and stop
-        // our own probe to avoid leaving a second mic stream open.
+        // Re-enumerate after a successful grant so device labels
+        // (empty strings before permission) get populated in the UI.
+        void refreshMicDevices();
+        // If a concurrent caller already populated the ref while we awaited,
+        // prefer that stream and stop our probe to avoid a second open stream.
         if (
           mediaStreamRef.current &&
           mediaStreamRef.current
@@ -1170,6 +1237,8 @@ export default function VoiceAgent({
     status,
     micEnabled,
     language,
+    selectedMicId,
+    refreshMicDevices,
     sendChatMessage,
     startUserAudioCapture,
     stopUserAudioCapture,
@@ -1610,9 +1679,22 @@ export default function VoiceAgent({
                     )}
                   </button>
                   <DeviceSelect
-                    value={selectedMic}
-                    options={MICROPHONES}
-                    onChange={setSelectedMic}
+                    value={
+                      micDevices.find((d) => d.deviceId === selectedMicId)
+                        ?.label ?? (micDevices[0]?.label || "Default Mic")
+                    }
+                    options={
+                      micDevices.length > 0
+                        ? micDevices.map((d) => d.label)
+                        : ["Default Mic"]
+                    }
+                    onChange={(label) => {
+                      const device = micDevices.find((d) => d.label === label);
+                      if (device) {
+                        setSelectedMicId(device.deviceId);
+                        selectedMicIdRef.current = device.deviceId;
+                      }
+                    }}
                   />
                 </div>
               </div>
