@@ -78,14 +78,24 @@ def _make_mock_sdk(reason: str = "RecognizedSpeech"):
 class TestAzureAssessmentServiceInit:
     def test_raises_when_key_missing(self, monkeypatch):
         monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
+        monkeypatch.delenv("AZURE_SUBSCRIPTION_ID", raising=False)
         with pytest.raises(ValueError, match="AZURE_SPEECH_KEY"):
             AzureAssessmentService()
 
     def test_raises_when_region_missing(self, monkeypatch):
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
         monkeypatch.delenv("AZURE_SPEECH_REGION", raising=False)
+        monkeypatch.delenv("AZURE_SERVICE_REGION", raising=False)
         with pytest.raises(ValueError, match="AZURE_SPEECH_REGION"):
             AzureAssessmentService()
+
+    def test_legacy_env_names_still_work(self, monkeypatch):
+        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
+        monkeypatch.delenv("AZURE_SPEECH_REGION", raising=False)
+        monkeypatch.setenv("AZURE_SUBSCRIPTION_ID", "legacy-key")
+        monkeypatch.setenv("AZURE_SERVICE_REGION", "eastus")
+        svc = AzureAssessmentService()
+        assert svc.default_language == "en-US"
 
     def test_default_language_is_en_us(self, monkeypatch):
         monkeypatch.setenv("AZURE_SPEECH_KEY", "key")

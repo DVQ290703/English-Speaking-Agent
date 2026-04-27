@@ -294,6 +294,7 @@ def chat_respond(
     text: str | None = Form(default=None),
     history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
+    voice_gender: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
@@ -408,7 +409,11 @@ def chat_respond(
         len(user_input),
         len(conversation_history),
     )
-    response_text, response_audio_bytes = run_langraph_agent(user_input=user_input, history=conversation_history)
+    response_text, response_audio_bytes = run_langraph_agent(
+        user_input=user_input,
+        history=conversation_history,
+        voice_gender=voice_gender,
+    )
     logger.info(
         "Pipeline complete response_text_length=%d audio_bytes=%d",
         len(response_text),

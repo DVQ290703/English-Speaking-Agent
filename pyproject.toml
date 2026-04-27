@@ -16,6 +16,8 @@ addopts = [
     "--tb=short",
     "--strict-markers",
     "--no-header",
+    "-p",
+    "no:cacheprovider",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

@@ -210,7 +210,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Next question", history=history)
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Next question", history=history
+            user_input="Next question", history=history, voice_gender=None
         )
 
     def test_run_langraph_agent_none_history_defaults_to_empty(self):
@@ -220,7 +220,7 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             run_langraph_agent("Hello", history=None)
 
-        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[])
+        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None)
 
     def test_run_langraph_agent_empty_response_text_returns_fallback(self):
         mock_pipeline = MagicMock()
@@ -265,6 +265,277 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             text, audio = run_langraph_agent("question")
 
-        mock_synth.assert_called_once_with("Nice job!")
+        mock_synth.assert_called_once_with("Nice job!", voice_gender=None)
         assert text == "Nice job!"
         assert audio == b"retry-audio"
+
+    def test_run_langraph_agent_passes_voice_gender(self):
+        mock_pipeline = self._mock_pipeline()
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import run_langraph_agent
+            run_langraph_agent("Hello", history=[], voice_gender="Female")
+
+        mock_pipeline.run.assert_called_once_with(
+            user_input="Hello", history=[], voice_gender="Female"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ElevenLabsTTS
+# ---------------------------------------------------------------------------
+
+class TestElevenLabsTTS:
+    def test_resolve_voice_id_uses_male_voice_when_requested(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("  Male  ") == "male-voice"
+
+    def test_resolve_voice_id_uses_female_voice_when_requested(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("Female") == "female-voice"
+
+    def test_resolve_voice_id_explicit_gender_does_not_fallback_to_default(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("Male") == ""
+
+    def test_resolve_voice_id_does_not_use_female_when_male_requested(self, monkeypatch):
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("Male") == ""
+
+    def test_resolve_voice_id_does_not_use_male_when_female_requested(self, monkeypatch):
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("Female") == ""
+
+    def test_resolve_voice_id_invalid_gender_uses_default(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("robot") == "default-voice"
+
+    def test_resolve_voice_id_no_gender_requires_default_voice(self, monkeypatch):
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id(None) == ""
+
+    def test_resolve_voice_id_returns_empty_when_no_voice_configured(self, monkeypatch):
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        assert ElevenLabsTTS()._resolve_voice_id("Female") == ""
+
+    def test_convert_text_to_speech_missing_api_key_does_not_call_http(self, monkeypatch):
+        monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post") as mock_post:
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+        mock_post.assert_not_called()
+
+    def test_convert_text_to_speech_missing_voice_id_does_not_call_http(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post") as mock_post:
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+        mock_post.assert_not_called()
+
+    def test_convert_text_to_speech_strips_api_key_before_request(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "  test-key  ")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        monkeypatch.setenv("ELEVENLABS_MODEL_ID", "test-model")
+        mock_response = MagicMock(status_code=200, content=b"mp3data", headers={"Content-Type": "audio/mpeg"})
+        mock_response.iter_content.return_value = [b"mp3", b"data"]
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response) as mock_post:
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b"mp3data"
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["xi-api-key"] == "test-key"
+        assert kwargs["json"] == {"text": "Hello", "model_id": "test-model"}
+        assert kwargs["timeout"] == 60
+
+    def test_convert_text_to_speech_does_not_log_api_key(self, monkeypatch, caplog):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "secret-test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=401, content=b"", text="unauthorized", headers={})
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert "secret-test-key" not in caplog.text
+
+    def test_convert_text_to_speech_401_returns_empty_bytes(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=401, content=b"", text="unauthorized", headers={})
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response) as mock_post:
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+        mock_post.assert_called_once()
+
+    def test_convert_text_to_speech_403_returns_empty_bytes(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=403, content=b"", text="forbidden", headers={})
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_500_returns_empty_bytes(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=500, content=b"", text="server error", headers={})
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_timeout_returns_empty_bytes(self, monkeypatch):
+        import requests
+
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", side_effect=requests.Timeout("timed out")):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_empty_text_does_not_call_http(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post") as mock_post:
+            result = ElevenLabsTTS().convert_text_to_speech("   ")
+
+        assert result == b""
+        mock_post.assert_not_called()
+
+    def test_convert_text_to_speech_rejects_empty_audio_body(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=200, content=b"", headers={"Content-Type": "audio/mpeg"})
+        mock_response.iter_content.return_value = []
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_handles_content_read_failure(self, monkeypatch):
+        import requests
+
+        class BrokenContentResponse:
+            status_code = 200
+            headers = {"Content-Type": "audio/mpeg"}
+
+            def iter_content(self, chunk_size):
+                raise requests.exceptions.ChunkedEncodingError("interrupted")
+
+            def close(self):
+                pass
+
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=BrokenContentResponse()):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_rejects_incomplete_audio_body(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(
+            status_code=200,
+            content=b"mp3",
+            headers={"Content-Type": "audio/mpeg", "Content-Length": "10"},
+        )
+        mock_response.iter_content.return_value = [b"mp3"]
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
+
+    def test_convert_text_to_speech_rejects_non_audio_content_type(self, monkeypatch):
+        monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
+        mock_response = MagicMock(status_code=200, content=b'{"error":"bad"}', headers={"Content-Type": "application/json"})
+        mock_response.iter_content.return_value = [b'{"error":"bad"}']
+
+        from app.services.elevenlabs_tts import ElevenLabsTTS
+
+        with patch("app.services.elevenlabs_tts.requests.post", return_value=mock_response):
+            result = ElevenLabsTTS().convert_text_to_speech("Hello")
+
+        assert result == b""
