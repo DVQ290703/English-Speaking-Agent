@@ -12,6 +12,8 @@ import {
   pruneOldestSessions,
 } from "../api/sessionHistory";
 import { clearAuthSession, getAuthSession } from "../auth/tokenStorage";
+import { useT, useLanguage } from "../i18n/LanguageContext";
+import LanguageToggle from "../i18n/LanguageToggle";
 
 const MOCK_SESSIONS = [
   {
@@ -331,9 +333,10 @@ function scoreColor(s) {
   };
 }
 
-function fmtDate(str) {
+function fmtDate(str, lang) {
   const d = new Date(str);
-  return d.toLocaleDateString("vi-VN", {
+  const locale = lang === "en" ? "en-US" : "vi-VN";
+  return d.toLocaleDateString(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -354,6 +357,7 @@ function StatCard({ icon, label, value, sub }) {
 }
 
 function TopicCard({ topic, accent, onStart }) {
+  const t = useT();
   const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.blue;
   return (
     <button
@@ -363,25 +367,26 @@ function TopicCard({ topic, accent, onStart }) {
       <div className="flex items-start justify-between mb-3">
         <span className="text-3xl leading-none">{topic.icon}</span>
         <span className="text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-sm font-semibold">
-          Start →
+          {t("common.start")} →
         </span>
       </div>
       <div className="text-base font-bold text-gray-900 mb-1.5">
-        {topic.title}
+        {t(`topic.${topic.key}.title`)}
       </div>
       <div className="text-sm text-gray-600 leading-relaxed mb-3 line-clamp-2 min-h-10">
-        {topic.desc}
+        {t(`topic.${topic.key}.desc`)}
       </div>
       <span
         className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${styles.chip}`}
       >
-        {topic.level}
+        {t(`level.${topic.level}`)}
       </span>
     </button>
   );
 }
 
 function CategoryTabsRow({ categories, onStart }) {
+  const t = useT();
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef(null);
   const active = categories[activeIdx];
@@ -408,7 +413,7 @@ function CategoryTabsRow({ categories, onStart }) {
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              {cat.name}
+              {t(`category.${cat.name}.name`)}
             </button>
           ))}
         </div>
@@ -416,20 +421,22 @@ function CategoryTabsRow({ categories, onStart }) {
           <button
             onClick={() => scroll(-1)}
             className="w-9 h-9 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-800 transition-colors flex items-center justify-center"
-            aria-label="Scroll left"
+            aria-label={t("dash.topics.scrollLeft")}
           >
             ‹
           </button>
           <button
             onClick={() => scroll(1)}
             className="w-9 h-9 rounded-full border border-gray-200 bg-white hover:bg-gray-50 text-gray-500 hover:text-gray-800 transition-colors flex items-center justify-center"
-            aria-label="Scroll right"
+            aria-label={t("dash.topics.scrollRight")}
           >
             ›
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-3 px-1">{active.desc}</p>
+      <p className="text-sm text-gray-500 mb-3 px-1">
+        {t(`category.${active.name}.desc`)}
+      </p>
       <div
         ref={scrollerRef}
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
@@ -448,7 +455,13 @@ function CategoryTabsRow({ categories, onStart }) {
 }
 
 function SessionCard({ session, onView, onDelete, highlight = false }) {
+  const t = useT();
+  const { lang } = useLanguage();
   const sc = scoreColor(session.avgScore);
+  const topicTitle =
+    t(`topic.${session.topic}.title`) === `topic.${session.topic}.title`
+      ? session.topic
+      : t(`topic.${session.topic}.title`);
   return (
     <div
       id={`session-card-${session.id}`}
@@ -463,7 +476,7 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
         <span
           className="absolute -top-2 left-4 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-sm animate-fadeIn"
         >
-          Just saved
+          {t("dash.session.justSaved")}
         </span>
       )}
       {session.isReal && onDelete && (
@@ -471,16 +484,12 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (
-              window.confirm(
-                "Xóa phiên luyện tập này? Hành động này không thể hoàn tác.",
-              )
-            ) {
+            if (window.confirm(t("dash.session.deleteConfirm"))) {
               onDelete();
             }
           }}
-          aria-label="Xóa phiên"
-          title="Xóa phiên"
+          aria-label={t("dash.session.deleteAria")}
+          title={t("dash.session.deleteAria")}
           className="absolute top-3 right-3 w-7 h-7 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all z-10"
         >
           <svg
@@ -510,10 +519,10 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
           </span>
           <div>
             <div className="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
-              {session.topic}
+              {topicTitle}
             </div>
             <div className="text-sm text-gray-400 mt-0.5">
-              {fmtDate(session.date)}
+              {fmtDate(session.date, lang)}
             </div>
           </div>
         </div>
@@ -535,13 +544,13 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
 
       <div className="flex items-center gap-4 text-sm text-gray-500">
         <span>⏱ {session.duration}</span>
-        <span>💬 {session.messages} turns</span>
-        <span>✏️ {session.corrections} fixes</span>
+        <span>💬 {t("dash.session.turns", { n: session.messages })}</span>
+        <span>✏️ {t("dash.session.fixes", { n: session.corrections })}</span>
       </div>
 
       <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
         <span className="text-sm text-blue-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-          View transcript →
+          {t("dash.session.viewTranscript")}
         </span>
         <button
           onClick={(e) => {
@@ -549,7 +558,7 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
           }}
           className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
         >
-          Replay
+          {t("common.replay")}
         </button>
       </div>
     </div>
@@ -557,6 +566,7 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
 }
 
 function StorageUsageBar({ tick, onCleanup }) {
+  const t = useT();
   const usage = useMemo(() => getStorageUsage(), [tick]);
   const [confirming, setConfirming] = useState(false);
 
@@ -593,15 +603,14 @@ function StorageUsageBar({ tick, onCleanup }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-3 mb-1.5">
           <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-            {isCritical
-              ? "⚠ Storage almost full"
-              : isWarning
-                ? "Storage usage"
-                : "Storage usage"}
+            {isCritical ? t("dash.storage.full") : t("dash.storage.usage")}
           </span>
           <span className="text-xs text-gray-500 tabular-nums">
-            {formatBytes(usage.bytes)} • {usage.sessionCount}/{usage.max}{" "}
-            sessions
+            {formatBytes(usage.bytes)} •{" "}
+            {t("dash.storage.sessionsCount", {
+              n: usage.sessionCount,
+              max: usage.max,
+            })}
           </span>
         </div>
         <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
@@ -612,8 +621,7 @@ function StorageUsageBar({ tick, onCleanup }) {
         </div>
         {isCritical && (
           <p className="text-[11px] text-red-600 mt-1.5">
-            New sessions may start dropping audio or older history. Clean up to
-            free space.
+            {t("dash.storage.fullNote")}
           </p>
         )}
       </div>
@@ -628,8 +636,10 @@ function StorageUsageBar({ tick, onCleanup }) {
           }`}
         >
           {confirming
-            ? `Confirm: remove oldest ${Math.floor(usage.sessionCount / 2)}?`
-            : "Clean up old sessions"}
+            ? t("dash.storage.confirmCleanup", {
+                n: Math.floor(usage.sessionCount / 2),
+              })
+            : t("dash.storage.cleanup")}
         </button>
       )}
     </div>
@@ -637,6 +647,7 @@ function StorageUsageBar({ tick, onCleanup }) {
 }
 
 export default function DashboardPage({ demoMode = false }) {
+  const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const [profile, setProfile] = useState(null);
@@ -768,7 +779,7 @@ export default function DashboardPage({ demoMode = false }) {
             className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-medium"
             onClick={() => navigate("/", { replace: true })}
           >
-            Back to login
+            {t("dash.error.back")}
           </button>
         </div>
       </div>
@@ -779,13 +790,14 @@ export default function DashboardPage({ demoMode = false }) {
     return (
       <div className="min-h-screen bg-[#f5f7fa] flex items-center justify-center">
         <div className="text-gray-400 text-sm animate-pulse">
-          Loading your workspace...
+          {t("dash.loading")}
         </div>
       </div>
     );
   }
 
-  const displayName = profile.display_name || profile.email || "Learner";
+  const displayName =
+    profile.display_name || profile.email || t("dash.fallbackName");
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] text-gray-900">
@@ -798,10 +810,11 @@ export default function DashboardPage({ demoMode = false }) {
             </span>
           </div>
           <span className="text-base font-semibold text-gray-800">
-            IELTS Speaking Coach
+            {t("brand.name")}
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <LanguageToggle />
           <div className="relative">
             <button
               onClick={() => setShowUserMenu((v) => !v)}
@@ -843,7 +856,7 @@ export default function DashboardPage({ demoMode = false }) {
                     <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
                       <Mic className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium">New Session</span>
+                    <span className="font-medium">{t("dash.newSession")}</span>
                   </button>
                   <button
                     onClick={() => {
@@ -853,7 +866,7 @@ export default function DashboardPage({ demoMode = false }) {
                     className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    <span className="ml-1">Sign out</span>
+                    <span className="ml-1">{t("common.signOut")}</span>
                   </button>
                 </div>
               </>
@@ -866,38 +879,38 @@ export default function DashboardPage({ demoMode = false }) {
         {/* Welcome */}
         <div className="mb-10">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
-            Xin chào, {displayName.split(" ").slice(-1)[0]} 👋
+            {t("dash.greeting", {
+              name: displayName.split(" ").slice(-1)[0],
+            })}
           </h1>
-          <p className="text-base text-gray-500 mt-2">
-            Here's your learning progress and session history.
-          </p>
+          <p className="text-base text-gray-500 mt-2">{t("dash.subtitle")}</p>
         </div>
 
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
           <StatCard
             icon="🎙️"
-            label="Total sessions"
+            label={t("dash.stats.totalSessions")}
             value={totalSessions}
-            sub="all time"
+            sub={t("dash.stats.totalSessions.sub")}
           />
           <StatCard
             icon="⭐"
-            label="Average score"
+            label={t("dash.stats.avgScore")}
             value={avgScore}
-            sub="across all topics"
+            sub={t("dash.stats.avgScore.sub")}
           />
           <StatCard
             icon="⏱"
-            label="Practice time"
-            value={`${totalMins} min`}
-            sub="total"
+            label={t("dash.stats.practice")}
+            value={t("dash.stats.minutes", { n: totalMins })}
+            sub={t("dash.stats.practice.sub")}
           />
           <StatCard
             icon="🔥"
-            label="Current streak"
-            value={`${streak} days`}
-            sub="keep it up!"
+            label={t("dash.stats.streak")}
+            value={t("dash.stats.streak.value", { n: streak })}
+            sub={t("dash.stats.streak.sub")}
           />
         </div>
 
@@ -912,10 +925,10 @@ export default function DashboardPage({ demoMode = false }) {
           <div className="flex items-end justify-between mb-5">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
-                Chọn chủ đề luyện tập
+                {t("dash.topics.title")}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
-                Browse by category and pick what you want to practise today.
+                {t("dash.topics.subtitle")}
               </p>
             </div>
           </div>
@@ -931,10 +944,10 @@ export default function DashboardPage({ demoMode = false }) {
           <div className="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-bold text-gray-900">
-                Session History
+                {t("dash.history.title")}
               </h2>
               <span className="text-sm text-gray-400">
-                {filtered.length} sessions
+                {t("dash.history.count", { n: filtered.length })}
               </span>
             </div>
             <div className="relative w-full sm:w-72">
@@ -957,14 +970,14 @@ export default function DashboardPage({ demoMode = false }) {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm theo chủ đề, ngày, hoặc điểm..."
+                placeholder={t("dash.history.searchPlaceholder")}
                 className="w-full pl-9 pr-9 py-2 text-sm rounded-full border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-colors bg-gray-50 placeholder:text-gray-400"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  aria-label="Xóa tìm kiếm"
+                  aria-label={t("dash.history.clearSearch")}
                   className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
                 >
                   <svg
@@ -988,26 +1001,34 @@ export default function DashboardPage({ demoMode = false }) {
 
           {/* Topic tabs */}
           <div className="px-6 py-4 border-b border-gray-100 flex gap-2 overflow-x-auto scrollbar-none">
-            {TOPICS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveTab(t)}
-                className={`whitespace-nowrap text-sm font-medium px-4 py-2 rounded-full transition-colors ${
-                  activeTab === t
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {t !== "All" && TOPIC_ICONS[t]} {t}
-              </button>
-            ))}
+            {TOPICS.map((tab) => {
+              const tabLabel =
+                tab === "All"
+                  ? t("dash.history.tabAll")
+                  : t(`topic.${tab}.title`) === `topic.${tab}.title`
+                    ? tab
+                    : t(`topic.${tab}.title`);
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`whitespace-nowrap text-sm font-medium px-4 py-2 rounded-full transition-colors ${
+                    activeTab === tab
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {tab !== "All" && TOPIC_ICONS[tab]} {tabLabel}
+                </button>
+              );
+            })}
           </div>
 
           {/* Cards grid */}
           <div className="p-6">
             {filtered.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-sm">
-                No sessions yet for this topic.
+                {t("dash.history.empty")}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1041,14 +1062,12 @@ export default function DashboardPage({ demoMode = false }) {
 
           {/* Footer CTA */}
           <div className="px-6 py-5 border-t border-gray-100 bg-linear-to-r from-blue-50 to-violet-50 flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              Ready to practise? Start a new session.
-            </p>
+            <p className="text-sm text-gray-600">{t("dash.history.cta")}</p>
             <button
               onClick={() => navigate("/VoiceAgent")}
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors"
             >
-              Start speaking →
+              {t("dash.history.startSpeaking")}
             </button>
           </div>
         </div>
@@ -1068,9 +1087,11 @@ export default function DashboardPage({ demoMode = false }) {
                 👋
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {t("dash.logout.title")}
+                </h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Bạn có chắc muốn đăng xuất khỏi tài khoản không?
+                  {t("dash.logout.body")}
                 </p>
               </div>
             </div>
@@ -1079,7 +1100,7 @@ export default function DashboardPage({ demoMode = false }) {
                 onClick={() => setShowLogoutConfirm(false)}
                 className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                Hủy
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => {
@@ -1088,7 +1109,7 @@ export default function DashboardPage({ demoMode = false }) {
                 }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
               >
-                Đăng xuất
+                {t("dash.logout.confirm")}
               </button>
             </div>
           </div>

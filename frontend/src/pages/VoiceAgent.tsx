@@ -45,6 +45,8 @@ import {
   SelectDropdown,
 } from "../components/voice-agent";
 import type { Message } from "../components/voice-agent";
+import { useLanguage } from "../i18n/LanguageContext";
+import LanguageToggle from "../i18n/LanguageToggle";
 
 interface AuthUser {
   display_name: string;
@@ -236,6 +238,7 @@ export default function VoiceAgent({
   onLogout,
 }: VoiceAgentProps) {
   const navigate = useNavigate();
+  const { lang, setLang, t } = useLanguage();
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       return localStorage.getItem("va-theme") === "dark";
@@ -306,7 +309,22 @@ export default function VoiceAgent({
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [micEnabled, setMicEnabled] = useState(true);
   const [gender, setGender] = useState<Gender>("Male");
-  const [language, setLanguage] = useState<Language>("English");
+  const [language, setLanguage] = useState<Language>(
+    lang === "vi" ? "Vietnamese" : "English",
+  );
+
+  // Keep speech-recognition language in sync with the global UI language.
+  useEffect(() => {
+    setLanguage(lang === "vi" ? "Vietnamese" : "English");
+  }, [lang]);
+
+  const handleLanguageChange = useCallback(
+    (next: Language) => {
+      setLanguage(next);
+      setLang(next === "Vietnamese" ? "vi" : "en");
+    },
+    [setLang],
+  );
   const [model, setModel] = useState<Model>("OpenAI GPT 5");
   const [selectedMic, setSelectedMic] = useState(MICROPHONES[0]);
   const [agentSpeaking, setAgentSpeaking] = useState(false);
@@ -969,9 +987,7 @@ export default function VoiceAgent({
     const SpeechRecognitionAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
-      alert(
-        "Trình duyệt không hỗ trợ nhận dạng giọng nói. Hãy dùng Chrome hoặc Edge trên máy tính.",
-      );
+      alert(t("va.alert.noBrowserSupport"));
       setMicEnabled(false);
       return;
     }
@@ -985,9 +1001,7 @@ export default function VoiceAgent({
     // in another site) the Speech API often fails silently without this.
     const ensureMicPermission = async (): Promise<boolean> => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        alert(
-          "Trình duyệt này không hỗ trợ truy cập micro (cần HTTPS và Chrome/Edge mới).",
-        );
+        alert(t("va.alert.noMicAPI"));
         return false;
       }
       // If we already hold a stream with at least one live track, reuse it
@@ -1024,15 +1038,20 @@ export default function VoiceAgent({
         const name = (err as { name?: string })?.name || "";
         console.error("[VoiceAgent] getUserMedia failed:", err);
         if (name === "NotAllowedError" || name === "SecurityError") {
-          alert(
-            "Trình duyệt chặn micro. Nếu bạn đang xem app trong khung xem trước, hãy mở app ở tab mới rồi cho phép micro.",
-          );
-        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
-          alert("Không tìm thấy thiết bị micro. Hãy cắm micro hoặc chọn thiết bị khác.");
+          alert(t("va.alert.micBlockedPreview"));
+        } else if (
+          name === "NotFoundError" ||
+          name === "OverconstrainedError"
+        ) {
+          alert(t("va.alert.micNotFound"));
         } else if (name === "NotReadableError") {
-          alert("Micro đang bị app khác chiếm dụng. Đóng các app dùng micro khác rồi thử lại.");
+          alert(t("va.alert.micBusy"));
         } else {
-          alert("Không thể truy cập micro: " + (name || "lỗi không xác định"));
+          alert(
+            t("va.alert.micGeneric", {
+              detail: name || t("va.alert.unknownError"),
+            }),
+          );
         }
         return false;
       }
@@ -1088,13 +1107,11 @@ export default function VoiceAgent({
         if (err === "not-allowed" || err === "service-not-allowed") {
           stopped = true;
           setMicEnabled(false);
-          alert(
-            "Trình duyệt chặn micro hoặc dịch vụ nhận dạng giọng nói. Nếu đang xem trong khung preview, hãy mở app ở tab mới và cho phép micro.",
-          );
+          alert(t("va.alert.recogBlockedPreview"));
         } else if (err === "audio-capture") {
           stopped = true;
           setMicEnabled(false);
-          alert("Không bắt được tín hiệu từ micro. Kiểm tra lại thiết bị thu âm.");
+          alert(t("va.alert.noSignal"));
         } else if (err === "network") {
           // Speech API needs network for some engines; back off harder.
           consecutiveErrors += 3;
@@ -1117,9 +1134,7 @@ export default function VoiceAgent({
           console.error(
             "[VoiceAgent] giving up after repeated SpeechRecognition errors",
           );
-          alert(
-            "Nhận dạng giọng nói liên tục lỗi. Hãy thử mở app ở tab mới (Chrome/Edge) và cấp quyền micro.",
-          );
+          alert(t("va.alert.recogGivingUp"));
           return;
         }
         // Back off a bit more on each error to be polite to the engine.
@@ -1367,15 +1382,16 @@ export default function VoiceAgent({
             </span>
           </div>
           <span className="text-sm font-semibold text-gray-800">
-            IELTS Speaking Coach
+            {t("brand.name")}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
+          <LanguageToggle />
           <button
             onClick={() => setIsDark((v) => !v)}
             className="w-7 h-7 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDark ? t("va.theme.light") : t("va.theme.dark")}
           >
             {isDark ? <Sun size={15} /> : <Moon size={15} />}
           </button>
@@ -1384,13 +1400,19 @@ export default function VoiceAgent({
               <button
                 onClick={() => setShowUserMenu((v) => !v)}
                 className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 hover:border-gray-300 hover:bg-gray-50 rounded-lg px-2.5 py-1 transition-colors"
-                title={currentUser.display_name || currentUser.email || "User"}
+                title={
+                  currentUser.display_name ||
+                  currentUser.email ||
+                  t("common.user")
+                }
               >
                 <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
                   {currentUser.display_name?.[0]?.toUpperCase() ?? "?"}
                 </div>
                 <span className="text-xs text-gray-700">
-                  {currentUser.display_name || currentUser.email || "User"}
+                  {currentUser.display_name ||
+                    currentUser.email ||
+                    t("common.user")}
                 </span>
                 <svg
                   className={`w-3 h-3 text-gray-500 transition-transform ${showUserMenu ? "rotate-180" : ""}`}
@@ -1413,7 +1435,7 @@ export default function VoiceAgent({
                   <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-gray-200 shadow-lg z-40 overflow-hidden animate-fadeIn">
                     <div className="px-3 py-2.5 border-b border-gray-100">
                       <div className="text-sm font-semibold text-gray-900 truncate">
-                        {currentUser.display_name || "User"}
+                        {currentUser.display_name || t("common.user")}
                       </div>
                       <div className="text-xs text-gray-500 truncate">
                         {currentUser.email}
@@ -1434,7 +1456,7 @@ export default function VoiceAgent({
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
                     >
-                      <span>📊</span> Dashboard
+                      <span>📊</span> {t("common.dashboard")}
                     </button>
                     <button
                       onClick={() => {
@@ -1443,7 +1465,7 @@ export default function VoiceAgent({
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
                     >
-                      <LogOut className="w-3.5 h-3.5" /> Sign out
+                      <LogOut className="w-3.5 h-3.5" /> {t("common.signOut")}
                     </button>
                   </div>
                 </>
@@ -1455,13 +1477,13 @@ export default function VoiceAgent({
                 onClick={() => navigate("/")}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg transition-colors"
               >
-                <LogIn className="w-3 h-3" /> Đăng nhập
+                <LogIn className="w-3 h-3" /> {t("common.signIn")}
               </button>
               <button
                 onClick={() => navigate("/register")}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-500 text-gray-900 rounded-lg transition-colors"
               >
-                <UserPlus className="w-3 h-3" /> Đăng ký
+                <UserPlus className="w-3 h-3" /> {t("common.signUp")}
               </button>
             </div>
           )}
@@ -1474,11 +1496,13 @@ export default function VoiceAgent({
         className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
       >
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-700">Description</span>
+          <span className="font-medium text-gray-700">
+            {t("va.descbar.label")}
+          </span>
           <span className="text-gray-400">·</span>
           <span className="text-gray-700">
             {customTopicLabel ??
-              TOPICS.find((t) => t.id === topic)?.label ??
+              TOPICS.find((tp) => tp.id === topic)?.label ??
               "Daily Conversation"}
           </span>
         </div>
@@ -1503,10 +1527,10 @@ export default function VoiceAgent({
             }`}
           >
             {isConnected
-              ? "Disconnect"
+              ? t("va.connect.disconnect")
               : isConnecting
-                ? "Connecting..."
-                : "Connect"}
+                ? t("va.connect.connecting")
+                : t("va.connect.connect")}
           </button>
         </div>
       </div>
@@ -1521,7 +1545,7 @@ export default function VoiceAgent({
           {/* Panel header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
             <span className="text-xs font-semibold text-gray-700 tracking-wide">
-              Audio Settings
+              {t("va.left.audioSettings")}
             </span>
             <SelectDropdown
               value={gender}
@@ -1565,7 +1589,7 @@ export default function VoiceAgent({
             <div className="px-2 py-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
-                  Microphone
+                  {t("va.left.microphone")}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -1613,7 +1637,7 @@ export default function VoiceAgent({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[11px] font-medium text-gray-700 mb-1 truncate">
-                  {currentUser?.display_name || "You"}
+                  {currentUser?.display_name || t("common.you")}
                 </div>
                 {isConnected || isConnecting ? (
                   <MicWaveform active={micEnabled && isConnected} />
@@ -1635,7 +1659,7 @@ export default function VoiceAgent({
           <div className="px-2 mt-3 flex-1 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-semibold text-gray-700 tracking-widest uppercase">
-                AI Feedback
+                {t("va.left.aiFeedback")}
               </span>
               {selectedMsg ? (
                 <button
@@ -1643,11 +1667,11 @@ export default function VoiceAgent({
                   onClick={() => setExpandedMsgId(null)}
                   className="text-[9px] text-gray-500 hover:text-gray-800 underline"
                 >
-                  Show latest
+                  {t("va.left.showLatest")}
                 </button>
               ) : isAutoLatest ? (
                 <span className="text-[9px] bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-1.5 py-0.5">
-                  Latest
+                  {t("va.left.latest")}
                 </span>
               ) : null}
             </div>
@@ -1658,7 +1682,9 @@ export default function VoiceAgent({
                   <div className="rounded-md border border-violet-200 bg-violet-50 p-2 animate-fadeIn">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700">
-                        {selectedMsg ? "Selected sentence" : "Latest sentence"}
+                        {selectedMsg
+                          ? t("va.left.selectedSentence")
+                          : t("va.left.latestSentence")}
                       </span>
                       {displayMsg.userAudioUrl && (
                         <button
@@ -1674,7 +1700,7 @@ export default function VoiceAgent({
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold text-violet-700 bg-white border border-violet-200 hover:bg-violet-100 transition-colors"
                         >
                           <Volume2 className="w-2.5 h-2.5" />
-                          Replay
+                          {t("common.replay")}
                         </button>
                       )}
                     </div>
@@ -1686,18 +1712,27 @@ export default function VoiceAgent({
                   {displayMsg.scoreDetails && (
                     <div className="rounded-md border border-gray-200 bg-white p-2 animate-fadeIn">
                       <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block mb-1.5">
-                        Score breakdown
+                        {t("va.left.scoreBreakdown")}
                       </span>
                       <div className="flex flex-col gap-1">
                         {(
                           [
-                            ["Overall", displayMsg.scoreDetails.overall],
                             [
-                              "Pronunciation",
+                              t("va.score.overall"),
+                              displayMsg.scoreDetails.overall,
+                            ],
+                            [
+                              t("va.score.pronunciation"),
                               displayMsg.scoreDetails.pronunciation,
                             ],
-                            ["Fluency", displayMsg.scoreDetails.fluency],
-                            ["Accuracy", displayMsg.scoreDetails.accuracy],
+                            [
+                              t("va.score.fluency"),
+                              displayMsg.scoreDetails.fluency,
+                            ],
+                            [
+                              t("va.score.accuracy"),
+                              displayMsg.scoreDetails.accuracy,
+                            ],
                           ] as const
                         ).map(([label, val]) => {
                           const color =
@@ -1732,15 +1767,17 @@ export default function VoiceAgent({
 
                   <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block px-1">
                     {displayMsg.mistakes && displayMsg.mistakes.length > 0
-                      ? `Errors (${displayMsg.mistakes.length})`
-                      : "Errors"}
+                      ? t("va.left.errorsCount", {
+                          n: displayMsg.mistakes.length,
+                        })
+                      : t("va.left.errors")}
                   </span>
 
                   {!displayMsg.mistakes || displayMsg.mistakes.length === 0 ? (
                     <div className="rounded-md border border-green-200 bg-green-50 p-2 flex items-start gap-1.5 animate-fadeIn">
                       <CheckCircle2 className="w-3 h-3 text-green-600 shrink-0 mt-0.5" />
                       <p className="text-[10px] text-green-700 leading-snug">
-                        Great job! No issues detected in this sentence.
+                        {t("va.left.noIssues")}
                       </p>
                     </div>
                   ) : (
@@ -1765,7 +1802,7 @@ export default function VoiceAgent({
                             <span
                               className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}
                             >
-                              {m.type}
+                              {t(`va.mistake.${m.type}`)}
                             </span>
                           </div>
                           {m.wrong !== "—" && (
@@ -1793,8 +1830,8 @@ export default function VoiceAgent({
                   <CheckCircle2 className="w-7 h-7 text-gray-400" />
                   <p className="text-[10px] text-gray-500 leading-relaxed px-2">
                     {isConnected
-                      ? "Send a message to see feedback for your latest sentence here."
-                      : "Connect to see real-time English corrections"}
+                      ? t("va.left.feedbackEmptyConnected")
+                      : t("va.left.feedbackEmptyDisconnected")}
                   </p>
                 </div>
               )}
@@ -1813,7 +1850,7 @@ export default function VoiceAgent({
           >
             <div className="flex items-center gap-3">
               <span className="text-xs font-semibold text-gray-700">
-                Conversation
+                {t("va.conv.title")}
               </span>
               {isConnected && (
                 <div className="flex items-center gap-1.5">
@@ -1821,7 +1858,9 @@ export default function VoiceAgent({
                     className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? "text-blue-600" : "text-green-400"}`}
                   />
                   <span className="text-[10px] text-gray-600">
-                    {agentSpeaking ? "Agent speaking" : "Listening"}
+                    {agentSpeaking
+                      ? t("va.conv.agentSpeaking")
+                      : t("va.conv.listening")}
                   </span>
                 </div>
               )}
@@ -1838,7 +1877,7 @@ export default function VoiceAgent({
               <SelectDropdown
                 value={language}
                 options={LANGUAGES}
-                onChange={setLanguage}
+                onChange={handleLanguageChange}
               />
             </div>
           </div>
@@ -1855,12 +1894,14 @@ export default function VoiceAgent({
                 </div>
                 <div className="space-y-1">
                   <p className="text-gray-600 text-sm">
-                    Click{" "}
-                    <span className="font-semibold text-gray-900">Connect</span>{" "}
-                    to start a session
+                    {t("va.empty.clickConnectPrefix")}{" "}
+                    <span className="font-semibold text-gray-900">
+                      {t("va.connect.connect")}
+                    </span>{" "}
+                    {t("va.empty.clickConnectSuffix")}
                   </p>
                   <p className="text-gray-400 text-xs">
-                    Conversation transcript will appear here
+                    {t("va.empty.transcriptHere")}
                   </p>
                 </div>
               </div>
@@ -1881,7 +1922,7 @@ export default function VoiceAgent({
                     type="button"
                     onClick={() => setSummaryDismissed(true)}
                     className="absolute top-2 right-2 p-1 rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -1893,11 +1934,13 @@ export default function VoiceAgent({
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900">
-                          Session summary
+                          {t("va.summary.title")}
                         </h3>
                         <p className="text-[11px] text-gray-500">
-                          {sessionSummary.sentenceCount} sentence
-                          {sessionSummary.sentenceCount > 1 ? "s" : ""} • {sessionSummary.totalErrors} total error{sessionSummary.totalErrors === 1 ? "" : "s"}
+                          {t("va.summary.meta", {
+                            sentences: sessionSummary.sentenceCount,
+                            errors: sessionSummary.totalErrors,
+                          })}
                         </p>
                       </div>
                     </div>
@@ -1913,7 +1956,7 @@ export default function VoiceAgent({
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-violet-700 bg-white border border-violet-300 hover:bg-violet-50 transition-colors"
                       >
                         <span>📊</span>
-                        View on Dashboard
+                        {t("va.summary.viewDashboard")}
                       </button>
                       <button
                         type="button"
@@ -1924,7 +1967,7 @@ export default function VoiceAgent({
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
                       >
                         <RefreshCw className="w-3 h-3" />
-                        New session
+                        {t("va.summary.newSession")}
                       </button>
                     </div>
                   </div>
@@ -1932,10 +1975,16 @@ export default function VoiceAgent({
                   <div className="grid grid-cols-4 gap-2 mb-3">
                     {(
                       [
-                        ["Overall", sessionSummary.scores.overall],
-                        ["Pronunc.", sessionSummary.scores.pronunciation],
-                        ["Fluency", sessionSummary.scores.fluency],
-                        ["Accuracy", sessionSummary.scores.accuracy],
+                        [t("va.score.overall"), sessionSummary.scores.overall],
+                        [
+                          t("va.score.pronShort"),
+                          sessionSummary.scores.pronunciation,
+                        ],
+                        [t("va.score.fluency"), sessionSummary.scores.fluency],
+                        [
+                          t("va.score.accuracy"),
+                          sessionSummary.scores.accuracy,
+                        ],
                       ] as const
                     ).map(([label, val]) => {
                       const color =
@@ -1965,7 +2014,7 @@ export default function VoiceAgent({
                   {sessionSummary.topErrors.length > 0 && (
                     <div className="mb-3">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1.5">
-                        Top error types
+                        {t("va.summary.topErrors")}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {sessionSummary.topErrors.map(([type, count]) => (
@@ -1973,7 +2022,7 @@ export default function VoiceAgent({
                             key={type}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200"
                           >
-                            {type}
+                            {t(`va.mistake.${type}`)}
                             <span className="text-red-500/80">×{count}</span>
                           </span>
                         ))}
@@ -1984,15 +2033,15 @@ export default function VoiceAgent({
                   <div>
                     <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600 mb-1.5 flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-violet-600" />
-                      Practice tips
+                      {t("va.summary.tips")}
                     </div>
                     <ul className="space-y-1">
-                      {sessionSummary.tips.map((t, i) => (
+                      {sessionSummary.tips.map((tip, i) => (
                         <li
                           key={i}
                           className="text-[11px] text-gray-700 leading-snug pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-violet-500"
                         >
-                          {t}
+                          {tip}
                         </li>
                       ))}
                     </ul>
@@ -2018,7 +2067,7 @@ export default function VoiceAgent({
                   ))}
                 </div>
                 <p className="text-blue-600/70 text-xs">
-                  Establishing connection...
+                  {t("va.connecting.note")}
                 </p>
               </div>
             )}
@@ -2078,7 +2127,7 @@ export default function VoiceAgent({
           >
             {!isConnected ? (
               <div className="flex items-center justify-center py-2 text-xs text-gray-400">
-                Connect to start chatting
+                {t("va.input.connectHint")}
               </div>
             ) : (
               <div className="flex items-end gap-2">
@@ -2098,10 +2147,10 @@ export default function VoiceAgent({
                     disabled={agentTyping}
                     placeholder={
                       isRecording
-                        ? "Đang nghe giọng nói..."
+                        ? t("va.input.listening")
                         : agentTyping
-                          ? "Agent is typing..."
-                          : "Type a message... (Enter to send)"
+                          ? t("va.input.agentTyping")
+                          : t("va.input.placeholder")
                     }
                     rows={1}
                     data-va="textarea"
@@ -2152,19 +2201,20 @@ export default function VoiceAgent({
                         />
                       ))}
                       <span className="ml-1 text-[10px] text-blue-600/80">
-                        Agent speaking
+                        {t("va.conv.agentSpeaking")}
                       </span>
                     </div>
                   )}
                   {agentTyping && !agentSpeaking && (
                     <span className="text-[10px] text-gray-500 italic">
-                      Agent is typing...
+                      {t("va.input.agentTyping")}
                     </span>
                   )}
                 </div>
                 <span className="text-[10px] text-gray-600">
-                  {messages.filter((m) => !m.typing).length} messages • Enter to
-                  send, Shift+Enter for newline
+                  {t("va.input.statusHint", {
+                    n: messages.filter((m) => !m.typing).length,
+                  })}
                 </span>
               </div>
             )}
@@ -2183,44 +2233,54 @@ export default function VoiceAgent({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-semibold text-gray-800 mb-1 text-sm">
-              Chủ đề luyện tập
+              {t("va.settings.title")}
             </h3>
             <p className="text-[10px] text-gray-500 mb-3">
-              Chọn chủ đề để AI tập trung hướng dẫn đúng hướng
+              {t("va.settings.subtitle")}
             </p>
             <div className="space-y-1">
-              {TOPICS.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setTopic(t.id);
-                    setCustomTopicLabel(null);
-                    setShowSettings(false);
-                    try {
-                      const url = new URL(window.location.href);
-                      url.searchParams.set("topic", t.label);
-                      window.history.replaceState({}, "", url.toString());
-                    } catch {}
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
-                    topic === t.id
-                      ? "bg-blue-100 border border-blue-300 text-blue-700"
-                      : "text-gray-600 hover:bg-gray-100 border border-transparent"
-                  }`}
-                >
-                  <div>
-                    <div className="text-xs font-medium text-gray-800">
-                      {t.label}
+              {TOPICS.map((tp) => {
+                const tpTitle =
+                  t(`topic.${tp.label}.title`) === `topic.${tp.label}.title`
+                    ? tp.label
+                    : t(`topic.${tp.label}.title`);
+                const tpDesc =
+                  t(`topic.${tp.label}.desc`) === `topic.${tp.label}.desc`
+                    ? tp.desc
+                    : t(`topic.${tp.label}.desc`);
+                return (
+                  <button
+                    key={tp.id}
+                    onClick={() => {
+                      setTopic(tp.id);
+                      setCustomTopicLabel(null);
+                      setShowSettings(false);
+                      try {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("topic", tp.label);
+                        window.history.replaceState({}, "", url.toString());
+                      } catch {}
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                      topic === tp.id
+                        ? "bg-blue-100 border border-blue-300 text-blue-700"
+                        : "text-gray-600 hover:bg-gray-100 border border-transparent"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs font-medium text-gray-800">
+                        {tpTitle}
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        {tpDesc}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                      {t.desc}
-                    </div>
-                  </div>
-                  {topic === t.id && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                  )}
-                </button>
-              ))}
+                    {topic === tp.id && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2240,9 +2300,11 @@ export default function VoiceAgent({
                 👋
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Đăng xuất?</h3>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {t("dash.logout.title")}
+                </h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Bạn có chắc muốn đăng xuất khỏi tài khoản không?
+                  {t("dash.logout.body")}
                 </p>
               </div>
             </div>
@@ -2251,7 +2313,7 @@ export default function VoiceAgent({
                 onClick={() => setShowLogoutConfirm(false)}
                 className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                Hủy
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => {
@@ -2263,7 +2325,7 @@ export default function VoiceAgent({
                 }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
               >
-                Đăng xuất
+                {t("dash.logout.confirm")}
               </button>
             </div>
           </div>

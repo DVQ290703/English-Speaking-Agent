@@ -1,4 +1,5 @@
 import { Bot, Play, User } from "lucide-react";
+import { useT } from "../../i18n/LanguageContext";
 
 export interface Mistake {
   wrong: string;
@@ -51,6 +52,7 @@ function TypingIndicator() {
 }
 
 function ScoreBadge({ score }: { score: number }) {
+  const t = useT();
   const isGood = score >= 85;
   const isMid = score >= 70;
   const cls = isGood
@@ -60,7 +62,7 @@ function ScoreBadge({ score }: { score: number }) {
       : "text-orange-700 bg-orange-50 border-orange-500/35";
   return (
     <span
-      title="Pronunciation score"
+      title={t("bubble.score.title")}
       className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border text-[10px] font-bold leading-4 tracking-wide select-none ${cls}`}
     >
       <span className="tabular-nums font-bold">{score}</span>
@@ -70,10 +72,11 @@ function ScoreBadge({ score }: { score: number }) {
 }
 
 function ReplayButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       onClick={onClick}
-      title="Replay"
+      title={t("bubble.replay.title")}
       className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35"
     >
       <Play className="w-2 h-2 fill-current" />
@@ -88,6 +91,7 @@ export default function MessageBubble({
   expanded,
   onToggleExpanded,
 }: MessageBubbleProps) {
+  const t = useT();
   const isAgent = message.role === "agent";
   const tsDate =
     message.timestamp instanceof Date
@@ -125,7 +129,7 @@ export default function MessageBubble({
           className={`flex items-center gap-1.5 ${isAgent ? "" : "flex-row-reverse"}`}
         >
           <span className="text-[10px] font-medium text-gray-600">
-            {isAgent ? "Agent" : "You"}
+            {isAgent ? t("common.agent") : t("common.you")}
           </span>
           <span className="text-[10px] text-gray-400">{timeStr}</span>
           {!message.typing && onReplay && <ReplayButton onClick={onReplay} />}
@@ -142,8 +146,8 @@ export default function MessageBubble({
           title={
             canSelect
               ? expanded
-                ? "Click to deselect"
-                : "Click to view feedback in the AI Feedback panel"
+                ? t("bubble.deselect")
+                : t("bubble.select")
               : undefined
           }
           className={`text-left px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap relative transition-all ${
