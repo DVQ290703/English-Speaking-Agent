@@ -58,7 +58,7 @@ GitLab CI is triggered automatically after the mirror lands. Branch filtering is
 ### Stage structure
 
 ```
-build  →  deploy
+test  →  build  →  deploy
 ```
 
 Push is implicit — Kaniko builds and pushes to Harbor in a single step. No separate push stage needed.
@@ -67,10 +67,19 @@ Push is implicit — Kaniko builds and pushes to Harbor in a single step. No sep
 
 | Job | Stage | Runs when |
 |---|---|---|
+| `test-backend` | test | every push to `main` (always) |
 | `build-backend` | build | `app/**`, `Dockerfile`, `requirements*.txt` changed on `main` |
 | `build-frontend` | build | `frontend/**`, `Dockerfile.frontend` changed on `main` |
 | `deploy-backend` | deploy | same paths as build-backend + `deployments/backend/**` |
 | `deploy-frontend` | deploy | same paths as build-frontend + `deployments/frontend/**` |
+
+### Test stage
+
+- Runs `pytest tests/ --tb=short` using `python:3.10-slim` image
+- Installs deps via `pip install -r requirements.txt -r requirements-test.txt`
+- Runs on **every push to `main`** regardless of which files changed
+- Build and deploy stages only proceed if `test-backend` passes
+- `build-backend` declares `needs: [test-backend]`; `build-frontend` also declares `needs: [test-backend]` so no deploy happens on a broken backend
 
 ### Path-based filtering
 
