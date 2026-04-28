@@ -15,9 +15,9 @@
 variables:
   HARBOR_REGISTRY: "vinai-registry.duckdns.org"
   HARBOR_PROJECT:  "english-speaking-agent"
-  IMAGE_BACKEND:   "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/backend"
-  IMAGE_FRONTEND:  "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/frontend"
-  CACHE_REPO:      "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/cache"
+  IMAGE_BACKEND:   "vinai-registry.duckdns.org/english-speaking-agent/backend"
+  IMAGE_FRONTEND:  "vinai-registry.duckdns.org/english-speaking-agent/frontend"
+  CACHE_REPO:      "vinai-registry.duckdns.org/english-speaking-agent/cache"
 
 stages:
   - test
