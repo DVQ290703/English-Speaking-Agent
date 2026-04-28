@@ -1,6 +1,7 @@
 # Environment
 .env
-
+.env.production
+.git-rewrite/
 # Python
 __pycache__/
 *.py[cod]
@@ -23,6 +24,7 @@ dist/
 .ai-log/*.jsonl
 # Environment
 .env
+.env.prod
 
 # Python
 __pycache__/
@@ -44,3 +46,7 @@ data/
 uv.lock
 IMAGES
 logs/
+.worktrees/
+
+# Prompt ConfigMap — managed out-of-band, not committed to git
+deployments/backend/prompts-configmap.yaml
