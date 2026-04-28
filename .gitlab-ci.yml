@@ -1,0 +1,44 @@
+# =============================================================================
+# GitLab CI/CD Pipeline — English Speaking Agent
+#
+# Stages:
+#   test   — pytest (always runs on main, gates build + deploy)
+#   build  — Kaniko builds backend and/or frontend (path-filtered)
+#   deploy — kubectl apply (path-filtered, optional dependency on build)
+#
+# Required GitLab CI Variables (Settings → CI/CD → Variables):
+#   HARBOR_USER     — Harbor registry username
+#   HARBOR_PASSWORD — Harbor registry password  (masked)
+#   KUBECONFIG      — Raw kubeconfig content     (File type)
+# =============================================================================
+
+variables:
+  HARBOR_REGISTRY: "vinai-registry.duckdns.org"
+  HARBOR_PROJECT:  "english-speaking-agent"
+  IMAGE_BACKEND:   "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/backend"
+  IMAGE_FRONTEND:  "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/frontend"
+  CACHE_REPO:      "${HARBOR_REGISTRY}/${HARBOR_PROJECT}/cache"
+
+stages:
+  - test
+  - build
+  - deploy
+
+# =============================================================================
+# Stage: test
+# Runs on every push to main regardless of which files changed.
+# All build and deploy jobs depend on this passing.
+# =============================================================================
+
+test-backend:
+  stage: test
+  image: python:3.10-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - pip install --quiet uv
+    - uv pip install -r requirements.txt -r requirements-test.txt --system --quiet
+  script:
+    - python -m pytest tests/ --tb=short
+  variables:
+    JWT_SECRET_KEY: "ci-test-secret-key-for-gitlab-ci!"
