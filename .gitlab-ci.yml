@@ -112,3 +112,43 @@ build-frontend:
       changes:
         - frontend/**/*
         - Dockerfile.frontend
+
+# =============================================================================
+# Stage: deploy
+# Path-filtered: runs when source OR manifest files change.
+# needs: optional: true — deploy still runs if only the manifest changed
+# (build was skipped), e.g. when updating resource limits or replicas.
+# KUBECONFIG is a GitLab CI File variable — kubectl picks it up automatically.
+# =============================================================================
+
+deploy-backend:
+  stage: deploy
+  image: bitnami/kubectl:1.29
+  needs:
+    - job: build-backend
+      optional: true
+  script:
+    - kubectl apply -f deployments/backend/deploy.yaml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - app/**/*
+        - Dockerfile
+        - requirements.txt
+        - requirements-test.txt
+        - deployments/backend/**/*
+
+deploy-frontend:
+  stage: deploy
+  image: bitnami/kubectl:1.29
+  needs:
+    - job: build-frontend
+      optional: true
+  script:
+    - kubectl apply -f deployments/frontend/deploy.yaml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+        - Dockerfile.frontend
+        - deployments/frontend/**/*
