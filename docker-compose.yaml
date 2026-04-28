@@ -10,16 +10,40 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       MINIO_ENDPOINT: minio:9000
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173"
+      TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./logs:/app/logs
     ports:
       - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Empty string → Vite uses relative URLs; nginx proxies /api/ to backend.
+        # Override at build time for non-proxied deployments:
+        #   docker compose build --build-arg VITE_API_BASE_URL=https://api.example.com
+        VITE_API_BASE_URL: ""
+    container_name: voice_agent_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_HOST: "backend:8000"
+    ports:
+      - "3000:80"
 
   postgres:
     image: postgres:16-alpine
@@ -57,13 +81,25 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
+  redis:
+    image: redis:7-alpine
+    container_name: voice_agent_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   minio:
     image: minio/minio:latest
     container_name: voice_agent_minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -71,7 +107,132 @@ services:
     volumes:
       - minio_data:/data
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: voice_agent_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: voice_agent_kibana
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  elasticsearch-init:
+    image: curlimages/curl:latest
+    container_name: voice_agent_elasticsearch_init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        echo 'Creating ILM policy...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_ilm/policy/voice-agent-logs-policy -H 'Content-Type: application/json' -d '{"policy":{"phases":{"hot":{"actions":{"rollover":{"max_primary_shard_size":"10gb","max_age":"7d"}}},"delete":{"min_age":"30d","actions":{"delete":{}}}}}}' &&
+        echo 'Creating component template...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_component_template/voice-agent-logs-mappings -H 'Content-Type: application/json' -d '{"template":{"mappings":{"dynamic":"false","properties":{"@timestamp":{"type":"date"},"log_type":{"type":"keyword"},"trace_id":{"type":"keyword"},"session_id":{"type":"keyword"},"user_id":{"type":"keyword"},"span_name":{"type":"keyword"},"span_kind":{"type":"keyword"},"duration_ms":{"type":"float"},"status":{"type":"keyword"},"event_type":{"type":"keyword"},"raw_message":{"type":"text"},"source_file":{"type":"keyword"},"environment":{"type":"keyword"},"model":{"type":"keyword"},"prompt_tokens":{"type":"integer"},"completion_tokens":{"type":"integer"},"total_tokens":{"type":"integer"},"estimated_cost_usd":{"type":"float"}}}}}' &&
+        echo 'Creating index template...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_index_template/voice-agent-logs -H 'Content-Type: application/json' -d '{"index_patterns":["logs-voice_agent.*-*"],"data_stream":{},"composed_of":["voice-agent-logs-mappings"],"template":{"settings":{"index.lifecycle.name":"voice-agent-logs-policy","number_of_shards":1,"number_of_replicas":0}},"priority":200}' &&
+        echo 'Elasticsearch bootstrap complete.'
+
+  kibana-init:
+    image: curlimages/curl:latest
+    container_name: voice_agent_kibana_init
+    depends_on:
+      kibana:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - |
+        echo 'Creating Spans data view...' &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.spans-*","name":"Voice Agent - Spans","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Spans view failed: $$status" && exit 1; }; } &&
+        echo 'Creating Audit data view...' &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.audit-*","name":"Voice Agent - Audit","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Audit view failed: $$status" && exit 1; }; } &&
+        echo 'Creating Plain data view...' &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.plain-*","name":"Voice Agent - Plain","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Plain view failed: $$status" && exit 1; }; } &&
+        echo 'Kibana data views created.'
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: voice_agent_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: voice_agent_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+
+  vector:
+    image: timberio/vector:0.38.0-alpine
+    container_name: voice_agent_vector
+    restart: unless-stopped
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - VECTOR_DATA_DIR=/var/lib/vector
+    volumes:
+      - ./logs:/logs:ro
+      - ./deployments/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - vector_data:/var/lib/vector
+    command: ["--config", "/etc/vector/vector.yaml"]
+
 volumes:
   postgres_data:
   pgadmin_data:
   minio_data:
+  elasticsearch_data:
+  vector_data:
+  prometheus_data:
+  grafana_data:
