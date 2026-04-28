@@ -1,0 +1,19 @@
+name: Sync TheAnh Branch to Google VM
+on:
+  push:
+    branches:
+      - TheAnh 
+
+jobs:
+  push_to_gitlab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 
+
+      - name: Push to GitLab Google VM
+        run: |
+          git remote add gitlab http://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
+          git push gitlab TheAnh:TheAnh --force
