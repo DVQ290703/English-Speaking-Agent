@@ -125,6 +125,8 @@ deploy-backend:
   stage: deploy
   image: bitnami/kubectl:1.29
   needs:
+    - job: test-backend
+      optional: true
     - job: build-backend
       optional: true
   script:
@@ -142,6 +144,8 @@ deploy-frontend:
   stage: deploy
   image: bitnami/kubectl:1.29
   needs:
+    - job: test-backend
+      optional: true
     - job: build-frontend
       optional: true
   script:
