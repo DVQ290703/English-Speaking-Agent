@@ -42,3 +42,73 @@ test-backend:
     - python -m pytest tests/ --tb=short
   variables:
     JWT_SECRET_KEY: "ci-test-secret-key-for-gitlab-ci!"
+
+# =============================================================================
+# Kaniko auth helper — merged into each build job via YAML anchor
+# Writes Harbor credentials to /kaniko/.docker/config.json before build.
+# =============================================================================
+
+.kaniko_auth: &kaniko_auth
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - AUTH=$(echo -n "${HARBOR_USER}:${HARBOR_PASSWORD}" | base64 | tr -d '\n')
+    - echo "{\"auths\":{\"${HARBOR_REGISTRY}\":{\"auth\":\"${AUTH}\"}}}" > /kaniko/.docker/config.json
+
+# =============================================================================
+# Stage: build
+# Path-filtered: only runs when the component's source files change.
+# =============================================================================
+
+build-backend:
+  stage: build
+  needs:
+    - job: test-backend
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - DATE=$(date +%Y%m%d)
+    - VERSION_TAG="${IMAGE_BACKEND}:${DATE}-${CI_COMMIT_SHORT_SHA}"
+    - LATEST_TAG="${IMAGE_BACKEND}:latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --destination "${VERSION_TAG}" \
+        --destination "${LATEST_TAG}" \
+        --cache=true \
+        --cache-repo "${CACHE_REPO}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - app/**/*
+        - Dockerfile
+        - requirements.txt
+        - requirements-test.txt
+
+build-frontend:
+  stage: build
+  needs:
+    - job: test-backend
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - DATE=$(date +%Y%m%d)
+    - VERSION_TAG="${IMAGE_FRONTEND}:${DATE}-${CI_COMMIT_SHORT_SHA}"
+    - LATEST_TAG="${IMAGE_FRONTEND}:latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile.frontend" \
+        --destination "${VERSION_TAG}" \
+        --destination "${LATEST_TAG}" \
+        --cache=true \
+        --cache-repo "${CACHE_REPO}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+        - Dockerfile.frontend
