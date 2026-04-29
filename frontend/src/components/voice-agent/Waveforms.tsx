@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo } from 'react';
 
 // Pre-compute stable random durations so they don't change on every re-render
 function useStableRandom(count: number, seed: number) {
@@ -23,12 +23,12 @@ export function AgentWaveform({ active }: { active: boolean }) {
           key={i}
           className="w-0.5 rounded-full bg-blue-500"
           style={{
-            height: active ? `${4 + Math.sin(i * 0.5) * 12}px` : "3px",
+            height: active ? `${4 + Math.sin(i * 0.5) * 12}px` : '3px',
             animation: active
               ? `agentWave ${0.7 + randoms[i] * 0.6}s ease-in-out ${i * 35}ms infinite`
-              : "none",
+              : 'none',
             opacity: active ? 0.8 : 0.25,
-            transition: "height 0.3s ease",
+            transition: 'height 0.3s ease',
           }}
         />
       ))}
@@ -46,12 +46,12 @@ export function MicWaveform({ active }: { active: boolean }) {
           key={i}
           className="w-0.75 rounded-full bg-blue-500"
           style={{
-            height: active ? `${12 + Math.sin(i * 0.5) * 16 + randoms[i] * 10}px` : "4px",
+            height: active ? `${12 + Math.sin(i * 0.5) * 16 + randoms[i] * 10}px` : '4px',
             animation: active
               ? `agentWave ${0.6 + randoms[i] * 0.8}s ease-in-out ${i * 40}ms infinite`
-              : "none",
+              : 'none',
             opacity: active ? 0.85 : 0.3,
-            transition: "height 0.3s ease",
+            transition: 'height 0.3s ease',
           }}
         />
       ))}

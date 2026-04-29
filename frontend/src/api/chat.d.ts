@@ -4,7 +4,7 @@ export interface ChatRespondParams {
   audioBlob?: Blob;
   history?: Array<{ role: string; text: string }>;
   topic?: string;
-  voiceGender?: "Male" | "Female" | string;
+  voiceGender?: 'Male' | 'Female' | string;
 }
 
 export interface ChatRespondResult {
@@ -39,13 +39,20 @@ export interface SyllableResult {
 export interface WordResult {
   word: string;
   accuracy_score: number;
-  error_type: "None" | "Omission" | "Insertion" | "Mispronunciation" | "UnexpectedBreak" | "MissingBreak" | "Monotone";
+  error_type:
+    | 'None'
+    | 'Omission'
+    | 'Insertion'
+    | 'Mispronunciation'
+    | 'UnexpectedBreak'
+    | 'MissingBreak'
+    | 'Monotone';
   syllables: SyllableResult[];
   phonemes: PhonemeResult[];
 }
 
 export interface AssessPronunciationResult {
-  mode: "scripted" | "unscripted";
+  mode: 'scripted' | 'unscripted';
   recognized_text: string;
   pron_score: number;
   accuracy_score: number;
@@ -55,4 +62,8 @@ export interface AssessPronunciationResult {
   words: WordResult[];
 }
 
-export function assessPronunciation(params: AssessPronunciationParams): Promise<AssessPronunciationResult>;
+export function assessPronunciation(
+  params: AssessPronunciationParams
+): Promise<AssessPronunciationResult>;
+
+export function toWav(blob: Blob): Promise<Blob>;

@@ -1,10 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export async function loginRequest({ email, password }) {
   const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ email, password }),
   });
@@ -12,7 +12,7 @@ export async function loginRequest({ email, password }) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || "Login failed");
+    throw new Error(data.detail || 'Login failed');
   }
 
   return data;
@@ -20,9 +20,9 @@ export async function loginRequest({ email, password }) {
 
 export async function registerRequest({ name, email, password }) {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ name, email, password }),
   });
@@ -30,7 +30,7 @@ export async function registerRequest({ name, email, password }) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || "Registration failed");
+    throw new Error(data.detail || 'Registration failed');
   }
 
   return data;
@@ -46,7 +46,7 @@ export async function fetchMe(token) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || "Failed to fetch profile");
+    throw new Error(data.detail || 'Failed to fetch profile');
   }
 
   return data;

@@ -6,11 +6,15 @@ import json
 import os
 
 from app.core.logger import logger
+from app.core.settings import AZURE_SPEECH_KEY, AZURE_SERVICE_REGION
 
 try:
     import azure.cognitiveservices.speech as speechsdk
-except ModuleNotFoundError:
+except ImportError:
     speechsdk = None
+except Exception:
+    logger.exception("Unexpected error importing azure.cognitiveservices.speech")
+    raise
 
 
 class AzureAssessmentService:
@@ -29,12 +33,16 @@ class AzureAssessmentService:
         return ""
 
     def __init__(self, language: str = "en-US"):
-        self._key = self._first_env_value("AZURE_SPEECH_KEY", "AZURE_SUBSCRIPTION_ID")
-        self._region = self._first_env_value("AZURE_SPEECH_REGION", "AZURE_SERVICE_REGION")
+        self._key = AZURE_SPEECH_KEY
+        self._region = AZURE_SERVICE_REGION
         if not self._key:
-            raise ValueError("AZURE_SPEECH_KEY is missing. Set it in your environment or .env file.")
+            raise ValueError(
+                "Azure speech key is not configured. Set AZURE_SPEECH_KEY (preferred) or AZURE_SUBSCRIPTION_ID (legacy) in your environment or .env file."
+            )
         if not self._region:
-            raise ValueError("AZURE_SPEECH_REGION is missing. Set it in your environment or .env file.")
+            raise ValueError(
+                "Azure service region is not configured. Set AZURE_SERVICE_REGION (or AZURE_SPEECH_REGION) in your environment or .env file."
+            )
         self.default_language = language
         logger.info("AzureAssessmentService ready language=%s region=%s", language, self._region)
 
