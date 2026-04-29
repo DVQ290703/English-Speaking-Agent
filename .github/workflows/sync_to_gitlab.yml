@@ -16,5 +16,5 @@ jobs:
 
       - name: Push branch to GitLab
         run: |
-          git remote add gitlab http://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
+          git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
           git push gitlab HEAD:${{ github.ref_name }} --force
