@@ -1,0 +1,244 @@
+# =============================================================================
+# GitLab CI/CD Pipeline — English Speaking Agent
+#
+# Stages:
+#   test   — pytest (always runs on main, gates build + deploy)
+#   build  — Kaniko builds backend and/or frontend (path-filtered)
+#   deploy — gcloud auth via Service Account key + kubectl apply
+#
+# Required GitLab CI Variables (Settings → CI/CD → Variables):
+#   HARBOR_USER                    — Harbor registry username
+#   HARBOR_PASSWORD                — Harbor registry password        (masked)
+#   GCP_PROJECT_ID                 — GCP project ID  e.g. vinuniai
+#   GCP_WORKLOAD_IDENTITY_PROVIDER — full provider resource name
+#     format: projects/<NUMBER>/locations/global/workloadIdentityPools/<POOL>/providers/<PROVIDER>
+#   GCP_SERVICE_ACCOUNT            — SA email e.g. gitlab-deployer@vinuniai.iam.gserviceaccount.com
+#   GKE_CLUSTER_NAME               — e.g. vinai-cluster
+#   GKE_CLUSTER_ZONE               — e.g. us-central1-a
+#
+# Auth: CI_JOB_JWT_V2 (predefined, no config needed) + GCP Workload Identity Federation
+# No SA keys stored — org policy constraints/iam.disableServiceAccountKeyCreation enforced.
+# =============================================================================
+
+variables:
+  HARBOR_REGISTRY: "vinai-registry.duckdns.org"
+  HARBOR_PROJECT:  "english-speaking-agent"
+  IMAGE_BACKEND:   "vinai-registry.duckdns.org/english-speaking-agent/backend"
+  IMAGE_FRONTEND:  "vinai-registry.duckdns.org/english-speaking-agent/frontend"
+  CACHE_REPO:      "vinai-registry.duckdns.org/english-speaking-agent/cache"
+  K8S_NAMESPACE:   "english-speaking-agent"
+
+stages:
+  - test
+  - build
+  - deploy
+
+# =============================================================================
+# Stage: test
+# =============================================================================
+
+test-backend:
+  stage: test
+  tags:
+    - AWS-Gitlab-runner
+  image: python:3.10-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - pip install --quiet uv
+    - uv pip install -r requirements.txt -r requirements-test.txt --system --quiet
+  script:
+    - python -m pytest tests/ --tb=short
+  variables:
+    JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+
+# =============================================================================
+# Kaniko auth helper — merged into each build job via YAML anchor
+# Writes Harbor credentials to /kaniko/.docker/config.json before build.
+# =============================================================================
+
+.kaniko_auth: &kaniko_auth
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - CREDS=$(printf '%s:%s' "${HARBOR_USER}" "${HARBOR_PASSWORD}" | base64 | tr -d '\n')
+    - printf '{"auths":{"%s":{"auth":"%s"}}}' "${HARBOR_REGISTRY}" "${CREDS}" > /kaniko/.docker/config.json
+
+# =============================================================================
+# GCP auth script — shared across deploy jobs via YAML anchor.
+# Uses CI_JOB_JWT_V2 (predefined OIDC token, GitLab 14.9+) to authenticate
+# with GCP Workload Identity Federation — no SA key required.
+# =============================================================================
+
+.gcp_before_script: &gcp_before_script
+  # Install kubectl and gke-gcloud-auth-plugin (not included in cloud-sdk:alpine)
+  - gcloud components install kubectl gke-gcloud-auth-plugin --quiet
+  # Validate required variables are set before attempting auth
+  - |
+    for VAR in GCP_PROJECT_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT GKE_CLUSTER_NAME GKE_CLUSTER_ZONE; do
+      eval "VAL=\$$VAR"
+      if [ -z "$VAL" ]; then
+        echo "ERROR: $VAR is not set. Add it in GitLab Settings → CI/CD → Variables."
+        exit 1
+      fi
+    done
+  # Validate CI_JOB_JWT_V2 is available (requires GitLab 14.9+ with JWT enabled)
+  - |
+    if [ -z "${CI_JOB_JWT_V2}" ]; then
+      echo "ERROR: CI_JOB_JWT_V2 is empty. Enable it in Admin → Settings → Network → Token Access."
+      exit 1
+    fi
+  # Write OIDC token to file
+  - echo "${CI_JOB_JWT_V2}" > /tmp/gitlab-token.txt
+  # Build WIF credential config using printf to avoid heredoc indentation issues
+  - >-
+    printf '{"type":"external_account","audience":"//iam.googleapis.com/%s","subject_token_type":"urn:ietf:params:oauth:token-type:jwt","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/tmp/gitlab-token.txt"},"service_account_impersonation_url":"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/%s:generateAccessToken"}'
+    "${GCP_WORKLOAD_IDENTITY_PROVIDER}"
+    "${GCP_SERVICE_ACCOUNT}"
+    > /tmp/wif-cred.json
+  - gcloud auth login --brief --cred-file=/tmp/wif-cred.json
+  - gcloud config set project "${GCP_PROJECT_ID}"
+  - export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+  - gcloud container clusters get-credentials "${GKE_CLUSTER_NAME}"
+      --zone "${GKE_CLUSTER_ZONE}"
+      --project "${GCP_PROJECT_ID}"
+  # Remove credential files immediately after auth
+  - rm -f /tmp/gitlab-token.txt /tmp/wif-cred.json
+  - kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+  - kubectl create secret docker-registry harbor-registry-secret
+      --docker-server="${HARBOR_REGISTRY}"
+      --docker-username="${HARBOR_USER}"
+      --docker-password="${HARBOR_PASSWORD}"
+      --namespace="${K8S_NAMESPACE}"
+      --dry-run=client -o yaml | kubectl apply -f -
+
+# =============================================================================
+# Stage: build
+# Path-filtered: only runs when the component's source files change.
+# =============================================================================
+
+build-backend:
+  stage: build
+  tags:
+    - AWS-Gitlab-runner
+  needs:
+    - job: test-backend
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - DATE=$(date +%Y%m%d)
+    - VERSION_TAG="${IMAGE_BACKEND}:${DATE}-${CI_COMMIT_SHORT_SHA}"
+    - LATEST_TAG="${IMAGE_BACKEND}:latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --destination "${VERSION_TAG}" \
+        --destination "${LATEST_TAG}" \
+        --insecure \
+        --skip-tls-verify \
+        --cache=true \
+        --cache-repo "${CACHE_REPO}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - app/**/*
+        - Dockerfile
+        - requirements.txt
+
+build-frontend:
+  stage: build
+  tags:
+    - AWS-Gitlab-runner
+  needs:
+    - job: test-backend
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - DATE=$(date +%Y%m%d)
+    - VERSION_TAG="${IMAGE_FRONTEND}:${DATE}-${CI_COMMIT_SHORT_SHA}"
+    - LATEST_TAG="${IMAGE_FRONTEND}:latest"
+    - |
+      /kaniko/executor \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile.frontend" \
+        --destination "${VERSION_TAG}" \
+        --destination "${LATEST_TAG}" \
+        --insecure \
+        --skip-tls-verify \
+        --cache=true \
+        --cache-repo "${CACHE_REPO}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+        - Dockerfile.frontend
+
+# =============================================================================
+# Stage: deploy
+# =============================================================================
+
+deploy-backend:
+  stage: deploy
+  tags:
+    - AWS-Gitlab-runner
+  image:
+    name: google/cloud-sdk:alpine
+    entrypoint: [""]
+  needs:
+    - job: test-backend
+    - job: build-backend
+      optional: true
+  before_script: *gcp_before_script
+  script:
+    - kubectl apply -f deployments/backend/deploy.yaml
+    - kubectl rollout status deployment/backend-agent -n "${K8S_NAMESPACE}" --timeout=300s
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - app/**/*
+        - Dockerfile
+        - requirements.txt
+        - deployments/backend/**/*
+
+deploy-frontend:
+  stage: deploy
+  tags:
+    - AWS-Gitlab-runner
+  image:
+    name: google/cloud-sdk:alpine
+    entrypoint: [""]
+  needs:
+    - job: test-backend
+    - job: build-frontend
+      optional: true
+  before_script: *gcp_before_script
+  script:
+    - kubectl apply -f deployments/frontend/deploy.yaml
+    - kubectl rollout status deployment/frontend-agent -n "${K8S_NAMESPACE}" --timeout=300s
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+        - Dockerfile.frontend
+        - deployments/frontend/**/*
+
+deploy-ingress:
+  stage: deploy
+  tags:
+    - AWS-Gitlab-runner
+  image:
+    name: google/cloud-sdk:alpine
+    entrypoint: [""]
+  needs:
+    - job: test-backend
+  before_script: *gcp_before_script
+  script:
+    - kubectl apply -f deployments/ingress.yaml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - deployments/ingress.yaml

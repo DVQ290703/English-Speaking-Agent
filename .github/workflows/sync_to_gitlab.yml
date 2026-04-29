@@ -1,0 +1,20 @@
+name: Sync All Branches to GitLab
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push branch to GitLab
+        run: |
+          git remote add gitlab http://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
+          git push gitlab HEAD:${{ github.ref_name }} --force
