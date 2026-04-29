@@ -111,14 +111,13 @@ spec:
           # Dockerfile already runs as non-root user 'app'.
           securityContext:
             allowPrivilegeEscalation: false
-            runAsNonRoot: true
 
       # Pull from the private Harbor registry.
       imagePullSecrets:
         - name: harbor-registry-secret
 
 ---
-
+# Build
 # ── Service ───────────────────────────────────────────────────────────────────
 # ClusterIP: internal only. Frontend reaches backend via this DNS name:
 #   http://backend-agent-service.english-speaking-agent.svc.cluster.local:8000
@@ -131,6 +130,8 @@ metadata:
     app: backend-agent
     tier: backend
     project: english-speaking-agent
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
 spec:
   type: ClusterIP
   selector:
