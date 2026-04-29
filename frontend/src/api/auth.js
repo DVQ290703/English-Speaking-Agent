@@ -1,53 +1,82 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+import { API_BASE_URL, ENDPOINTS } from './config';
+
+async function parseAuthResponse(response, fallbackMessage) {
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || fallbackMessage);
+  }
+
+  return data;
+}
 
 export async function loginRequest({ email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: "POST",
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.login}`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ email, password }),
   });
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.detail || "Login failed");
-  }
-
-  return data;
+  return parseAuthResponse(response, 'Login failed');
 }
 
-export async function registerRequest({ name, email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: "POST",
+export async function registerRequest({ display_name, email, password }) {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.register}`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ display_name, email, password }),
   });
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.detail || "Registration failed");
-  }
-
-  return data;
+  return parseAuthResponse(response, 'Registration failed');
 }
 
 export async function fetchMe(token) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.me}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
 
-  const data = await response.json();
+  return parseAuthResponse(response, 'Failed to fetch profile');
+}
 
-  if (!response.ok) {
-    throw new Error(data.detail || "Failed to fetch profile");
-  }
+export async function forgotPasswordRequest({ email }) {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.forgotPassword}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  });
 
-  return data;
+  return parseAuthResponse(response, 'Failed to start password reset');
+}
+
+export async function resetPasswordRequest({ token, new_password }) {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.resetPassword}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ token, new_password }),
+  });
+
+  return parseAuthResponse(response, 'Failed to reset password');
+}
+
+export async function changePasswordRequest({ token, current_password, new_password }) {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.changePassword}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ current_password, new_password }),
+  });
+
+  return parseAuthResponse(response, 'Failed to change password');
 }
