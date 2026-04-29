@@ -22,7 +22,13 @@ from app.api.schemas import (
     UserOut,
     WordResult,
 )
-from app.core.ai_services import get_assessment_service, normalize_history, run_langraph_agent, transcribe_audio
+from app.core.ai_services import (
+    _synthesize_audio_bytes,
+    get_assessment_service,
+    normalize_history,
+    run_langraph_agent,
+    transcribe_audio,
+)
 from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import (
@@ -34,6 +40,27 @@ from app.core.security import (
     verify_password_with_padding,
 )
 from app.core.storage import _upload, build_object_key, get_presigned_url, store_user_audio
+
+import time as _time
+
+from app.guardrails.audit.logger import AuditLogger
+from app.guardrails.exceptions import GuardrailException
+from app.guardrails.hitl.router import HITLRouter
+from app.guardrails.input import InputGuardrails
+from app.guardrails.output import OutputGuardrails
+
+_input_guardrails = InputGuardrails()
+_output_guardrails = OutputGuardrails()
+_hitl_router = HITLRouter()
+_audit_logger = AuditLogger()
+
+_GUARDRAIL_HTTP_STATUS: dict[str, int] = {
+    "INPUT_INVALID": status.HTTP_400_BAD_REQUEST,
+    "INPUT_TOO_LONG": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    "RATE_LIMITED": status.HTTP_429_TOO_MANY_REQUESTS,
+    "INJECTION_DETECTED": status.HTTP_400_BAD_REQUEST,
+    "TOPIC_BLOCKED": status.HTTP_400_BAD_REQUEST,
+}
 
 router = APIRouter(prefix="/api")
 
@@ -343,6 +370,35 @@ def chat_respond(
     if not user_input:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
 
+    # ── Guardrails: Input ──────────────────────────────────────────────────
+    _guardrail_start = _time.time()
+    _guardrail_decisions: dict = {}
+    _all_flags: list[str] = []
+
+    try:
+        user_input = _input_guardrails.check(user_input, user_id)
+        _guardrail_decisions.update({
+            "input_valid": True,
+            "rate_limited": False,
+            "injection_detected": False,
+            "topic_blocked": False,
+        })
+    except GuardrailException as exc:
+        logger.warning(
+            "input_guardrail_block code=%s reason=%s user_id=%s",
+            exc.code,
+            exc.reason,
+            user_id,
+        )
+        http_status = _GUARDRAIL_HTTP_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST)
+        extra_headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+        raise HTTPException(
+            status_code=http_status,
+            detail=exc.reason,
+            headers=extra_headers,
+        )
+    # ── End Input Guardrails ───────────────────────────────────────────────
+
     if conversation_id:
         _validate_uuid(conversation_id, "conversation_id")
 
@@ -414,6 +470,41 @@ def chat_respond(
         history=conversation_history,
         voice_gender=voice_gender,
     )
+
+    # ── Guardrails: Output ─────────────────────────────────────────────────
+    output_result = _output_guardrails.check(response_text)
+    if output_result.needs_retry:
+        logger.warning("output_guardrail retry triggered flags=%s", output_result.flags)
+        retry_text, retry_audio = run_langraph_agent(
+            user_input=user_input,
+            history=conversation_history,
+            voice_gender=voice_gender,
+        )
+        retry_result = _output_guardrails.check(retry_text)
+        if not retry_result.needs_retry:
+            if retry_result.text != retry_text:
+                response_audio_bytes = _synthesize_audio_bytes(retry_result.text, voice_gender=voice_gender)
+            else:
+                response_audio_bytes = retry_audio
+            response_text = retry_result.text
+            _all_flags.extend(retry_result.flags)
+        else:
+            response_text = "I'm sorry, I couldn't generate a valid response. Please try again."
+            response_audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender)
+            _all_flags.append("format_invalid")
+    else:
+        if output_result.text != response_text:
+            response_audio_bytes = _synthesize_audio_bytes(output_result.text, voice_gender=voice_gender)
+        response_text = output_result.text
+        _all_flags.extend(output_result.flags)
+
+    _guardrail_decisions.update({
+        "output_toxic": "is_toxic" in _all_flags,
+        "output_pii_redacted": "contains_pii" in _all_flags,
+        "format_valid": "format_invalid" not in _all_flags,
+    })
+    # ── End Output Guardrails ──────────────────────────────────────────────
+
     logger.info(
         "Pipeline complete response_text_length=%d audio_bytes=%d",
         len(response_text),
@@ -476,6 +567,28 @@ def chat_respond(
                     mime_type="audio/mpeg",
                     size_bytes=len(response_audio_bytes),
                 )
+
+    # ── HITL Routing ───────────────────────────────────────────────────────
+    _hitl_queued = _hitl_router.route(
+        flags=_all_flags,
+        conversation_id=conv_id,
+        message_id=assistant_message_id,
+        user_input=user_input,
+        response_text=response_text,
+    )
+
+    # ── Audit Logging ──────────────────────────────────────────────────────
+    _audit_logger.log(
+        user_id=user_id,
+        conversation_id=conv_id,
+        user_input=user_input,
+        response_text=response_text,
+        guardrail_decisions=_guardrail_decisions,
+        flags=_all_flags,
+        hitl_queued=_hitl_queued,
+        start_time=_guardrail_start,
+    )
+    # ── End Guardrails ─────────────────────────────────────────────────────
 
     user_audio_url: str | None = None
     if user_object_key:
