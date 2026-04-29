@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass, field
 
 _URL_PATTERN = re.compile(r"https?://\S+")
+_TRAILING_PUNCT = re.compile(r"[.,;:!?\"')\]]+$")
 
 
 @dataclass
@@ -21,11 +22,13 @@ class FormatValidator:
         """Strip non-allowlisted URLs; flag empty/very-short responses for retry."""
 
         def _replace(match: re.Match) -> str:
-            url = match.group(0)
+            raw = match.group(0)
+            url = _TRAILING_PUNCT.sub("", raw)
+            trailing = raw[len(url):]
             for allowed in self._url_allowlist:
                 if url.startswith(allowed):
-                    return url
-            return ""
+                    return url + trailing
+            return trailing
 
         cleaned = _URL_PATTERN.sub(_replace, text).strip()
 

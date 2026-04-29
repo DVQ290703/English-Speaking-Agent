@@ -13,7 +13,7 @@ def test_url_stripped_when_not_in_allowlist():
     v = FormatValidator(url_allowlist=[])
     result = v.check("Visit https://example.com for more info.")
     assert "https://example.com" not in result.text
-    assert result.text.strip() != ""
+    assert result.text.strip() == "Visit  for more info."
 
 
 def test_url_preserved_when_in_allowlist():
@@ -53,3 +53,4 @@ def test_response_with_only_url_becomes_empty_and_triggers_retry():
     v = FormatValidator(url_allowlist=[])
     result = v.check("https://example.com")
     assert result.needs_retry is True
+    assert "format_invalid" in result.flags
