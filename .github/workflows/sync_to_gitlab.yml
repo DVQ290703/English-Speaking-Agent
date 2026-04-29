@@ -1,4 +1,4 @@
-name: Sync All Branches to GitLab
+name: Multi-Sync (Upstream & GitLab)
 
 on:
   push:
@@ -6,15 +6,28 @@ on:
       - '**'
 
 jobs:
-  mirror:
+  sync-and-mirror:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_TOKEN }}
 
-      - name: Push branch to GitLab
+      - name: Config Git
+        run: |
+          git config --global user.name "abcdefya"
+          git config --global user.email "anh.dothe47@gmail.com"
+
+      - name: Sync to Upstream (GitHub)
+        if: github.ref_name != 'main'
+        run: |
+          git remote add upstream https://x-access-token:${{ secrets.UPSTREAM_TOKEN }}@github.com/a20-ai-thuc-chien/A20-App-014.git
+          git push upstream HEAD:${{ github.ref_name }} --force
+
+      - name: Mirror to GitLab
+        if: github.ref_name == 'main'
         run: |
           git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
           git push gitlab HEAD:${{ github.ref_name }} --force
