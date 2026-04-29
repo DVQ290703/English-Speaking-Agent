@@ -46,6 +46,9 @@ def test_log_event_contains_required_fields(caplog):
     assert event["hitl_queued"] is True
     assert "latency_ms" in event
     assert event["latency_ms"] >= 0
+    assert "user_input_length" in event
+    assert "response_length" in event
+    assert "guardrail_decisions" in event
 
 
 def test_raw_text_not_in_audit_event(caplog):
@@ -81,3 +84,13 @@ def test_audit_db_write_called_when_enabled(monkeypatch):
     with patch("app.guardrails.audit.logger.get_connection", return_value=mock_conn):
         _call_log(logger_instance)
     mock_cursor.execute.assert_called_once()
+
+
+def test_db_write_error_is_caught_and_logged(monkeypatch, caplog):
+    import logging
+    import app.core.settings as s
+    monkeypatch.setattr(s, "AUDIT_DB_ENABLED", True)
+    with patch("app.guardrails.audit.logger.get_connection", side_effect=Exception("db down")):
+        with caplog.at_level(logging.ERROR):
+            _call_log(AuditLogger())  # must not raise
+    assert any("audit_log DB write failed" in r.message for r in caplog.records)
