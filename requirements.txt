@@ -15,4 +15,4 @@ python-multipart
 langsmith[claude-agent-sdk]
 minio
 azure-cognitiveservices-speech
-redis>=5.0
+redis>=5.0,<6

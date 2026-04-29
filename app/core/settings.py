@@ -79,6 +79,18 @@ CORS_ORIGINS: list[str] = [origin.strip() for origin in _cors_env.split(",") if 
 
 # ── Guardrails ─────────────────────────────────────────────────────────────────
 
+
+def _parse_json_list(env_var: str, default: str = "[]") -> list[str]:
+    raw = os.getenv(env_var, default)
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, list):
+            raise ValueError(f"{env_var} must be a JSON array, got: {type(result).__name__}")
+        return result
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{env_var} contains invalid JSON: {exc}") from exc
+
+
 # Redis (rate limiting)
 REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -88,14 +100,20 @@ RATE_LIMIT_RPM: int = int(os.getenv("RATE_LIMIT_RPM", "10"))
 # Input guardrails
 MAX_INPUT_CHARS: int = int(os.getenv("MAX_INPUT_CHARS", "2000"))
 INJECTION_USE_LLM: bool = os.getenv("INJECTION_USE_LLM", "false").lower() == "true"
-TOPIC_BLOCKLIST: list[str] = json.loads(os.getenv("TOPIC_BLOCKLIST", "[]"))
+TOPIC_BLOCKLIST: list[str] = _parse_json_list("TOPIC_BLOCKLIST")
 
 # Output guardrails
 GUARDRAIL_MAX_RETRIES: int = int(os.getenv("GUARDRAIL_MAX_RETRIES", "1"))
-URL_ALLOWLIST: list[str] = json.loads(os.getenv("URL_ALLOWLIST", "[]"))
+URL_ALLOWLIST: list[str] = _parse_json_list("URL_ALLOWLIST")
 
 # HITL
 ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
+_warn_or_raise_for_secret(
+    name="ADMIN_API_KEY",
+    value=ADMIN_API_KEY,
+    minimum_length=16,
+    blocked_values={"admin", "secret", "changeme", "test", ""},
+)
 
 # Audit
 AUDIT_DB_ENABLED: bool = os.getenv("AUDIT_DB_ENABLED", "false").lower() == "true"
