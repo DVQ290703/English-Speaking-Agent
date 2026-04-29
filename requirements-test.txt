@@ -3,3 +3,4 @@
 pytest
 pytest-anyio
 pytest-cov
+fakeredis>=2.0

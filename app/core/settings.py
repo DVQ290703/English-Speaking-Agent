@@ -1,3 +1,4 @@
+import json
 import os
 import warnings
 
@@ -75,3 +76,26 @@ AZURE_SERVICE_REGION = AZURE_SPEECH_REGION
 
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CORS_ORIGINS: list[str] = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+
+# ── Guardrails ─────────────────────────────────────────────────────────────────
+
+# Redis (rate limiting)
+REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# Rate limiting
+RATE_LIMIT_RPM: int = int(os.getenv("RATE_LIMIT_RPM", "10"))
+
+# Input guardrails
+MAX_INPUT_CHARS: int = int(os.getenv("MAX_INPUT_CHARS", "2000"))
+INJECTION_USE_LLM: bool = os.getenv("INJECTION_USE_LLM", "false").lower() == "true"
+TOPIC_BLOCKLIST: list[str] = json.loads(os.getenv("TOPIC_BLOCKLIST", "[]"))
+
+# Output guardrails
+GUARDRAIL_MAX_RETRIES: int = int(os.getenv("GUARDRAIL_MAX_RETRIES", "1"))
+URL_ALLOWLIST: list[str] = json.loads(os.getenv("URL_ALLOWLIST", "[]"))
+
+# HITL
+ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
+
+# Audit
+AUDIT_DB_ENABLED: bool = os.getenv("AUDIT_DB_ENABLED", "false").lower() == "true"
