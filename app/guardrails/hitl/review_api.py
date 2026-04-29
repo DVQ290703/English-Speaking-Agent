@@ -23,7 +23,7 @@ class ReviewRequest(BaseModel):
 
 @router.get("/queue")
 def list_queue(
-    status_filter: str = "pending",
+    status: str = "pending",
     _: None = Depends(_require_admin),
 ):
     with get_connection() as conn:
@@ -37,7 +37,7 @@ def list_queue(
                 ORDER BY created_at DESC
                 LIMIT 100
                 """,
-                (status_filter,),
+                (status,),
             )
             rows = cur.fetchall()
     return {

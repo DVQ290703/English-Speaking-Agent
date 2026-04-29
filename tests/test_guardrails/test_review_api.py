@@ -94,3 +94,14 @@ def test_dismiss_item(hitl_client):
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "dismissed"
+
+
+def test_dismiss_item_404_when_not_found(hitl_client):
+    mock_conn, mock_cursor = _make_mock_conn(rows=[])
+    mock_cursor.fetchone.return_value = None
+    with patch("app.guardrails.hitl.review_api.get_connection", return_value=mock_conn):
+        resp = hitl_client.post(
+            "/api/admin/hitl/nonexistent/dismiss",
+            headers=ADMIN_HEADERS,
+        )
+    assert resp.status_code == 404
