@@ -2,7 +2,7 @@
 # GitLab CI/CD Pipeline — English Speaking Agent
 #
 # Stages:
-#   test   — pytest (always runs on test_cicd, gates build + deploy)
+#   test   — pytest (always runs on main, gates build + deploy)
 #   build  — Kaniko builds backend and/or frontend (path-filtered)
 #   deploy — gcloud auth via Service Account key + kubectl apply
 #
@@ -43,7 +43,7 @@ test-backend:
     - AWS-Gitlab-runner
   image: python:3.10-slim
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
   before_script:
     - pip install --quiet uv
     - uv pip install -r requirements.txt -r requirements-test.txt --system --quiet
@@ -141,7 +141,7 @@ build-backend:
         --cache=true \
         --cache-repo "${CACHE_REPO}"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - app/**/*
         - Dockerfile
@@ -172,7 +172,7 @@ build-frontend:
         --cache=true \
         --cache-repo "${CACHE_REPO}"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - frontend/**/*
         - Dockerfile.frontend
@@ -197,7 +197,7 @@ deploy-backend:
     - kubectl apply -f deployments/backend/deploy.yaml
     - kubectl rollout status deployment/backend-agent -n "${K8S_NAMESPACE}" --timeout=300s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - app/**/*
         - Dockerfile
@@ -220,7 +220,7 @@ deploy-frontend:
     - kubectl apply -f deployments/frontend/deploy.yaml
     - kubectl rollout status deployment/frontend-agent -n "${K8S_NAMESPACE}" --timeout=300s
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - frontend/**/*
         - Dockerfile.frontend
@@ -239,6 +239,6 @@ deploy-ingress:
   script:
     - kubectl apply -f deployments/ingress.yaml
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test_cicd"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - deployments/ingress.yaml
