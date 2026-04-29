@@ -1,0 +1,186 @@
+# =============================================================================
+# Frontend Deployment Manifest — English Speaking Agent
+# Apply  : kubectl apply -f deployments/frontend/deploy.yaml
+# Status : kubectl get pods -l app=frontend-agent -n english-speaking-agent
+# =============================================================================
+# 
+# ── Namespace ─────────────────────────────────────────────────────────────────
+# Isolates all project resources from the default namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: english-speaking-agent
+  labels:
+    project: english-speaking-agent
+
+---
+
+# ── ConfigMap ─────────────────────────────────────────────────────────────────
+# Externalises runtime configuration so the image never needs rebuilding
+# for environment-specific settings.
+# Update INTERNAL_API_URL once the backend Service name is known.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-agent-config
+  namespace: english-speaking-agent
+  labels:
+    app: frontend-agent
+    tier: frontend
+    project: english-speaking-agent
+data:
+  # Points to the backend Kubernetes Service (ClusterIP DNS).
+  # Format: http://<service-name>.<namespace>.svc.cluster.local:<port>
+  INTERNAL_API_URL: "http://backend-agent-service.english-speaking-agent.svc.cluster.local:8000"
+
+---
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+# Manages the desired state of the frontend pods.
+# 2 replicas spread across nodes for basic high availability.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-agent
+  namespace: english-speaking-agent
+  labels:
+    app: frontend-agent
+    tier: frontend
+    project: english-speaking-agent
+spec:
+  replicas: 1
+
+  # RollingUpdate: terminates old pods gradually so the app stays available
+  # during deployments. maxSurge allows one extra pod during the rollout.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0      # zero-downtime: never kill a pod before a new one is ready
+
+  # Must match pod template labels exactly — used by the ReplicaSet controller.
+  selector:
+    matchLabels:
+      app: frontend-agent
+      tier: frontend
+
+  template:
+    metadata:
+      labels:
+        app: frontend-agent
+        tier: frontend
+        project: english-speaking-agent
+    spec:
+      # Allow scheduling on control-plane nodes (dev/single-node clusters only).
+      # Remove this block once you have dedicated worker nodes.
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      # Spread pods across different nodes when possible.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: frontend-agent
+
+      containers:
+        - name: frontend
+          # ── Image ──────────────────────────────────────────────────────────
+          # To pin a specific release, replace `latest` with the versioned tag
+          # produced by publish.sh (e.g. 20260426-c3cc45b).
+          image: vinai-registry.duckdns.org/english-speaking-agent/frontend:latest
+          imagePullPolicy: Always   # always pull so `latest` is genuinely fresh
+
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          # ── Environment from ConfigMap ──────────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: frontend-agent-config
+
+          # ── Resource Limits ────────────────────────────────────────────────
+          # nginx serving static assets is intentionally lightweight.
+          # Raise limits if you add SSR or a BFF layer.
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          # ── Readiness Probe ────────────────────────────────────────────────
+          # Pod only receives traffic once nginx serves a 200 on /.
+          # Keeps bad deploys from accepting requests.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # ── Liveness Probe ─────────────────────────────────────────────────
+          # Restarts the container if nginx stops responding.
+          # Longer initial delay to avoid killing pods during startup.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # ── Security Context ───────────────────────────────────────────────
+          # nginx:alpine already drops root after binding port 80;
+          # these settings enforce the principle of least privilege.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # nginx writes tmp/cache files
+            runAsNonRoot: false             # nginx must bind port 80 as root briefly
+
+      # Pull from the private Harbor registry.
+      # Create the secret with:
+      #   kubectl create secret docker-registry harbor-registry-secret \
+      #     --docker-server=vinai-registry.duckdns.org \
+      #     --docker-username=<user> \
+      #     --docker-password=<password> \
+      #     -n english-speaking-agent
+      imagePullSecrets:
+        - name: harbor-registry-secret
+
+---
+
+# ── Service ───────────────────────────────────────────────────────────────────
+# ClusterIP: internal only — traffic arrives via the GKE Ingress.
+# NEG annotation enables container-native load balancing for better performance.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-agent-service
+  namespace: english-speaking-agent
+  labels:
+    app: frontend-agent
+    tier: frontend
+    project: english-speaking-agent
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend-agent
+    tier: frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
