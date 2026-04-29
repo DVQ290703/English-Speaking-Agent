@@ -85,7 +85,7 @@ def _parse_json_list(env_var: str, default: str = "[]") -> list[str]:
     try:
         result = json.loads(raw)
         if not isinstance(result, list):
-            raise ValueError(f"{env_var} must be a JSON array, got: {type(result).__name__}")
+            raise RuntimeError(f"{env_var} must be a JSON array, got: {type(result).__name__}")
         return result
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"{env_var} contains invalid JSON: {exc}") from exc
