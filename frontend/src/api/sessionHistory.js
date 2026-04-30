@@ -1,4 +1,4 @@
-const STORAGE_KEY = "vt_session_history_v1";
+const STORAGE_KEY = 'vt_session_history_v1';
 const MAX_SESSIONS = 50;
 const MAX_MESSAGES_PER_SESSION = 200;
 
@@ -43,11 +43,11 @@ export function getSessions() {
 }
 
 export function getSession(id) {
-  return getSessions().find((s) => s.id === id) ?? null;
+  return getSessions().find(s => s.id === id) ?? null;
 }
 
 export function deleteSession(id) {
-  const next = getSessions().filter((s) => s.id !== id);
+  const next = getSessions().filter(s => s.id !== id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     invalidateSessionsCache();
@@ -58,15 +58,18 @@ export function deleteSession(id) {
 
 // Strip large/transient fields from a message so it survives in localStorage.
 function trimMessage(m) {
-  if (!m || typeof m !== "object") return m;
-  const { audioUrl, audioBlob, _audioBuffer, _localUrl, ...rest } = m;
+  if (!m || typeof m !== 'object') return m;
+  // userAudioUrl (blob: URLs) and audioBlob are transient and shouldn't
+  // be persisted across page loads — object URLs are only valid per-document.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { audioUrl, audioBlob, _audioBuffer, _localUrl, userAudioUrl, ...rest } = m;
   return rest;
 }
 
 // Yield to the browser between heavy stringify+setItem passes so the UI
 // thread can repaint between retries on lower-end devices.
 function yieldToBrowser() {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 // Serialise concurrent writes so two rapid saveSession calls (e.g. one from
@@ -82,7 +85,7 @@ let pendingResolvers = [];
 
 function scheduleWrite(next) {
   pendingPayload = next;
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     pendingResolvers.push(resolve);
     writeChain = writeChain.then(async () => {
       // Snapshot whatever is queued *now* — earlier callers will all be
@@ -90,7 +93,7 @@ function scheduleWrite(next) {
       if (pendingPayload === null) {
         const resolvers = pendingResolvers;
         pendingResolvers = [];
-        resolvers.forEach((r) => r(null));
+        resolvers.forEach(r => r(null));
         return;
       }
       const toWrite = pendingPayload;
@@ -99,12 +102,12 @@ function scheduleWrite(next) {
       pendingResolvers = [];
       try {
         const result = await writeSessions(toWrite);
-        resolvers.forEach((r) => r(result));
+        resolvers.forEach(r => r(result));
       } catch (err) {
-        if (typeof console !== "undefined") {
-          console.warn("[sessionHistory] write chain rejected:", err);
+        if (typeof console !== 'undefined') {
+          console.warn('[sessionHistory] write chain rejected:', err);
         }
-        resolvers.forEach((r) => r(null));
+        resolvers.forEach(r => r(null));
       }
     });
   });
@@ -129,17 +132,15 @@ function scheduleWrite(next) {
 // fallback failed.
 async function writeSessions(next) {
   const stages = [
-    (arr) => arr,
-    (arr) =>
-      arr.map((s) => ({
+    arr => arr,
+    arr =>
+      arr.map(s => ({
         ...s,
-        messages: Array.isArray(s.messages)
-          ? s.messages.map(trimMessage)
-          : s.messages,
+        messages: Array.isArray(s.messages) ? s.messages.map(trimMessage) : s.messages,
       })),
-    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
-    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
-    (arr) => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
+    arr => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
+    arr => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
+    arr => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
   ];
 
   let attempt = next;
@@ -157,9 +158,9 @@ async function writeSessions(next) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(attempt));
       invalidateSessionsCache();
-      if (i > 0 && typeof console !== "undefined") {
+      if (i > 0 && typeof console !== 'undefined') {
         console.warn(
-          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} retr${i === 1 ? "y" : "ies"}.`,
+          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} retr${i === 1 ? 'y' : 'ies'}.`
         );
       }
       return attempt;
@@ -167,19 +168,15 @@ async function writeSessions(next) {
       lastError = err;
     }
   }
-  if (typeof console !== "undefined") {
-    console.warn(
-      "[sessionHistory] could not persist session history to localStorage:",
-      lastError,
-    );
+  if (typeof console !== 'undefined') {
+    console.warn('[sessionHistory] could not persist session history to localStorage:', lastError);
   }
   return null;
 }
 
 export function saveSession(session) {
   const all = getSessions();
-  const id =
-    session.id ?? `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const id = session.id ?? `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const messages = Array.isArray(session.messages) ? session.messages : [];
   // Cap transcript length to keep individual sessions reasonable.
   const cappedMessages =
@@ -189,7 +186,7 @@ export function saveSession(session) {
   const entry = {
     id,
     date: session.date ?? new Date().toISOString(),
-    topic: session.topic ?? "Daily Conversation",
+    topic: session.topic ?? 'Daily Conversation',
     avgScore: session.avgScore ?? 0,
     sentenceCount: session.sentenceCount ?? 0,
     corrections: session.corrections ?? 0,
@@ -199,7 +196,7 @@ export function saveSession(session) {
     messages: cappedMessages,
     topicKey: session.topicKey ?? null,
   };
-  const filtered = all.filter((s) => s.id !== id);
+  const filtered = all.filter(s => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
 
   // Fast path: attempt a fully synchronous write, which is critical for
@@ -230,9 +227,9 @@ export function saveSession(session) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(emergency));
     invalidateSessionsCache();
-    if (typeof console !== "undefined") {
+    if (typeof console !== 'undefined') {
       console.warn(
-        "[sessionHistory] storage quota tight — saved only latest session without transcript.",
+        '[sessionHistory] storage quota tight — saved only latest session without transcript.'
       );
     }
     return entry;
@@ -242,9 +239,9 @@ export function saveSession(session) {
     // may not complete if the tab closes immediately afterwards, but
     // both synchronous attempts already failed, so there is nothing
     // more we can do synchronously.
-    if (typeof console !== "undefined") {
+    if (typeof console !== 'undefined') {
       console.warn(
-        "[sessionHistory] sync write failed entirely — falling back to async write queue.",
+        '[sessionHistory] sync write failed entirely — falling back to async write queue.'
       );
     }
     void scheduleWrite(next);
@@ -292,21 +289,18 @@ export function getStorageUsage() {
   let bytes = 0;
   let sessionCount = 0;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? "";
+    const raw = localStorage.getItem(STORAGE_KEY) ?? '';
     bytes = raw.length;
     sessionCount = getSessions().length;
   } catch {
     // ignore
   }
-  const percent = Math.min(
-    100,
-    Math.round((bytes / APPROX_LOCALSTORAGE_QUOTA) * 100),
-  );
+  const percent = Math.min(100, Math.round((bytes / APPROX_LOCALSTORAGE_QUOTA) * 100));
   return { bytes, percent, sessionCount, max: MAX_SESSIONS };
 }
 
 export function formatBytes(bytes) {
-  if (!bytes) return "0 KB";
+  if (!bytes) return '0 KB';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;

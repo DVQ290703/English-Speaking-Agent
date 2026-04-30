@@ -66,13 +66,28 @@ _warn_or_raise_for_secret(
     blocked_values={"minioadmin", "password", "changeme", "test-secret"},
 )
 
-AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", os.getenv("AZURE_SUBSCRIPTION_ID", ""))
-AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", os.getenv("AZURE_SERVICE_REGION", ""))
+# ── Azure Cognitive Services ──────────────────────────────────────────────────
+# Prefer the explicit AZURE_SPEECH_KEY. Do NOT silently fall back to
+# AZURE_SUBSCRIPTION_ID — that can lead to accidental use of legacy keys.
+AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY") or os.getenv("AZURE_SUBSCRIPTION_ID") or ""
+if not os.getenv("AZURE_SPEECH_KEY") and os.getenv("AZURE_SUBSCRIPTION_ID"):
+    warnings.warn(
+        "AZURE_SUBSCRIPTION_ID is set but AZURE_SPEECH_KEY is not. Using AZURE_SUBSCRIPTION_ID for backward compatibility — please set AZURE_SPEECH_KEY.",
+        stacklevel=2,
+    )
 
-# Backward-compatible aliases for older configuration names still referenced
-# in parts of the repo and historical docs.
+# Service region — support either AZURE_SERVICE_REGION (current) or
+# AZURE_SPEECH_REGION (legacy) environment variable names.
+AZURE_SERVICE_REGION = os.getenv("AZURE_SERVICE_REGION") or os.getenv("AZURE_SPEECH_REGION") or ""
+if not AZURE_SERVICE_REGION:
+    warnings.warn(
+        "AZURE_SERVICE_REGION (or AZURE_SPEECH_REGION) is not set. Azure assessment calls will fail without a region.",
+        stacklevel=2,
+    )
+
+# Backward-compatible aliases (so older imports still work)
 AZURE_SUBSCRIPTION_ID = AZURE_SPEECH_KEY
-AZURE_SERVICE_REGION = AZURE_SPEECH_REGION
+AZURE_SPEECH_REGION = AZURE_SERVICE_REGION
 
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CORS_ORIGINS: list[str] = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
