@@ -12,8 +12,6 @@ import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
-os.environ.setdefault("AZURE_SPEECH_KEY", "test-azure-key")
-os.environ.setdefault("AZURE_SPEECH_REGION", "eastus")
 
 from app.services.azure_assessment import AzureAssessmentService
 
@@ -72,19 +70,27 @@ def _make_mock_sdk(reason: str = "RecognizedSpeech"):
 
 
 # ---------------------------------------------------------------------------
+# Module-wide default: patch the already-imported module constants so tests
+# work in CI without a .env file. Individual tests override as needed.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _azure_defaults(monkeypatch):
+    monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "test-azure-key")
+    monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
+
+
+# ---------------------------------------------------------------------------
 # Init tests
 # ---------------------------------------------------------------------------
 
 class TestAzureAssessmentServiceInit:
     def test_raises_when_key_missing(self, monkeypatch):
-        # Patch the already-imported module constant, not os.environ
         monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "")
-        monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
         with pytest.raises(ValueError, match="AZURE_SPEECH_KEY"):
             AzureAssessmentService()
 
     def test_raises_when_region_missing(self, monkeypatch):
-        monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "key")
         monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "")
         with pytest.raises(ValueError, match="AZURE_SPEECH_REGION"):
             AzureAssessmentService()
@@ -96,15 +102,11 @@ class TestAzureAssessmentServiceInit:
         svc = AzureAssessmentService()
         assert svc.default_language == "en-US"
 
-    def test_default_language_is_en_us(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "eastus")
+    def test_default_language_is_en_us(self):
         svc = AzureAssessmentService()
         assert svc.default_language == "en-US"
 
-    def test_custom_language_stored(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "uksouth")
+    def test_custom_language_stored(self):
         svc = AzureAssessmentService(language="en-GB")
         assert svc.default_language == "en-GB"
 
@@ -115,9 +117,7 @@ class TestAzureAssessmentServiceInit:
 
 class TestAzureAssessmentServiceAssess:
     @pytest.fixture()
-    def svc(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "test-key")
-        monkeypatch.setenv("AZURE_SPEECH_REGION", "eastus")
+    def svc(self):
         return AzureAssessmentService()
 
     def test_raises_on_empty_audio(self, svc):
