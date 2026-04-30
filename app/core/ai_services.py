@@ -46,15 +46,16 @@ def get_assessment_service():
     return service
 
 
-def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
-    """Convert raw UI history JSON into a compact list of prompt-ready conversation lines."""
+def normalize_history(history_raw: str | None, category: str | None = None, topic: str | None = None) -> list[str]:
+    """Convert raw UI history JSON into a compact list of prompt-ready conversation lines.
+
+    NOTE: category and topic are accepted for call-site compatibility but are no longer
+    injected into history. They are passed directly to the pipeline via run_langraph_agent().
+    """
     history_lines: list[str] = []
 
-    if topic and topic.strip():
-        history_lines.append(f"Topic: {topic.strip()}")
-
     if not history_raw:
-        logger.debug("normalize_history no history provided topic_present=%s", bool(topic and topic.strip()))
+        logger.debug("normalize_history no history provided")
         return history_lines
 
     try:
@@ -92,13 +93,14 @@ def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
         return ""
 
 
-def _synthesize_audio_bytes(text: str, voice_gender: str | None = None) -> bytes:
+def _synthesize_audio_bytes(text: str, voice_gender: str | None = None, voice_accent: str | None = None) -> bytes:
     """Synthesize *text* via the cached pipeline's TTS service and return raw bytes."""
     logger.info("_synthesize_audio_bytes start text_length=%d", len(text))
     try:
         audio = get_voice_agent_pipeline().tts_service.convert_text_to_speech(
             text,
             voice_gender=voice_gender,
+            voice_accent=voice_accent,
         )
         if audio is None:
             logger.warning("_synthesize_audio_bytes received None from TTS")
@@ -118,27 +120,46 @@ def run_langraph_agent(
     user_input: str,
     history: list[str] | None = None,
     voice_gender: str | None = None,
-) -> tuple[str, bytes]:
-    """Run the conversation pipeline and return (response_text, audio_bytes)."""
+    voice_accent: str | None = None,
+    category: str | None = None,
+    topic: str | None = None,
+    user_id: str | None = None,
+) -> tuple[str, bytes, str | None, list, list[str], str | None]:
+    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_raw, tool_steps, suggestions, raw_output)."""
+    from app.agents.tool_steps import extract_tool_steps
+
     history = history or []
-    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d", len(user_input), len(history))
+    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d category=%s topic=%s user_id=%s", len(user_input), len(history), category, topic, user_id)
     try:
         pipeline = get_voice_agent_pipeline()
-        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender)
+        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, voice_accent=voice_accent, category=category, topic=topic, user_id=user_id)
+
+        # Guardrail blocked: return the apology text with no audio — do not retry TTS
+        if result.get("guardrail_blocked"):
+            response_text = str(result.get("response_text", "")).strip()
+            logger.info("run_langraph_agent guardrail_blocked response_text_length=%d", len(response_text))
+            return response_text, b"", None, [], [], None
+
         response_text = str(result.get("response_text", "")).strip()
+        raw_output: str | None = result.get("raw_output")
         audio_bytes: bytes = result.get("audio_bytes") or b""
+        grammar_raw: str | None = result.get("grammar_raw")
+        suggestions: list[str] = result.get("suggestions") or []
+        tool_steps = extract_tool_steps(result.get("messages", []))
 
         logger.info(
-            "Pipeline run complete response_text_length=%d audio_bytes=%d",
+            "Pipeline run complete response_text_length=%d audio_bytes=%d grammar_present=%s tool_steps=%d",
             len(response_text),
             len(audio_bytes),
+            grammar_raw is not None,
+            len(tool_steps),
         )
 
         if response_text:
-            if not audio_bytes:
+            if not audio_bytes and not tool_steps:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
-                audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender)
-            return response_text, audio_bytes
+                audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender, voice_accent=voice_accent)
+            return response_text, audio_bytes, grammar_raw, tool_steps, suggestions, raw_output
 
         logger.warning("Pipeline returned empty response_text - using fallback")
     except Exception:
@@ -146,4 +167,4 @@ def run_langraph_agent(
 
     fallback_text = "Sorry, I couldn't process your request right now."
     logger.info("Returning fallback response")
-    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender)
+    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender, voice_accent=voice_accent), None, [], [], None
