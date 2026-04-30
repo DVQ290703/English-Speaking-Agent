@@ -5,7 +5,7 @@ import path from "path";
 
 const port = Number(process.env.PORT) || 5173;
 const basePath = process.env.BASE_PATH || "/";
-
+//  build
 export default defineConfig({
   base: basePath,
   plugins: [

@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .env
+.env.*
 .git
 .ai-log
 .cursor
@@ -14,6 +15,7 @@ node_modules/
 frontend/node_modules/
 outputs/
 tests/
+requirements-test.txt
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

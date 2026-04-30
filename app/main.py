@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import router
+from app.api.router import router
 from app.core.database import init_db_pool
 from app.core.logger import logger
 from app.core.settings import CORS_ORIGINS

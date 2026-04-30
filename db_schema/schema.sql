@@ -191,3 +191,21 @@ CREATE TABLE IF NOT EXISTS daily_progress (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date ON daily_progress(user_id, date DESC);
+
+-- =========================
+-- 8) GUARDRAILS — AUDIT LOGS (DISABLED — set AUDIT_DB_ENABLED=true to activate)
+-- =========================
+
+-- CREATE TABLE IF NOT EXISTS audit_logs (
+--     id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     user_id              UUID,
+--     conversation_id      UUID,
+--     user_input_hash      TEXT NOT NULL,
+--     response_text_hash   TEXT NOT NULL,
+--     flags                JSONB NOT NULL DEFAULT '[]',
+--     guardrail_decisions  JSONB NOT NULL DEFAULT '{}',
+--     latency_ms           INTEGER,
+--     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+-- );
+-- CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+-- CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

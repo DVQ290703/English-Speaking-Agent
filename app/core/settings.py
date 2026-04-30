@@ -1,3 +1,4 @@
+import json
 import os
 import warnings
 
@@ -90,3 +91,31 @@ AZURE_SPEECH_REGION = AZURE_SERVICE_REGION
 
 _cors_env = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 CORS_ORIGINS: list[str] = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+
+# ── Guardrails ─────────────────────────────────────────────────────────────────
+
+
+def _parse_json_list(env_var: str, default: str = "[]") -> list[str]:
+    raw = os.getenv(env_var, default)
+    try:
+        result = json.loads(raw)
+        if not isinstance(result, list):
+            raise RuntimeError(f"{env_var} must be a JSON array, got: {type(result).__name__}")
+        return result
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"{env_var} contains invalid JSON: {exc}") from exc
+
+
+# Redis (rate limiting)
+REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+# Rate limiting
+RATE_LIMIT_RPM: int = int(os.getenv("RATE_LIMIT_RPM", "10"))
+
+# Input guardrails
+MAX_INPUT_CHARS: int = int(os.getenv("MAX_INPUT_CHARS", "2000"))
+INJECTION_USE_LLM: bool = os.getenv("INJECTION_USE_LLM", "false").lower() == "true"
+TOPIC_BLOCKLIST: list[str] = _parse_json_list("TOPIC_BLOCKLIST")
+
+# Audit
+AUDIT_DB_ENABLED: bool = os.getenv("AUDIT_DB_ENABLED", "false").lower() == "true"
