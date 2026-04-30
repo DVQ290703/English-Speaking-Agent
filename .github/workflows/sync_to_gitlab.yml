@@ -17,8 +17,8 @@ jobs:
 
       - name: Config Git
         run: |
-          git config --global user.name "abcdefya"
-          git config --global user.email "anh.dothe47@gmail.com"
+          git config --global user.name "A40405"
+          git config --global user.email "anhhuanvg02@gmail.com"
 
       - name: Sync to Upstream (GitHub)
         if: github.ref_name != 'main'
