@@ -96,7 +96,11 @@ def _client(conn=None):
     else:
         real_conn, cursor = conn
 
-    with patch("app.api.routes.get_connection", return_value=real_conn):
+    with (
+        patch("app.api.auth.get_connection", return_value=real_conn),
+        patch("app.api.chat.get_connection", return_value=real_conn),
+        patch("app.api.conversations.get_connection", return_value=real_conn),
+    ):
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c, cursor
 
@@ -295,11 +299,11 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Great job!", b"mp3data")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/audio.mp3"),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", return_value="http://minio/audio.mp3"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -320,11 +324,11 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Reply!", b"audiodata")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/url"),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", return_value="http://minio/url"),
         ):
             with _client(fresh_conn) as (c, _):
                 r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
@@ -334,12 +338,12 @@ class TestChatRespond:
     def test_chat_respond_audio_mode_calls_stt(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.routes.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Nice!", b"mp3")),
-            patch("app.api.routes.store_user_audio", return_value=("key", "audio/webm")),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/url"),
+            patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3")),
+            patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", return_value="http://minio/url"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -385,8 +389,8 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("reply", b"")),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"")),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -474,7 +478,7 @@ class TestGetConversationMessages:
         )
         with (
             _client(conn) as (c, _),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/presigned"),
+            patch("app.api.conversations.get_presigned_url", return_value="http://minio/presigned"),
         ):
             r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
         assert r.status_code == 200
@@ -499,7 +503,7 @@ class TestGetConversationMessages:
         )
         with (
             _client(conn) as (c, _),
-            patch("app.api.routes.get_presigned_url", side_effect=RuntimeError("MinIO down")),
+            patch("app.api.conversations.get_presigned_url", side_effect=RuntimeError("MinIO down")),
         ):
             r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
         assert r.status_code == 200
@@ -543,7 +547,7 @@ class TestHealthCheck:
 
 
 def test_read_and_close_upload_closes_temp_file():
-    from app.api.routes import _read_and_close_upload
+    from app.api._audio import _read_and_close_upload
 
     upload_backing_file = tempfile.SpooledTemporaryFile()
     upload_backing_file.write(_fake_webm_bytes())
@@ -620,7 +624,7 @@ class TestAssessRoute:
         assert resp.status_code == 413
 
     def test_unscripted_assess_returns_200(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result("unscripted")
             resp = client.post(
                 "/api/assess",
@@ -639,7 +643,7 @@ class TestAssessRoute:
         assert data["words"][0]["word"] == "hello"
 
     def test_scripted_assess_returns_completeness_score(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result(
                 "scripted", include_completeness=True
             )
@@ -655,7 +659,7 @@ class TestAssessRoute:
         assert data["completeness_score"] == 100.0
 
     def test_assess_passes_reference_text_to_service(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result("scripted", include_completeness=True)
             client.post(
                 "/api/assess",
@@ -667,7 +671,7 @@ class TestAssessRoute:
         assert call_kwargs.kwargs["reference_text"] == "Good morning"
 
     def test_assess_passes_language_override_to_service(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result()
             client.post(
                 "/api/assess",
@@ -679,7 +683,7 @@ class TestAssessRoute:
         assert call_kwargs.kwargs["language"] == "en-GB"
 
     def test_azure_runtime_error_returns_502(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.side_effect = RuntimeError("Speech not recognized.")
             resp = client.post(
                 "/api/assess",
@@ -703,7 +707,7 @@ class TestAssessRoute:
                 }
             ],
         }
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = mock_result
             resp = client.post(
                 "/api/assess",
