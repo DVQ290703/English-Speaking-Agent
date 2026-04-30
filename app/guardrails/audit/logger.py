@@ -23,7 +23,6 @@ class AuditLogger:
         response_text: str,
         guardrail_decisions: dict,
         flags: list[str],
-        hitl_queued: bool,
         start_time: float,
     ) -> None:
         latency_ms = int((time.time() - start_time) * 1000)
@@ -38,7 +37,6 @@ class AuditLogger:
             "response_text_hash": hashlib.sha256(response_text.encode()).hexdigest(),
             "guardrail_decisions": guardrail_decisions,
             "flags": flags,
-            "hitl_queued": hitl_queued,
             "latency_ms": latency_ms,
         }
         _app_logger.info("audit_event %s", json.dumps(event))
@@ -54,8 +52,8 @@ class AuditLogger:
                         """
                         INSERT INTO audit_logs
                             (user_id, conversation_id, user_input_hash, response_text_hash,
-                             flags, guardrail_decisions, hitl_queued, latency_ms)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                             flags, guardrail_decisions, latency_ms)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             event["user_id"],
@@ -64,7 +62,6 @@ class AuditLogger:
                             event["response_text_hash"],
                             json.dumps(event["flags"]),
                             json.dumps(event["guardrail_decisions"]),
-                            event["hitl_queued"],
                             event["latency_ms"],
                         ),
                     )

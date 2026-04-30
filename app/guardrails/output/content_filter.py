@@ -3,21 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-SAFE_FALLBACK = "I'm sorry, I can't provide that response. Please ask me something else."
-
-_TOXICITY_PATTERNS: list[str] = [
-    r"\bfuck\s+you\b",
-    r"\bgo\s+to\s+hell\b",
-    r"\bi\s+will\s+kill\s+you\b",
-    r"\bkill\s+yourself\b",
-    r"\byou\s+stupid\s+(idiot|moron|bastard)\b",
-    r"\bpiece\s+of\s+shit\b",
-]
-
-_TOXICITY_COMPILED: list[re.Pattern] = [
-    re.compile(p, re.IGNORECASE) for p in _TOXICITY_PATTERNS
-]
-
 _PII_RULES: list[tuple[re.Pattern, str]] = [
     # Email
     (re.compile(r"[\w.+\-]+@[\w\-]+\.[\w.\-]+"), "[EMAIL REDACTED]"),
@@ -40,13 +25,7 @@ class ContentFilterResult:
 
 class ContentFilter:
     def check(self, text: str) -> ContentFilterResult:
-        """Block toxic content; redact PII. Never raises — degrades gracefully."""
-        # Toxicity check — replace entire response if detected
-        for pattern in _TOXICITY_COMPILED:
-            if pattern.search(text):
-                return ContentFilterResult(text=SAFE_FALLBACK, flags=["is_toxic"])
-
-        # PII redaction — replace in-place
+        """Redact PII from output text. Never raises."""
         flags: list[str] = []
         result = text
         for pattern, replacement in _PII_RULES:
@@ -55,5 +34,4 @@ class ContentFilter:
                 if "contains_pii" not in flags:
                     flags.append("contains_pii")
                 result = new_text
-
         return ContentFilterResult(text=result, flags=flags)
