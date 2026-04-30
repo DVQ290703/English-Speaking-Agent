@@ -102,18 +102,5 @@ MAX_INPUT_CHARS: int = int(os.getenv("MAX_INPUT_CHARS", "2000"))
 INJECTION_USE_LLM: bool = os.getenv("INJECTION_USE_LLM", "false").lower() == "true"
 TOPIC_BLOCKLIST: list[str] = _parse_json_list("TOPIC_BLOCKLIST")
 
-# Output guardrails
-GUARDRAIL_MAX_RETRIES: int = int(os.getenv("GUARDRAIL_MAX_RETRIES", "1"))
-URL_ALLOWLIST: list[str] = _parse_json_list("URL_ALLOWLIST")
-
-# HITL
-ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
-_warn_or_raise_for_secret(
-    name="ADMIN_API_KEY",
-    value=ADMIN_API_KEY,
-    minimum_length=16,
-    blocked_values={"admin", "secret", "changeme", "test", ""},
-)
-
 # Audit
 AUDIT_DB_ENABLED: bool = os.getenv("AUDIT_DB_ENABLED", "false").lower() == "true"
