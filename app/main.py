@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
+from app.guardrails.hitl.review_api import router as hitl_review_router
 from app.core.database import init_db_pool
 from app.core.logger import logger
 from app.core.settings import CORS_ORIGINS
@@ -51,3 +52,4 @@ def health_check():
 
 
 app.include_router(router)
+app.include_router(hitl_review_router)
