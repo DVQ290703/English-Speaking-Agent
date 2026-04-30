@@ -10,16 +10,37 @@ services:
         condition: service_healthy
       minio:
         condition: service_started
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       MINIO_ENDPOINT: minio:9000
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173"
     volumes:
       - ./logs:/app/logs
     ports:
       - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Empty string → Vite uses relative URLs; nginx proxies /api/ to backend.
+        # Override at build time for non-proxied deployments:
+        #   docker compose build --build-arg VITE_API_BASE_URL=https://api.example.com
+        VITE_API_BASE_URL: ""
+    container_name: voice_agent_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"
 
   postgres:
     image: postgres:16-alpine
@@ -56,6 +77,18 @@ services:
       - "5050:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+
+  redis:
+    image: redis:7-alpine
+    container_name: voice_agent_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   minio:
     image: minio/minio:latest
