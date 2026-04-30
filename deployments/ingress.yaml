@@ -8,7 +8,7 @@
 #   2. Point vinai-speaking-agent.duckdns.org → that IP in DuckDNS
 #   3. Wait 15-20 min for GCP to provision the SSL cert
 # =============================================================================
-
+# 
 # ── GCP Managed Certificate ───────────────────────────────────────────────────
 # GCP automatically provisions and renews the Let's Encrypt TLS cert.
 # Certificate status: kubectl describe managedcertificate vinai-managed-cert -n english-speaking-agent
