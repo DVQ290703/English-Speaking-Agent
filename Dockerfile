@@ -24,7 +24,7 @@ COPY requirements.txt /tmp/requirements.txt
 # image never re-compiles a dependency on first import (faster cold start).
 RUN uv pip install --no-cache --compile-bytecode -r /tmp/requirements.txt
 
-
+# build
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
