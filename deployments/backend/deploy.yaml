@@ -77,6 +77,9 @@ spec:
           envFrom:
             - secretRef:
                 name: backend-secret
+          env:
+            - name: LOG_DIR
+              value: /tmp/logs
 
           resources:
             requests:
