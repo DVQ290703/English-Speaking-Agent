@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from app.core.logger import logger
+from app.prompts.prompt_builder import build_system_prompt, extract_prompt_context
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md"
 
@@ -50,13 +51,13 @@ class GroqLLMService:
             len(user_input),
         )
 
-        messages: list = [SystemMessage(content=SYSTEM_PROMPT)]
+        topic, sub_option = extract_prompt_context(history)
+        dynamic_prompt = build_system_prompt(topic=topic, sub_option=sub_option)
+        messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
         if history:
-            topic_line = next((ln for ln in history if ln.startswith("Topic:")), None)
-            if topic_line:
-                messages.append(SystemMessage(content=f"Practice topic: {topic_line[6:].strip()}"))
-                logger.debug("GroqLLM injecting topic line")
+            if topic:
+                logger.debug("GroqLLM resolved dynamic prompt topic=%s sub_option_present=%s", topic, bool(sub_option))
 
             for line in history[-8:]:
                 if line.startswith("User:"):
