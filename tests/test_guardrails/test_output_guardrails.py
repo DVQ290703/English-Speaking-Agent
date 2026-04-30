@@ -1,5 +1,4 @@
 from app.guardrails.output import OutputGuardrails
-from app.guardrails.output.content_filter import SAFE_FALLBACK
 
 
 def test_clean_output_passes_through():
@@ -10,13 +9,6 @@ def test_clean_output_passes_through():
     assert result.needs_retry is False
 
 
-def test_toxic_content_replaced_with_fallback():
-    g = OutputGuardrails()
-    result = g.check("fuck you go to hell")
-    assert result.text == SAFE_FALLBACK
-    assert "is_toxic" in result.flags
-
-
 def test_pii_redacted():
     g = OutputGuardrails()
     result = g.check("Contact alice@example.com for help.")
@@ -24,24 +16,13 @@ def test_pii_redacted():
     assert "contains_pii" in result.flags
 
 
-def test_url_stripped():
-    g = OutputGuardrails(format_validator_allowlist=[])
-    result = g.check("Visit https://example.com for more details.")
-    assert "https://example.com" not in result.text
-
-
-def test_empty_response_triggers_retry():
-    g = OutputGuardrails()
-    result = g.check("")
-    assert result.needs_retry is True
-    assert "format_invalid" in result.flags
-
-
-def test_flags_aggregated_from_both_checks():
-    """PII in response that also becomes very short after URL strip."""
-    g = OutputGuardrails(format_validator_allowlist=[])
-    # Email is redacted, then remaining text is checked for length
-    result = g.check("alice@example.com")
-    # After PII redaction: "[EMAIL REDACTED]" — 17 chars, so no retry
+def test_custom_content_filter_injected():
+    from unittest.mock import MagicMock
+    from app.guardrails.output.content_filter import ContentFilterResult
+    mock_cf = MagicMock()
+    mock_cf.check.return_value = ContentFilterResult(text="safe text", flags=["contains_pii"])
+    g = OutputGuardrails(content_filter=mock_cf)
+    result = g.check("any input")
+    assert result.text == "safe text"
     assert "contains_pii" in result.flags
-    assert result.needs_retry is False
+    mock_cf.check.assert_called_once_with("any input")

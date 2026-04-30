@@ -15,7 +15,6 @@ def _call_log(logger, **overrides):
         response_text="Hi there!",
         guardrail_decisions={"input_valid": True, "rate_limited": False},
         flags=[],
-        hitl_queued=False,
         start_time=time.time() - 0.1,
     )
     defaults.update(overrides)
@@ -34,7 +33,7 @@ def test_log_event_contains_required_fields(caplog):
     import logging
     logger = AuditLogger()
     with caplog.at_level(logging.INFO):
-        _call_log(logger, flags=["contains_pii"], hitl_queued=True)
+        _call_log(logger, flags=["contains_pii"])
     audit_record = next(r for r in caplog.records if "audit_event" in r.message)
     payload_str = audit_record.message.replace("audit_event ", "", 1)
     event = json.loads(payload_str)
@@ -43,7 +42,6 @@ def test_log_event_contains_required_fields(caplog):
     assert event["user_id"] == "user-1"
     assert event["conversation_id"] == "conv-1"
     assert event["flags"] == ["contains_pii"]
-    assert event["hitl_queued"] is True
     assert "latency_ms" in event
     assert event["latency_ms"] >= 0
     assert "user_input_length" in event

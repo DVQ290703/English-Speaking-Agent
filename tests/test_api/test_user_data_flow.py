@@ -77,7 +77,11 @@ def _make_conn(fetchone_side_effect=(), fetchall_value=None, fetchone_by_sql=Non
 @contextmanager
 def _client(conn=None):
     real_conn, cursor = conn if conn else _make_conn()
-    with patch("app.api.routes.get_connection", return_value=real_conn):
+    with (
+        patch("app.api.auth.get_connection", return_value=real_conn),
+        patch("app.api.chat.get_connection", return_value=real_conn),
+        patch("app.api.conversations.get_connection", return_value=real_conn),
+    ):
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c, cursor
 
@@ -155,11 +159,11 @@ class TestUserLifecycle:
             }
         )
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Good job!", b"audio")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://s3/audio.mp3"),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good job!", b"audio")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", return_value="http://s3/audio.mp3"),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",
@@ -236,11 +240,11 @@ class TestContinueConversation:
     def test_continue_conversation_returns_same_conv_id(self):
         conn = self._existing_conv_conn(turn_number=2)
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Great!", b"audio")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://s3/url"),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great!", b"audio")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", return_value="http://s3/url"),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",
@@ -254,11 +258,11 @@ class TestContinueConversation:
         """Third message → turn_number should be 3."""
         conn = self._existing_conv_conn(turn_number=3)
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("OK!", b"")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", side_effect=RuntimeError("no audio")),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("OK!", b"")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", side_effect=RuntimeError("no audio")),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",
@@ -414,11 +418,11 @@ class TestConversationTitle:
     def test_chat_with_known_topic_returns_200(self):
         conn = self._chat_conn_with_topic(topic_found=True)
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Reply", b"")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", side_effect=Exception("no key")),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply", b"")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", side_effect=Exception("no key")),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",
@@ -431,11 +435,11 @@ class TestConversationTitle:
     def test_chat_with_unknown_topic_still_creates_conversation(self):
         conn = self._chat_conn_with_topic(topic_found=False)
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Fallback", b"")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", side_effect=Exception("no key")),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Fallback", b"")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", side_effect=Exception("no key")),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",
@@ -454,11 +458,11 @@ class TestConversationTitle:
             }
         )
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Hello!", b"")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", side_effect=Exception("no key")),
+            patch("app.api.chat.normalize_history", return_value=[]),
+            patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"")),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+            patch("app.api.chat.get_presigned_url", side_effect=Exception("no key")),
         ):
             with _client(conn) as (c, _):
                 r = c.post("/api/chat/respond",

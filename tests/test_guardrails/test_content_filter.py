@@ -1,4 +1,4 @@
-from app.guardrails.output.content_filter import ContentFilter, SAFE_FALLBACK
+from app.guardrails.output.content_filter import ContentFilter
 
 
 def test_clean_text_passes_unchanged():
@@ -6,13 +6,6 @@ def test_clean_text_passes_unchanged():
     result = f.check("Great job! Your pronunciation is improving.")
     assert result.text == "Great job! Your pronunciation is improving."
     assert result.flags == []
-
-
-def test_toxic_content_replaced_with_fallback():
-    f = ContentFilter()
-    result = f.check("fuck you, go to hell")
-    assert result.text == SAFE_FALLBACK
-    assert "is_toxic" in result.flags
 
 
 def test_email_redacted():
@@ -67,11 +60,3 @@ def test_pii_flag_not_duplicated():
     f = ContentFilter()
     result = f.check("alice@a.com and bob@b.com are both here")
     assert result.flags.count("contains_pii") == 1
-
-
-def test_toxic_content_wins_over_pii():
-    """Toxicity check replaces entire response; PII redaction does not run on fallback."""
-    f = ContentFilter()
-    result = f.check("fuck you, also email me at x@y.com")
-    assert result.text == SAFE_FALLBACK
-    assert "is_toxic" in result.flags
