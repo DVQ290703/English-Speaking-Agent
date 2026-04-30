@@ -193,28 +193,7 @@ CREATE TABLE IF NOT EXISTS daily_progress (
 CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date ON daily_progress(user_id, date DESC);
 
 -- =========================
--- 8) GUARDRAILS — HITL QUEUE
--- =========================
-
-CREATE TABLE IF NOT EXISTS hitl_queue (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
-    message_id      UUID REFERENCES messages(id) ON DELETE SET NULL,
-    user_input      TEXT NOT NULL,
-    response_text   TEXT NOT NULL,
-    flags           JSONB NOT NULL DEFAULT '[]',
-    status          TEXT NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'reviewed', 'dismissed')),
-    reviewer_notes  TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    reviewed_at     TIMESTAMPTZ
-);
-
-CREATE INDEX IF NOT EXISTS idx_hitl_queue_status ON hitl_queue(status);
-CREATE INDEX IF NOT EXISTS idx_hitl_queue_created ON hitl_queue(created_at DESC);
-
--- =========================
--- 9) GUARDRAILS — AUDIT LOGS (DISABLED — set AUDIT_DB_ENABLED=true to activate)
+-- 8) GUARDRAILS — AUDIT LOGS (DISABLED — set AUDIT_DB_ENABLED=true to activate)
 -- =========================
 
 -- CREATE TABLE IF NOT EXISTS audit_logs (
@@ -225,7 +204,6 @@ CREATE INDEX IF NOT EXISTS idx_hitl_queue_created ON hitl_queue(created_at DESC)
 --     response_text_hash   TEXT NOT NULL,
 --     flags                JSONB NOT NULL DEFAULT '[]',
 --     guardrail_decisions  JSONB NOT NULL DEFAULT '{}',
---     hitl_queued          BOOLEAN NOT NULL DEFAULT FALSE,
 --     latency_ms           INTEGER,
 --     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 -- );
