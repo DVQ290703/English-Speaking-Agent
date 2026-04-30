@@ -1,5 +1,6 @@
 import base64
 import re
+import time as _time
 import uuid as _uuid
 
 import psycopg2
@@ -40,8 +41,6 @@ from app.core.security import (
     verify_password_with_padding,
 )
 from app.core.storage import _upload, build_object_key, get_presigned_url, store_user_audio
-
-import time as _time
 
 from app.guardrails.audit.logger import AuditLogger
 from app.guardrails.exceptions import GuardrailException
