@@ -6,11 +6,18 @@ from io import BytesIO
 from minio import Minio
 from minio.error import S3Error
 
-from app.core.settings import MINIO_ACCESS_KEY, MINIO_BUCKET, MINIO_ENDPOINT, MINIO_SECURE, MINIO_SECRET_KEY
+from app.core.settings import MINIO_ACCESS_KEY, MINIO_BUCKET, MINIO_ENDPOINT, MINIO_PUBLIC_ENDPOINT, MINIO_PUBLIC_SECURE, MINIO_SECURE, MINIO_SECRET_KEY
 from app.core.logger import logger
 
 # Singleton — one client per process, not per request
 _client: Minio | None = None
+# Separate client used only for presigned URL generation.
+# Initialized with MINIO_PUBLIC_ENDPOINT so the signed URLs contain the host
+# that browsers can actually reach. region is set explicitly to skip the
+# region-lookup HTTP call that minio-py would otherwise make on first use
+# (that call fails when MINIO_PUBLIC_ENDPOINT is only reachable by browsers,
+# not by the backend process itself — e.g. localhost:9000 inside Docker).
+_public_client: Minio | None = None
 
 _CONTENT_TYPE_TO_EXT: dict[str, str] = {
     "audio/webm": "webm",
@@ -101,10 +108,34 @@ def delete_object(object_key: str) -> None:
         logger.warning("MinIO delete — key not found (already deleted?): %s", object_key)
 
 
+def _get_public_minio_client() -> Minio:
+    global _public_client
+    if _public_client is None:
+        logger.info(
+            "Creating public MinIO client endpoint=%s secure=%s",
+            MINIO_PUBLIC_ENDPOINT, MINIO_PUBLIC_SECURE,
+        )
+        _public_client = Minio(
+            MINIO_PUBLIC_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=MINIO_PUBLIC_SECURE,
+            region="us-east-1",  # explicit region avoids minio-py's region-lookup HTTP call
+        )
+    return _public_client
+
+
 def get_presigned_url(object_key: str, expires: timedelta = timedelta(hours=1)) -> str:
-    """Generate a short-lived presigned GET URL. The bucket remains private."""
-    logger.debug("Generating presigned URL key=%s expires=%s", object_key, expires)
-    client = get_minio_client()
+    """Generate a short-lived presigned GET URL reachable by browsers.
+
+    Uses the public client so the signed URL contains MINIO_PUBLIC_ENDPOINT as
+    its host — which is what browsers resolve (e.g. localhost:9000 in dev,
+    the ingress domain in K8s). The explicit region="us-east-1" on the public
+    client prevents minio-py from making a region-lookup HTTP call to an
+    endpoint that may not be reachable from the backend process.
+    """
+    logger.debug("Generating presigned URL key=%s expires=%s endpoint=%s", object_key, expires, MINIO_PUBLIC_ENDPOINT)
+    client = _get_public_minio_client()
     url = client.presigned_get_object(MINIO_BUCKET, object_key, expires=expires)
     logger.debug("Presigned URL generated key=%s", object_key)
     return url
