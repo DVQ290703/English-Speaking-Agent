@@ -77,23 +77,22 @@ def _make_mock_sdk(reason: str = "RecognizedSpeech"):
 
 class TestAzureAssessmentServiceInit:
     def test_raises_when_key_missing(self, monkeypatch):
-        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
-        monkeypatch.delenv("AZURE_SUBSCRIPTION_ID", raising=False)
+        # Patch the already-imported module constant, not os.environ
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "")
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
         with pytest.raises(ValueError, match="AZURE_SPEECH_KEY"):
             AzureAssessmentService()
 
     def test_raises_when_region_missing(self, monkeypatch):
-        monkeypatch.setenv("AZURE_SPEECH_KEY", "key")
-        monkeypatch.delenv("AZURE_SPEECH_REGION", raising=False)
-        monkeypatch.delenv("AZURE_SERVICE_REGION", raising=False)
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "key")
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "")
         with pytest.raises(ValueError, match="AZURE_SPEECH_REGION"):
             AzureAssessmentService()
 
     def test_legacy_env_names_still_work(self, monkeypatch):
-        monkeypatch.delenv("AZURE_SPEECH_KEY", raising=False)
-        monkeypatch.delenv("AZURE_SPEECH_REGION", raising=False)
-        monkeypatch.setenv("AZURE_SUBSCRIPTION_ID", "legacy-key")
-        monkeypatch.setenv("AZURE_SERVICE_REGION", "eastus")
+        # Settings resolves legacy names at load time; service sees the resolved value
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "legacy-key")
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
         svc = AzureAssessmentService()
         assert svc.default_language == "en-US"
 
