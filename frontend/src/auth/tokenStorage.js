@@ -1,4 +1,4 @@
-const AUTH_STORAGE_KEY = "voice_agent_auth";
+const AUTH_STORAGE_KEY = 'voice_agent_auth';
 
 export function saveAuthSession(session) {
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
