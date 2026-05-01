@@ -140,3 +140,9 @@ def test_get_messages_excludes_pre_clear_messages():
     data = resp.json()
     assert len(data["messages"]) == 1
     assert data["messages"][0]["text_content"] == "Hello after clear"
+
+
+def test_chat_respond_does_not_accept_history_field():
+    """After server-side history, ChatResponse still has conversation_id."""
+    from app.api.schemas import ChatResponse
+    assert "conversation_id" in ChatResponse.model_fields

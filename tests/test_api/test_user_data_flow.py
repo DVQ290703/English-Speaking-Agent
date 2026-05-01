@@ -159,7 +159,6 @@ class TestUserLifecycle:
             }
         )
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Good job!", b"audio")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -240,7 +239,6 @@ class TestContinueConversation:
     def test_continue_conversation_returns_same_conv_id(self):
         conn = self._existing_conv_conn(turn_number=2)
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Great!", b"audio")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -258,7 +256,6 @@ class TestContinueConversation:
         """Third message → turn_number should be 3."""
         conn = self._existing_conv_conn(turn_number=3)
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("OK!", b"")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -418,7 +415,6 @@ class TestConversationTitle:
     def test_chat_with_known_topic_returns_200(self):
         conn = self._chat_conn_with_topic(topic_found=True)
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Reply", b"")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -435,7 +431,6 @@ class TestConversationTitle:
     def test_chat_with_unknown_topic_still_creates_conversation(self):
         conn = self._chat_conn_with_topic(topic_found=False)
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Fallback", b"")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -458,7 +453,6 @@ class TestConversationTitle:
             }
         )
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
