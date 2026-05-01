@@ -296,20 +296,21 @@ class TestPromptArchitecture:
     def test_build_system_prompt_layers_base_topic_and_sub_option(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(topic="Travel & Tourism", sub_option="Airport English")
+        prompt = build_system_prompt(topic="travel", sub_option="airport_check_in")
 
-        assert "AI Speaking Coach" in prompt
-        assert "Topic layer (travel)" in prompt
-        assert "Sub-option layer" in prompt
+        assert "AI English-speaking coach" in prompt
+        assert "## Topic: travel" in prompt
+        assert "## Scenario: airport_check_in" in prompt
         assert "airport check-in" in prompt.lower()
 
     def test_build_system_prompt_uses_unknown_sub_option_fallback(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(topic="Daily Conversation", sub_option="Meeting a neighbor")
+        prompt = build_system_prompt(topic="daily_conversation", sub_option="Meeting a neighbor")
 
-        assert "Topic layer (daily_conversation)" in prompt
+        assert "## Topic: daily_conversation" in prompt
         assert "Meeting a neighbor" in prompt
+
 
     def test_extract_prompt_context_reads_topic_and_sub_option_lines(self):
         from app.prompts.prompt_builder import extract_prompt_context

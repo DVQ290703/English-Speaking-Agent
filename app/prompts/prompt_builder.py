@@ -1,91 +1,102 @@
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
 
 from app.core.logger import logger
 
-_ARCHITECTURE_PATH = Path(__file__).with_name("prompt_architecture.json")
+_SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
+_TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
 
 _BASE_FALLBACK = (
     "You are an AI English-speaking coach. Keep replies short, natural, "
     "supportive, and easy to say aloud. Ask one follow-up question that helps "
     "the learner keep speaking."
 )
-_PROMPT_CACHE: dict[str, Any] = {"mtime": None, "data": None}
+
+_CACHE: dict[str, Any] = {
+    "base_mtime": None, "base": None,
+    "topics_mtime": None, "topics": None,
+}
 
 
 def _normalize_key(value: str | None) -> str:
     if not value:
         return ""
-    normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
-    return normalized.strip("_")
+    return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
 
 
-def load_prompt_architecture() -> dict[str, Any]:
-    """Load the layered prompt architecture from JSON."""
+def _load_base_prompt() -> str:
     try:
-        mtime = _ARCHITECTURE_PATH.stat().st_mtime
+        mtime = _SYSTEM_PROMPT_PATH.stat().st_mtime
     except OSError:
-        logger.exception("Prompt architecture file not found at %s", _ARCHITECTURE_PATH)
-        return {"base_prompt": _BASE_FALLBACK, "topics": {}}
+        logger.exception("system_prompt.md not found at %s", _SYSTEM_PROMPT_PATH)
+        return _BASE_FALLBACK
 
-    if _PROMPT_CACHE["mtime"] == mtime and isinstance(_PROMPT_CACHE["data"], dict):
-        return _PROMPT_CACHE["data"]
+    if _CACHE["base_mtime"] == mtime and isinstance(_CACHE["base"], str):
+        return _CACHE["base"]
 
     try:
-        with _ARCHITECTURE_PATH.open(encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        logger.exception("Failed to load prompt architecture from %s", _ARCHITECTURE_PATH)
-        return {"base_prompt": _BASE_FALLBACK, "topics": {}}
+        text = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.exception("Failed to read system_prompt.md")
+        return _BASE_FALLBACK
 
-    if not isinstance(data, dict):
-        logger.warning("Prompt architecture root is not an object")
-        return {"base_prompt": _BASE_FALLBACK, "topics": {}}
-    _PROMPT_CACHE["mtime"] = mtime
-    _PROMPT_CACHE["data"] = data
-    return data
+    _CACHE["base_mtime"] = mtime
+    _CACHE["base"] = text
+    return text
 
 
-def _resolve_topic(data: dict[str, Any], topic: str | None) -> tuple[str, dict[str, Any] | None]:
-    topics = data.get("topics")
-    if not isinstance(topics, dict):
-        return "", None
+def _parse_topics(content: str) -> dict[str, Any]:
+    topics: dict[str, Any] = {}
+    topic_re = re.compile(r"^# Topic:\s*(.+)$", re.MULTILINE)
+    subtopic_re = re.compile(r"^## Sub-topic:\s*(.+)$", re.MULTILINE)
+    sep_re = re.compile(r"^---\s*$", re.MULTILINE)
 
-    topic_key = _normalize_key(topic)
-    if topic_key in topics and isinstance(topics[topic_key], dict):
-        return topic_key, topics[topic_key]
+    topic_matches = list(topic_re.finditer(content))
+    for i, tm in enumerate(topic_matches):
+        topic_key = _normalize_key(tm.group(1))
+        block_start = tm.end()
+        block_end = topic_matches[i + 1].start() if i + 1 < len(topic_matches) else len(content)
+        block = content[block_start:block_end]
 
-    for key, value in topics.items():
-        if not isinstance(value, dict):
-            continue
-        aliases = value.get("aliases", [])
-        if isinstance(aliases, list) and topic_key in {_normalize_key(str(alias)) for alias in aliases}:
-            return str(key), value
+        sub_matches = list(subtopic_re.finditer(block))
+        topic_prompt_raw = block[: sub_matches[0].start()] if sub_matches else block
+        topic_prompt = sep_re.sub("", topic_prompt_raw).strip()
 
-    return topic_key, None
+        options: dict[str, str] = {}
+        for j, sm in enumerate(sub_matches):
+            sub_key = _normalize_key(sm.group(1))
+            sub_start = sm.end()
+            sub_end = sub_matches[j + 1].start() if j + 1 < len(sub_matches) else len(block)
+            options[sub_key] = sep_re.sub("", block[sub_start:sub_end]).strip()
+
+        topics[topic_key] = {"topic_prompt": topic_prompt, "options": options}
+
+    return topics
 
 
-def _resolve_option(topic_data: dict[str, Any], sub_option: str | None) -> dict[str, Any] | None:
-    options = topic_data.get("options")
-    if not isinstance(options, dict):
-        return None
+def _load_topics() -> dict[str, Any]:
+    try:
+        mtime = _TOPIC_PROMPTS_PATH.stat().st_mtime
+    except OSError:
+        logger.exception("topic_prompts.md not found at %s", _TOPIC_PROMPTS_PATH)
+        return {}
 
-    option_key = _normalize_key(sub_option)
-    if option_key in options and isinstance(options[option_key], dict):
-        return options[option_key]
+    if _CACHE["topics_mtime"] == mtime and isinstance(_CACHE["topics"], dict):
+        return _CACHE["topics"]
 
-    for value in options.values():
-        if not isinstance(value, dict):
-            continue
-        aliases = value.get("aliases", [])
-        if isinstance(aliases, list) and option_key in {_normalize_key(str(alias)) for alias in aliases}:
-            return value
+    try:
+        content = _TOPIC_PROMPTS_PATH.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("Failed to read topic_prompts.md")
+        return {}
 
-    return None
+    topics = _parse_topics(content)
+    _CACHE["topics_mtime"] = mtime
+    _CACHE["topics"] = topics
+    return topics
 
 
 def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
@@ -98,36 +109,41 @@ def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
 
 
 def build_system_prompt(topic: str | None = None, sub_option: str | None = None) -> str:
-    """
-    Compose a dynamic system prompt using the layered architecture:
-    base prompt -> topic prompt -> sub-option prompt.
-    """
-    data = load_prompt_architecture()
-    base_prompt = str(data.get("base_prompt") or _BASE_FALLBACK).strip()
-    prompt_parts = [base_prompt]
+    """Compose a system prompt: base -> topic layer -> sub-option layer."""
+    prompt_parts = [_load_base_prompt()]
 
-    topic_key, topic_data = _resolve_topic(data, topic)
-    if topic and topic_data:
-        topic_prompt = str(topic_data.get("topic_prompt") or "").strip()
-        if topic_prompt:
-            prompt_parts.append(f"Topic layer ({topic_key}):\n{topic_prompt}")
+    if topic:
+        topics = _load_topics()
+        topic_key = _normalize_key(topic)
+        topic_data = topics.get(topic_key)
 
-        option_data = _resolve_option(topic_data, sub_option)
-        if sub_option and option_data:
-            option_prompt = str(option_data.get("system_prompt") or "").strip()
-            if option_prompt:
-                prompt_parts.append(f"Sub-option layer:\n{option_prompt}")
-        elif sub_option:
+        if topic_data:
+            topic_prompt = topic_data.get("topic_prompt", "").strip()
+            if topic_prompt:
+                prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{topic_prompt}")
+
+            if sub_option:
+                sub_key = _normalize_key(sub_option)
+                option_prompt = topic_data.get("options", {}).get(sub_key, "").strip()
+                if option_prompt:
+                    prompt_parts.append(f"---\n\n## Scenario: {sub_key}\n{option_prompt}")
+                else:
+                    prompt_parts.append(
+                        f"---\n\n## Scenario: {sub_option.strip()}\n"
+                        "The learner selected this scenario. "
+                        "Adapt the conversation to it while keeping the same coaching style."
+                    )
+        else:
             prompt_parts.append(
-                "Sub-option layer:\n"
-                f"The learner selected this scenario: {sub_option.strip()}. "
-                "Adapt the conversation to that scenario while keeping the same coaching style."
+                f"---\n\n## Topic: {topic.strip()}\n"
+                "The learner selected this topic. "
+                "Create a realistic speaking-practice conversation around it."
             )
-    elif topic:
-        prompt_parts.append(
-            "Topic layer:\n"
-            f"The learner selected this topic: {topic.strip()}. "
-            "Create a realistic speaking-practice conversation around it."
-        )
+            if sub_option:
+                prompt_parts.append(
+                    f"---\n\n## Scenario: {sub_option.strip()}\n"
+                    "The learner selected this scenario. "
+                    "Adapt the conversation to it while keeping the same coaching style."
+                )
 
     return "\n\n".join(part for part in prompt_parts if part)
