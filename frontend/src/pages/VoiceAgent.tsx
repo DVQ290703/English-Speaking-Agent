@@ -48,6 +48,10 @@ import {
 import type { Message, Mistake } from '../components/voice-agent';
 import { useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
+import { clearConversation } from '../api/conversations';
+import { dbClearConversationData } from '../lib/db';
+import { evictConversationAudio } from '../lib/audioCache';
+import { queryClient } from '../lib/queryClient';
 
 interface AuthUser {
   display_name: string;
@@ -356,6 +360,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // below) sees the exact same object that initialised state.
   const [messages, setMessages] = useState<Message[]>(initialMessagesAndId.messages);
   const sessionIdRef = useRef<string | null>(initialMessagesAndId.sessionId);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
   const selectedMsg =
     expandedMsgId !== null ? (messages.find(m => m.id === expandedMsgId) ?? null) : null;
@@ -955,16 +960,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // even if something else later clears the `audioBlob` property.
       if (audioBlob) audioBlobsRef.current[userId] = audioBlob;
 
-      const historyPayload: { role: string; text: string }[] = [
-        ...messages
-          .filter(message => !message.typing)
-          .map(message => ({
-            role: message.role === 'agent' ? 'assistant' : 'user',
-            text: message.text,
-          })),
-        { role: 'user', text: trimmed },
-      ];
-
       setMessages((prev: Message[]) => [
         ...prev,
         userMsg,
@@ -986,7 +981,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             token: session.token,
             text: trimmed,
             audioBlob,
-            history: historyPayload,
             topic:
               TOPICS.find(item => item.id === (topic as TopicId | undefined))?.label ??
               topic ??
@@ -994,6 +988,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             subOption: subOption ?? undefined,
             voiceGender: gender,
           });
+
+          if (data.conversation_id) {
+            setCurrentConversationId(data.conversation_id);
+          }
 
           const responseText =
             String(data.response_text || '').trim() || 'I am ready to help you practice.';
@@ -1539,6 +1537,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setFeedbacks([]);
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
+
+    if (currentConversationId) {
+      const session = getAuthSession();
+      const convId = currentConversationId;
+      const clearedAt = new Date().toISOString();
+      clearConversation(session?.token ?? '', convId)
+        .then(() => dbClearConversationData(convId, clearedAt))
+        .then(() => evictConversationAudio(convId))
+        .then(() => queryClient.invalidateQueries({ queryKey: ['conversations'] }))
+        .catch(err => console.warn('Failed to sync clear:', err));
+    }
+    setCurrentConversationId(null);
+
     setStatusSync('connecting');
 
     const t0 = setTimeout(() => {
@@ -1550,7 +1561,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }, 600);
 
     timersRef.current.push(t0);
-  }, [clearTimers, clearLocalAudioUrls, setStatusSync]);
+  }, [clearTimers, clearLocalAudioUrls, setStatusSync, currentConversationId]);
 
   const handleConnect = useCallback(() => {
     // Read status from a ref so rapid clicks within a single event-loop
