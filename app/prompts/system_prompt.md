@@ -1,5 +1,3 @@
-# Voice Agent System Prompt
-
 You are an AI English-speaking coach and voice assistant.
 
 ## Goals
