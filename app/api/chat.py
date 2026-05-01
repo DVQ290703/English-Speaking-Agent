@@ -16,7 +16,6 @@ from app.api._validators import _enforce_max_length, _validate_uuid
 from app.api.schemas import ChatResponse
 from app.core.ai_services import (
     _synthesize_audio_bytes,
-    normalize_history,
     run_langraph_agent,
     transcribe_audio,
 )
@@ -50,6 +49,32 @@ _GUARDRAIL_HTTP_STATUS: dict[str, int] = {
 }
 
 
+def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
+    """
+    Return the last `limit` visible (post-cleared_at) user+assistant turns
+    for the given conversation, oldest-first, ready for the LLM context.
+    Returns empty list if conv_id is None or no messages found.
+    """
+    if not conv_id:
+        return []
+    cur.execute(
+        """
+        SELECT m.role, m.text_content
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.conversation_id = %s
+          AND m.role IN ('user', 'assistant')
+          AND m.text_content IS NOT NULL
+          AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+        ORDER BY m.created_at DESC
+        LIMIT %s
+        """,
+        (conv_id, limit),
+    )
+    rows = cur.fetchall()
+    return [{"role": row[0], "content": row[1]} for row in reversed(rows)]
+
+
 def _insert_audio_asset(
     cur,
     *,
@@ -72,7 +97,6 @@ def _insert_audio_asset(
 @router.post("/respond", response_model=ChatResponse)
 def chat_respond(
     text: str | None = Form(default=None),
-    history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
     sub_option: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
@@ -84,7 +108,6 @@ def chat_respond(
     logger.info("chat_respond start user_id=%s input_mode=%s conversation_id=%s", user_id, input_mode, conversation_id)
 
     text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
-    history = _enforce_max_length(history, field="history", max_chars=_MAX_HISTORY_CHARS)
     topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
     sub_option = _enforce_max_length(sub_option, field="sub_option", max_chars=_MAX_SUB_OPTION_CHARS)
 
@@ -199,6 +222,9 @@ def chat_respond(
             )
             turn_number = cur.fetchone()[0]
 
+            # Server-side history — replaces client-owned history field
+            conversation_history = _fetch_visible_history(cur, conv_id)
+
     user_object_key: str | None = None
     user_mime_type = "audio/webm"
     if audio_bytes_received:
@@ -214,7 +240,6 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
-    conversation_history = normalize_history(history_raw=history, topic=topic, sub_option=sub_option)
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),
