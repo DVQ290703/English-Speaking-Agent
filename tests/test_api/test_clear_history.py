@@ -65,3 +65,48 @@ def test_conversation_out_has_cleared_at_field():
         cleared_at=None,
     )
     assert conv.cleared_at is None
+
+
+def test_clear_conversation_returns_204():
+    """POST /conversations/{id}/clear returns 204 when conversation belongs to user."""
+    user_id = str(uuid.uuid4())
+    conv_id = str(uuid.uuid4())
+
+    cur = MagicMock()
+    cur.fetchone.return_value = (conv_id,)
+
+    with patch("app.api.conversations.get_connection", return_value=_make_conn(cur)):
+        with TestClient(app) as client:
+            resp = client.post(
+                f"/api/conversations/{conv_id}/clear",
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 204
+
+
+def test_clear_conversation_returns_404_when_not_owned():
+    """POST /conversations/{id}/clear returns 404 when conversation not found or not owned."""
+    user_id = str(uuid.uuid4())
+    conv_id = str(uuid.uuid4())
+
+    cur = MagicMock()
+    cur.fetchone.return_value = None
+
+    with patch("app.api.conversations.get_connection", return_value=_make_conn(cur)):
+        with TestClient(app) as client:
+            resp = client.post(
+                f"/api/conversations/{conv_id}/clear",
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 404
+
+
+def test_clear_conversation_rejects_invalid_uuid():
+    """POST /conversations/not-a-uuid/clear returns 422."""
+    user_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/conversations/not-a-uuid/clear",
+            headers=_auth(user_id),
+        )
+    assert resp.status_code == 422
