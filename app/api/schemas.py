@@ -78,6 +78,7 @@ class ConversationOut(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     topic_id: str | None
+    cleared_at: datetime | None = None
 
 
 class ConversationListResponse(BaseModel):
