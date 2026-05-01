@@ -34,6 +34,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 _MAX_TEXT_CHARS = 4_000
 _MAX_HISTORY_CHARS = 50_000
 _MAX_TOPIC_CHARS = 80
+_MAX_SUB_OPTION_CHARS = 120
 _INLINE_AUDIO_LIMIT_BYTES = 512 * 1024
 
 _input_guardrails = InputGuardrails()
@@ -73,6 +74,7 @@ def chat_respond(
     text: str | None = Form(default=None),
     history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
+    sub_option: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
     conversation_id: str | None = Form(default=None),
@@ -84,6 +86,7 @@ def chat_respond(
     text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
     history = _enforce_max_length(history, field="history", max_chars=_MAX_HISTORY_CHARS)
     topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
+    sub_option = _enforce_max_length(sub_option, field="sub_option", max_chars=_MAX_SUB_OPTION_CHARS)
 
     user_input = (text or "").strip()
     audio_bytes_received = b""
@@ -211,7 +214,7 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
-    conversation_history = normalize_history(history_raw=history, topic=topic)
+    conversation_history = normalize_history(history_raw=history, topic=topic, sub_option=sub_option)
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),
