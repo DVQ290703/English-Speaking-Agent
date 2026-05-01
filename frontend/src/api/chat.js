@@ -4,7 +4,6 @@ export async function chatRespond({
   token,
   text,
   audioBlob,
-  history = [],
   topic = '',
   subOption = '',
   voiceGender = '',
@@ -13,10 +12,6 @@ export async function chatRespond({
 
   if (text && text.trim()) {
     formData.append('text', text.trim());
-  }
-
-  if (Array.isArray(history) && history.length > 0) {
-    formData.append('history', JSON.stringify(history));
   }
 
   if (topic && topic.trim()) {
