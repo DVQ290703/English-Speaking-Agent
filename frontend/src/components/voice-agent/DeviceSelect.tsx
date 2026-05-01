@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 interface DeviceSelectProps {
   value: string;
@@ -17,8 +17,8 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   const shortVal = value.length > 24 ? `${value.slice(0, 24)}…` : value;
@@ -45,8 +45,8 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
               }}
               className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                 opt === value
-                  ? "bg-blue-50 text-blue-700 font-medium"
-                  : "text-gray-700 hover:bg-gray-50"
+                  ? 'bg-blue-50 text-blue-700 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
               {opt}
