@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     topic_id            UUID REFERENCES topics(id),
     title               TEXT,
     status              TEXT NOT NULL DEFAULT 'active',
+    cleared_at          TIMESTAMPTZ,
     started_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at            TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -75,6 +76,12 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 CREATE INDEX IF NOT EXISTS idx_conversations_user_started ON conversations(user_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversations_topic ON conversations(topic_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_cleared_at
+    ON conversations(id) WHERE cleared_at IS NOT NULL;
+
+-- Migration for existing databases (run once):
+-- ALTER TABLE conversations ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ;
+-- CREATE INDEX IF NOT EXISTS idx_conversations_cleared_at ON conversations(id) WHERE cleared_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS turns (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
