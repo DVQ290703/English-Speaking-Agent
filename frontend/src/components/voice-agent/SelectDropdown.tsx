@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 interface SelectDropdownProps<T extends string> {
   value: T;
@@ -12,7 +12,7 @@ export default function SelectDropdown<T extends string>({
   value,
   options,
   onChange,
-  className = "",
+  className = '',
 }: SelectDropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -23,8 +23,8 @@ export default function SelectDropdown<T extends string>({
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   return (
@@ -49,8 +49,8 @@ export default function SelectDropdown<T extends string>({
               }}
               className={`w-full text-left px-3 py-2 text-xs transition-colors ${
                 opt === value
-                  ? "bg-blue-50 text-blue-700 font-medium"
-                  : "text-gray-700 hover:bg-gray-50"
+                  ? 'bg-blue-50 text-blue-700 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
               }`}
             >
               {opt}
