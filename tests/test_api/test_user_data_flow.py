@@ -181,7 +181,7 @@ class TestUserLifecycle:
     def test_step5_list_conversations_shows_new_conversation(self):
         now = datetime.now(timezone.utc)
         conn = _make_conn(
-            fetchall_value=[(self._conv_id, "New Conversation", "active", now, None, None)]
+            fetchall_value=[(self._conv_id, "New Conversation", "active", now, None, None, None)]
         )
         with _client(conn) as (c, _):
             r = c.get("/api/conversations", headers=_bearer(self._user_id, self._email))
