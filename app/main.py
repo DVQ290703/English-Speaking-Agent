@@ -39,7 +39,10 @@ async def add_security_headers(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
     response.headers.setdefault("Permissions-Policy", "microphone=(self)")
-    response.headers.setdefault("Cache-Control", "no-store")
+    # Only force no-store on sensitive endpoints. Audio and health set their own headers.
+    sensitive_prefixes = ("/api/auth/", "/api/chat/")
+    if any(request.url.path.startswith(p) for p in sensitive_prefixes):
+        response.headers.setdefault("Cache-Control", "no-store")
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response

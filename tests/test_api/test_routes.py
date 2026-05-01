@@ -539,7 +539,9 @@ class TestHealthCheck:
             r = c.get("/health")
         assert r.headers["X-Content-Type-Options"] == "nosniff"
         assert r.headers["X-Frame-Options"] == "DENY"
-        assert r.headers["Cache-Control"] == "no-store"
+        # /health is not a sensitive endpoint; Cache-Control: no-store is only
+        # applied to /api/auth/ and /api/chat/ paths.
+        assert r.headers.get("cache-control") != "no-store"
 
 
 def test_read_and_close_upload_closes_temp_file():
