@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Mic } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 import { fetchMe } from '../api/auth';
 import {
@@ -11,9 +12,13 @@ import {
   formatBytes,
   pruneOldestSessions,
 } from '../api/sessionHistory';
+import { fetchConversations, clearConversation } from '../api/conversations';
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
 import { useT, useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
+import { queryClient } from '../lib/queryClient';
+import { dbGetConversations, dbUpsertConversations, dbClearConversationData } from '../lib/db';
+import { evictConversationAudio } from '../lib/audioCache';
 
 const TOPIC_ICONS = {
   'Daily Conversation': '💬',
@@ -563,20 +568,68 @@ export default function DashboardPage({ demoMode = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightId]);
 
+  // Server conversations from TanStack Query
+  const { data: serverConversations } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: async () => {
+      if (!session?.token) return [];
+      const convs = await fetchConversations(session.token);
+      // Write-through to IndexedDB so next login renders instantly
+      await dbUpsertConversations(
+        convs.map(c => ({ ...c, cached_at: new Date().toISOString() }))
+      );
+      return convs;
+    },
+    enabled: !!session?.token,
+    staleTime: 60_000,
+  });
+
+  // Seed from IndexedDB on first render (before server responds)
+  const [cachedConversations, setCachedConversations] = useState([]);
+  useEffect(() => {
+    dbGetConversations().then(rows => {
+      if (rows.length > 0) setCachedConversations(rows);
+    });
+  }, []);
+
+  // Merge: server data wins once available; IndexedDB is the instant fallback
+  // Also merge with localStorage sessions for score/duration data (temporary until full API)
   const realSessions = useMemo(() => {
-    return getSessions().map((s, idx) => ({
-      id: s.id ?? `real_${idx}`,
-      topic: s.topic,
-      date: s.date,
-      duration: formatDuration(s.durationMs ?? 0),
-      durationMs: s.durationMs ?? 0,
-      messages: s.sentenceCount ?? 0,
-      avgScore: s.avgScore ?? 0,
-      corrections: s.corrections ?? 0,
-      isReal: true,
-    }));
+    const localSessions = getSessions();
+    const localById = Object.fromEntries(localSessions.map(s => [s.id, s]));
+
+    const source = serverConversations ?? cachedConversations;
+    if (source.length === 0) {
+      // Pure localStorage fallback if server hasn't responded and IndexedDB is empty
+      return localSessions.map((s, idx) => ({
+        id: s.id ?? `real_${idx}`,
+        topic: s.topic,
+        date: s.date,
+        duration: formatDuration(s.durationMs ?? 0),
+        durationMs: s.durationMs ?? 0,
+        messages: s.sentenceCount ?? 0,
+        avgScore: s.avgScore ?? 0,
+        corrections: s.corrections ?? 0,
+        isReal: true,
+      }));
+    }
+
+    return source.map((c, idx) => {
+      const local = localById[c.id];
+      return {
+        id: c.id ?? `real_${idx}`,
+        topic: c.title ?? local?.topic ?? 'Daily Conversation',
+        date: c.started_at ?? local?.date,
+        duration: formatDuration(local?.durationMs ?? 0),
+        durationMs: local?.durationMs ?? 0,
+        messages: local?.sentenceCount ?? 0,
+        avgScore: local?.avgScore ?? 0,
+        corrections: local?.corrections ?? 0,
+        isReal: true,
+      };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyTick]);
+  }, [serverConversations, cachedConversations, historyTick]);
 
   // Derive the topic filter tabs dynamically from real session data so the
   // list always reflects what the user has actually practised — no hardcoded
@@ -932,9 +985,23 @@ export default function DashboardPage({ demoMode = false }) {
                     }}
                     onDelete={
                       s.isReal
-                        ? () => {
-                            deleteSession(s.id);
+                        ? async () => {
+                            // Optimistic: update UI immediately
+                            queryClient.setQueryData(['conversations'], (old) =>
+                              Array.isArray(old) ? old.filter(c => c.id !== s.id) : old
+                            );
+                            setCachedConversations(prev => prev.filter(c => c.id !== s.id));
+                            deleteSession(s.id); // keep localStorage in sync
                             setHistoryTick(t => t + 1);
+                            // Sync to server + evict audio cache
+                            try {
+                              await clearConversation(session.token, s.id);
+                              await dbClearConversationData(s.id, new Date().toISOString());
+                              await evictConversationAudio(s.id);
+                            } catch {
+                              // On failure, invalidate to re-fetch from server
+                              queryClient.invalidateQueries({ queryKey: ['conversations'] });
+                            }
                           }
                         : undefined
                     }
