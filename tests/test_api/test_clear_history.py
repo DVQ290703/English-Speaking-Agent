@@ -110,3 +110,33 @@ def test_clear_conversation_rejects_invalid_uuid():
             headers=_auth(user_id),
         )
     assert resp.status_code == 422
+
+
+def test_get_messages_excludes_pre_clear_messages():
+    """GET /conversations/{id}/messages only returns messages after cleared_at."""
+    user_id = str(uuid.uuid4())
+    conv_id = str(uuid.uuid4())
+    msg_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    cur = MagicMock()
+    # First fetchone: ownership check
+    cur.fetchone.return_value = (conv_id,)
+    # fetchall: messages (post-clear only)
+    cur.fetchall.return_value = [
+        (msg_id, "assistant", "text", "Hello after clear", now, None),
+    ]
+
+    with (
+        patch("app.api.conversations.get_connection", return_value=_make_conn(cur)),
+        patch("app.api.conversations.get_presigned_url", return_value=None),
+    ):
+        with TestClient(app) as client:
+            resp = client.get(
+                f"/api/conversations/{conv_id}/messages",
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["messages"]) == 1
+    assert data["messages"][0]["text_content"] == "Hello after clear"

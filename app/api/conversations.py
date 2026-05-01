@@ -26,7 +26,7 @@ def list_conversations(user_id: str = Depends(get_current_user_id)):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id::text, title, status, started_at, ended_at, topic_id::text
+                SELECT id::text, title, status, started_at, ended_at, topic_id::text, cleared_at
                 FROM conversations
                 WHERE user_id = %s
                 ORDER BY started_at DESC
@@ -38,7 +38,11 @@ def list_conversations(user_id: str = Depends(get_current_user_id)):
 
     logger.info("list_conversations user_id=%s returned=%d", user_id, len(rows))
     conversations = [
-        ConversationOut(id=row[0], title=row[1], status=row[2], started_at=row[3], ended_at=row[4], topic_id=row[5])
+        ConversationOut(
+            id=row[0], title=row[1], status=row[2],
+            started_at=row[3], ended_at=row[4], topic_id=row[5],
+            cleared_at=row[6],
+        )
         for row in rows
     ]
     return ConversationListResponse(conversations=conversations)
@@ -72,8 +76,10 @@ def get_conversation_messages(
                     m.created_at,
                     aa.storage_key
                 FROM messages m
+                JOIN conversations c ON c.id = m.conversation_id
                 LEFT JOIN audio_assets aa ON aa.message_id = m.id
                 WHERE m.conversation_id = %s
+                  AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
                 ORDER BY m.created_at ASC
                 """,
                 (conversation_id,),
