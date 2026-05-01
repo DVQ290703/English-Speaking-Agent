@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api._validators import _validate_uuid
@@ -106,3 +108,29 @@ def get_conversation_messages(
         logger.warning("Presigned URL generation ok=%d failed=%d conversation_id=%s", presign_ok, presign_fail, conversation_id)
 
     return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
+
+
+@router.post("/{conversation_id}/clear", status_code=status.HTTP_204_NO_CONTENT)
+def clear_conversation_history(
+    conversation_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Set cleared_at = NOW() — hides prior messages from user but retains data in DB."""
+    conv_id_str = str(conversation_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE conversations
+                SET cleared_at = NOW(), updated_at = NOW()
+                WHERE id = %s AND user_id = %s
+                RETURNING id::text
+                """,
+                (conv_id_str, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conversation not found",
+                )
+    logger.info("clear_conversation_history conversation_id=%s user_id=%s", conv_id_str, user_id)
