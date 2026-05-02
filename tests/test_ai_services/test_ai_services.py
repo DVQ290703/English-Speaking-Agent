@@ -44,6 +44,13 @@ class TestNormalizeHistory:
         result = self._call(None, topic="   ")
         assert result == []
 
+    def test_normalize_history_includes_sub_option_after_topic(self):
+        from app.core.ai_services import normalize_history
+
+        result = normalize_history(history_raw=None, topic="Travel", sub_option="Airport Check-in")
+
+        assert result == ["Topic: Travel", "Sub-option: Airport Check-in"]
+
     def test_normalize_history_valid_json_list_of_dicts(self):
         history = json.dumps([
             {"role": "user", "text": "Hello"},
@@ -282,14 +289,51 @@ class TestRunLangraphAgent:
 
 
 # ---------------------------------------------------------------------------
+# dynamic prompt architecture
+# ---------------------------------------------------------------------------
+
+class TestPromptArchitecture:
+    def test_build_system_prompt_layers_base_topic_and_sub_option(self):
+        from app.prompts.prompt_builder import build_system_prompt
+
+        prompt = build_system_prompt(topic="travel", sub_option="airport_check_in")
+
+        assert "AI English-speaking coach" in prompt
+        assert "## Topic: travel" in prompt
+        assert "## Scenario: airport_check_in" in prompt
+        assert "airport check-in" in prompt.lower()
+
+    def test_build_system_prompt_uses_unknown_sub_option_fallback(self):
+        from app.prompts.prompt_builder import build_system_prompt
+
+        prompt = build_system_prompt(topic="daily_conversation", sub_option="Meeting a neighbor")
+
+        assert "## Topic: daily_conversation" in prompt
+        assert "Meeting a neighbor" in prompt
+
+
+    def test_extract_prompt_context_reads_topic_and_sub_option_lines(self):
+        from app.prompts.prompt_builder import extract_prompt_context
+
+        topic, sub_option = extract_prompt_context([
+            "Topic: Job Interview",
+            "Sub-option: Salary negotiation",
+            "User: hello",
+        ])
+
+        assert topic == "Job Interview"
+        assert sub_option == "Salary negotiation"
+
+
+# ---------------------------------------------------------------------------
 # ElevenLabsTTS
 # ---------------------------------------------------------------------------
 
 class TestElevenLabsTTS:
     def test_resolve_voice_id_uses_male_voice_when_requested(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_MALE", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_FEMALE", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -297,8 +341,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_uses_female_voice_when_requested(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_MALE", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_FEMALE", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -306,7 +350,7 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_explicit_gender_does_not_fallback_to_default(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_MALE", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -314,8 +358,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_does_not_use_female_when_male_requested(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_MALE", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_FEMALE", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -323,8 +367,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_does_not_use_male_when_female_requested(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_MALE", "male-voice")
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_FEMALE", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -332,7 +376,7 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_invalid_gender_uses_default(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_MALE", "male-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -340,8 +384,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_no_gender_requires_default_voice(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_MALE", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_VOICE_ID_FEMALE", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -349,8 +393,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_returns_empty_when_no_voice_configured(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_MALE", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_FEMALE", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -371,8 +415,8 @@ class TestElevenLabsTTS:
     def test_convert_text_to_speech_missing_voice_id_does_not_call_http(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_MALE", raising=False)
+        monkeypatch.delenv("ELEVENLABS_VOICE_ID_FEMALE", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 

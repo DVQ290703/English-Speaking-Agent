@@ -46,12 +46,14 @@ def get_assessment_service():
     return service
 
 
-def normalize_history(history_raw: str | None, topic: str | None) -> list[str]:
+def normalize_history(history_raw: str | None, topic: str | None, sub_option: str | None = None) -> list[str]:
     """Convert raw UI history JSON into a compact list of prompt-ready conversation lines."""
     history_lines: list[str] = []
 
     if topic and topic.strip():
         history_lines.append(f"Topic: {topic.strip()}")
+    if sub_option and sub_option.strip():
+        history_lines.append(f"Sub-option: {sub_option.strip()}")
 
     if not history_raw:
         logger.debug("normalize_history no history provided topic_present=%s", bool(topic and topic.strip()))
