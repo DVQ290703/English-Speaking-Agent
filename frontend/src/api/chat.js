@@ -7,6 +7,7 @@ export async function chatRespond({
   topic = '',
   subOption = '',
   voiceGender = '',
+  conversationId = null,
 }) {
   const formData = new FormData();
 
@@ -16,6 +17,10 @@ export async function chatRespond({
 
   if (topic && topic.trim()) {
     formData.append('topic', topic.trim());
+  }
+
+  if (conversationId) {
+    formData.append('conversation_id', conversationId);
   }
 
   if (subOption && subOption.trim()) {
