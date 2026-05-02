@@ -1719,16 +1719,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       <div data-va="content" className="flex flex-1 overflow-hidden">
         {/* Left sidebar — conversation history */}
         <ConversationSidebar
-          conversations={forTopicData?.conversations ?? []}
-          activeConversationId={currentConversationId}
-          onSelect={handleSelectConversation}
-          onNewChat={() => {
-            setSidebarOpen(false);
-            handleNewChat();
-          }}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           isDark={isDark}
+          activeTopic={topic ?? null}
+          activeConversationId={currentConversationId}
+          token={authSession?.token ?? ''}
+          onSelectConversation={handleSelectConversation}
+          onNewChat={handleNewChat}
+          onDeleteConversation={handleDeleteConversation}
         />
         {/* Left panel: Audio & Video */}
         <div
