@@ -410,7 +410,7 @@ class TestListConversations:
 
     def test_list_conversations_happy_path(self):
         now = datetime.now(timezone.utc)
-        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None, None)])
+        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None, None, None)])
         with _client(conn) as (c, _):
             r = c.get("/api/conversations", headers=self._headers())
         assert r.status_code == 200

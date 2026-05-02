@@ -62,3 +62,22 @@ def test_for_topic_response_schema():
     )
     assert resp.limit_reached is False
     assert resp.conversations[0].session_number == 1
+
+
+def test_list_conversations_excludes_deleted():
+    """GET /conversations must not return conversations where deleted_at IS NOT NULL."""
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    conn, _ = make_mock_connection(
+        fetchall_value=[
+            # Only one row — the soft-deleted one is absent (filtered by SQL)
+            (str(uuid.uuid4()), "Live Session", "active", now, None, None, None, "ielts_part1"),
+        ]
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.get("/api/conversations", headers=_auth(user_id))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["conversations"]) == 1
+    assert data["conversations"][0]["title"] == "Live Session"

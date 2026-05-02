@@ -42,6 +42,7 @@ def list_conversations(user_id: str = Depends(get_current_user_id)):
                 FROM conversations c
                 LEFT JOIN topics t ON t.id = c.topic_id
                 WHERE c.user_id = %s
+                  AND c.deleted_at IS NULL
                 ORDER BY c.started_at DESC
                 LIMIT 100
                 """,
