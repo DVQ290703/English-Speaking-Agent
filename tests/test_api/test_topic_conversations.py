@@ -166,3 +166,46 @@ def test_for_topic_unknown_topic_returns_404():
                 headers=_auth(user_id),
             )
     assert resp.status_code == 404
+
+
+def test_delete_conversation_returns_204():
+    """DELETE /conversations/{id} soft-deletes a conversation owned by user."""
+    user_id = str(uuid.uuid4())
+    conv_id = str(uuid.uuid4())
+    conn, _ = make_mock_connection(
+        fetchone_by_sql={"returning id": (conv_id,)},
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.delete(
+                f"/api/conversations/{conv_id}",
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 204
+
+
+def test_delete_conversation_returns_404_when_not_owned():
+    """DELETE /conversations/{id} returns 404 when conversation not found or not owned."""
+    user_id = str(uuid.uuid4())
+    conv_id = str(uuid.uuid4())
+    conn, _ = make_mock_connection(
+        fetchone_by_sql={"returning id": None},
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.delete(
+                f"/api/conversations/{conv_id}",
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 404
+
+
+def test_delete_conversation_rejects_invalid_uuid():
+    """DELETE /conversations/not-a-uuid returns 422."""
+    user_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        resp = client.delete(
+            "/api/conversations/not-a-uuid",
+            headers=_auth(user_id),
+        )
+    assert resp.status_code == 422

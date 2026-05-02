@@ -238,6 +238,32 @@ def clear_conversation_history(
     logger.info("clear_conversation_history conversation_id=%s user_id=%s", conv_id_str, user_id)
 
 
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Soft-delete a conversation: sets deleted_at = NOW(). Data is retained in DB."""
+    conv_id_str = str(conversation_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE conversations
+                SET deleted_at = NOW(), updated_at = NOW()
+                WHERE id = %s AND user_id = %s AND deleted_at IS NULL
+                RETURNING id::text
+                """,
+                (conv_id_str, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conversation not found",
+                )
+    logger.info("delete_conversation conversation_id=%s user_id=%s", conv_id_str, user_id)
+
+
 @router.get("/{conversation_id}/messages-with-scores", response_model=ConversationWithScoresResponse)
 def get_conversation_messages_with_scores(
     conversation_id: str,
