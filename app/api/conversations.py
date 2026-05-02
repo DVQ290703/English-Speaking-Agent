@@ -103,8 +103,11 @@ def get_conversations_for_topic(
                     c.status,
                     c.started_at,
                     c.updated_at,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY c.topic_id ORDER BY c.started_at
+                    (
+                        SELECT COUNT(*) FROM conversations c2
+                        WHERE c2.topic_id = c.topic_id
+                          AND c2.user_id = c.user_id
+                          AND c2.started_at <= c.started_at
                     ) AS session_number
                 FROM conversations c
                 WHERE c.user_id = %s
@@ -133,7 +136,7 @@ def get_conversations_for_topic(
         user_id, topic_code, len(conversations),
     )
     return ForTopicResponse(
-        topic_code=topic_code,
+        topic_code=topic_code.strip().lower(),
         topic_title=topic_title,
         conversations=conversations,
         total=total,
