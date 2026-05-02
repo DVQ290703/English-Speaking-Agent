@@ -89,7 +89,7 @@ def test_for_topic_returns_conversations_with_session_number():
     now = datetime.now(timezone.utc)
     conn, _ = make_mock_connection(
         fetchall_by_sql={
-            "row_number": [
+            "select count(*) from conversations c2": [
                 (str(uuid.uuid4()), "IELTS Part 1 — Intro - Session 2", "active", now, now, 2),
                 (str(uuid.uuid4()), "IELTS Part 1 — Intro - Session 1", "active", now, now, 1),
             ],
@@ -125,7 +125,7 @@ def test_for_topic_limit_reached_when_5_conversations():
         for i in range(5, 0, -1)
     ]
     conn, _ = make_mock_connection(
-        fetchall_by_sql={"row_number": five_convs},
+        fetchall_by_sql={"select count(*) from conversations c2": five_convs},
         fetchone_by_sql={
             "select id::text, title from topics": ("topic-uuid", "IELTS Part 1 — Intro"),
             "select count(*)": (5,),
