@@ -49,6 +49,23 @@ export interface MessageWithScoreOut {
   score: MessageScoreOut | null;
 }
 
+export interface ForTopicConversation {
+  id: string;
+  title: string | null;
+  status: string;
+  session_number: number;
+  started_at: string;
+  updated_at: string;
+}
+
+export interface ForTopicResponse {
+  topic_code: string;
+  topic_title: string;
+  conversations: ForTopicConversation[];
+  total: number;
+  limit_reached: boolean;
+}
+
 async function apiFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -98,5 +115,18 @@ export async function fetchMessagesWithScores(
 export async function clearConversation(token: string, conversationId: string): Promise<void> {
   await apiFetch<void>(`/api/conversations/${conversationId}/clear`, token, {
     method: 'POST',
+  });
+}
+
+export async function fetchForTopic(token: string, topicCode: string): Promise<ForTopicResponse> {
+  return apiFetch<ForTopicResponse>(
+    `/api/conversations/for-topic?topic_code=${encodeURIComponent(topicCode)}`,
+    token
+  );
+}
+
+export async function deleteConversation(token: string, conversationId: string): Promise<void> {
+  await apiFetch<void>(`/api/conversations/${conversationId}`, token, {
+    method: 'DELETE',
   });
 }
