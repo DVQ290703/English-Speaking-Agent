@@ -82,10 +82,10 @@ function TopicCard({ topic, accent, onStart }) {
         </span>
       </div>
       <div className="text-base font-bold text-gray-900 mb-1.5">
-        {t(`topic.${topic.key}.title`)}
+        {t(`topic.${topic.id}.title`)}
       </div>
       <div className="text-sm text-gray-600 leading-relaxed mb-3 line-clamp-2 min-h-10">
-        {t(`topic.${topic.key}.desc`)}
+        {t(`topic.${topic.id}.desc`)}
       </div>
       <span
         className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${styles.chip}`}
@@ -150,7 +150,7 @@ function CategoryTabsRow({ categories, onStart }) {
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
       >
         {active.topics.map(t => (
-          <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key)} />
+          <TopicCard key={t.id} topic={t} accent={active.accent} onStart={() => onStart(t.id)} />
         ))}
       </div>
     </div>
