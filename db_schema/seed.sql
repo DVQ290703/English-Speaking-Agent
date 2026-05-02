@@ -2,6 +2,9 @@
 -- SEED DATA
 -- =========================
 
+-- Remove legacy flat topics replaced by categorized sub-topics
+DELETE FROM topics WHERE code IN ('daily_conversation', 'travel', 'job_interview', 'business_meeting', 'academic');
+
 -- =========================
 -- Categories (10)
 -- =========================
@@ -201,27 +204,27 @@ INSERT INTO topics (id, category_id, code, title, description, difficulty_level,
 
   -- Technology & Innovation (6)
   ('t0000000-0000-0000-0000-000000000041','ca000000-0000-0000-0000-000000000007',
-   'tech_social_media','Social Media & Internet Culture',
+   'technology_social_media','Social Media & Internet Culture',
    'Discuss platforms, online behaviour, and digital communication',
    'beginner', 1),
   ('t0000000-0000-0000-0000-000000000042','ca000000-0000-0000-0000-000000000007',
-   'tech_ai','Artificial Intelligence & Future',
+   'technology_ai','Artificial Intelligence & Future',
    'Discuss AI trends, automation, and the future of work',
    'advanced', 2),
   ('t0000000-0000-0000-0000-000000000043','ca000000-0000-0000-0000-000000000007',
-   'tech_gadgets','Gadgets & Devices',
+   'technology_gadgets','Gadgets & Devices',
    'Compare products, describe features, and discuss consumer tech',
    'beginner', 3),
   ('t0000000-0000-0000-0000-000000000044','ca000000-0000-0000-0000-000000000007',
-   'tech_cybersecurity','Cybersecurity & Privacy',
+   'technology_cybersecurity','Cybersecurity & Privacy',
    'Discuss online safety, data privacy, and digital threats',
    'advanced', 4),
   ('t0000000-0000-0000-0000-000000000045','ca000000-0000-0000-0000-000000000007',
-   'tech_ecommerce','E-commerce & Digital Life',
+   'technology_ecommerce','E-commerce & Digital Life',
    'Discuss online shopping, digital payments, and platform economies',
    'intermediate', 5),
   ('t0000000-0000-0000-0000-000000000046','ca000000-0000-0000-0000-000000000007',
-   'tech_gaming','Gaming & Virtual Reality',
+   'technology_gaming','Gaming & Virtual Reality',
    'Talk about video games, esports, and immersive digital experiences',
    'intermediate', 6),
 
@@ -253,53 +256,53 @@ INSERT INTO topics (id, category_id, code, title, description, difficulty_level,
 
   -- Environment & Society (6)
   ('t0000000-0000-0000-0000-000000000053','ca000000-0000-0000-0000-000000000009',
-   'env_climate','Climate Change & Environment',
+   'environment_climate','Climate Change & Environment',
    'Discuss environmental issues, climate science, and global impact',
    'advanced', 1),
   ('t0000000-0000-0000-0000-000000000054','ca000000-0000-0000-0000-000000000009',
-   'env_sustainable','Sustainable Living',
+   'environment_sustainable','Sustainable Living',
    'Talk about eco-friendly habits, recycling, and green choices',
    'intermediate', 2),
   ('t0000000-0000-0000-0000-000000000055','ca000000-0000-0000-0000-000000000009',
-   'env_social_issues','Social Issues & Inequality',
+   'environment_social_issues','Social Issues & Inequality',
    'Discuss poverty, discrimination, and systemic social challenges',
    'advanced', 3),
   ('t0000000-0000-0000-0000-000000000056','ca000000-0000-0000-0000-000000000009',
-   'env_immigration','Immigration & Identity',
+   'environment_immigration','Immigration & Identity',
    'Talk about migration, cultural identity, and belonging',
    'advanced', 4),
   ('t0000000-0000-0000-0000-000000000057','ca000000-0000-0000-0000-000000000009',
-   'env_urban_rural','Urban vs Rural Life',
+   'environment_urban_rural','Urban vs Rural Life',
    'Compare city and countryside living, pros and cons',
    'intermediate', 5),
   ('t0000000-0000-0000-0000-000000000058','ca000000-0000-0000-0000-000000000009',
-   'env_politics','Politics & Current Events',
+   'environment_politics','Politics & Current Events',
    'Discuss news, political systems, and civic responsibility',
    'advanced', 6),
 
   -- Entertainment & Media (6)
   ('t0000000-0000-0000-0000-000000000059','ca000000-0000-0000-0000-000000000010',
-   'ent_movies','Movies & TV Shows',
+   'entertainment_movies','Movies & TV Shows',
    'Review films and series, discuss genres and recommendations',
    'beginner', 1),
   ('t0000000-0000-0000-0000-000000000060','ca000000-0000-0000-0000-000000000010',
-   'ent_music','Music & Concerts',
+   'entertainment_music','Music & Concerts',
    'Talk about music genres, artists, and live performances',
    'beginner', 2),
   ('t0000000-0000-0000-0000-000000000061','ca000000-0000-0000-0000-000000000010',
-   'ent_books','Books & Literature',
+   'entertainment_books','Books & Literature',
    'Discuss books, authors, and reading habits',
    'intermediate', 3),
   ('t0000000-0000-0000-0000-000000000062','ca000000-0000-0000-0000-000000000010',
-   'ent_sports','Sports & Competition',
+   'entertainment_sports','Sports & Competition',
    'Discuss teams, sporting events, and athletic achievement',
    'beginner', 4),
   ('t0000000-0000-0000-0000-000000000063','ca000000-0000-0000-0000-000000000010',
-   'ent_celebrities','Celebrities & Pop Culture',
+   'entertainment_celebrities','Celebrities & Pop Culture',
    'Discuss famous people, trends, and popular culture',
    'beginner', 5),
   ('t0000000-0000-0000-0000-000000000064','ca000000-0000-0000-0000-000000000010',
-   'ent_news','News & Current Events',
+   'entertainment_news','News & Current Events',
    'Summarise news stories and discuss their significance',
    'intermediate', 6)
 
@@ -452,8 +455,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO pronunciation_word_details (assessment_id, word_index, word, accuracy_score, error_type, start_ms, duration_ms)
 SELECT a.id, w.word_index, w.word, w.accuracy_score, w.error_type, w.start_ms, w.duration_ms
-FROM pronunciation_assessments a,
-(VALUES
+FROM (VALUES
   (1, 'Hello',  95.0, 'None', 0,    320),
   (2, 'my',     98.0, 'None', 380,  150),
   (3, 'name',   92.0, 'None', 580,  280),
@@ -464,7 +466,8 @@ FROM pronunciation_assessments a,
   (8, 'meet',   90.0, 'None', 2120, 350),
   (9, 'you',    93.0, 'None', 2530, 280)
 ) AS w(word_index, word, accuracy_score, error_type, start_ms, duration_ms)
-WHERE a.message_id = 'e1000000-0000-0000-0000-000000000001';
+JOIN pronunciation_assessments a ON a.message_id = 'e1000000-0000-0000-0000-000000000001'
+ON CONFLICT (assessment_id, word_index) DO NOTHING;
 
 -- =========================
 -- Agent feedback
