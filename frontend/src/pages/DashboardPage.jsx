@@ -199,22 +199,16 @@ const TOPIC_CATEGORIES = [
 ];
 
 const ACCENT_STYLES = {
-  blue: {
-    card: 'from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400',
-    chip: 'bg-blue-100 text-blue-700',
-  },
-  violet: {
-    card: 'from-violet-50 to-violet-100 border-violet-200 hover:border-violet-400',
-    chip: 'bg-violet-100 text-violet-700',
-  },
-  emerald: {
-    card: 'from-emerald-50 to-emerald-100 border-emerald-200 hover:border-emerald-400',
-    chip: 'bg-emerald-100 text-emerald-700',
-  },
-  amber: {
-    card: 'from-amber-50 to-amber-100 border-amber-200 hover:border-amber-400',
-    chip: 'bg-amber-100 text-amber-700',
-  },
+  blue:   { card: 'from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400',       chip: 'bg-blue-100 text-blue-700' },
+  violet: { card: 'from-violet-50 to-violet-100 border-violet-200 hover:border-violet-400', chip: 'bg-violet-100 text-violet-700' },
+  emerald:{ card: 'from-emerald-50 to-emerald-100 border-emerald-200 hover:border-emerald-400', chip: 'bg-emerald-100 text-emerald-700' },
+  amber:  { card: 'from-amber-50 to-amber-100 border-amber-200 hover:border-amber-400',   chip: 'bg-amber-100 text-amber-700' },
+  teal:   { card: 'from-teal-50 to-teal-100 border-teal-200 hover:border-teal-400',       chip: 'bg-teal-100 text-teal-700' },
+  rose:   { card: 'from-rose-50 to-rose-100 border-rose-200 hover:border-rose-400',       chip: 'bg-rose-100 text-rose-700' },
+  indigo: { card: 'from-indigo-50 to-indigo-100 border-indigo-200 hover:border-indigo-400', chip: 'bg-indigo-100 text-indigo-700' },
+  pink:   { card: 'from-pink-50 to-pink-100 border-pink-200 hover:border-pink-400',       chip: 'bg-pink-100 text-pink-700' },
+  green:  { card: 'from-green-50 to-green-100 border-green-200 hover:border-green-400',   chip: 'bg-green-100 text-green-700' },
+  orange: { card: 'from-orange-50 to-orange-100 border-orange-200 hover:border-orange-400', chip: 'bg-orange-100 text-orange-700' },
 };
 
 function scoreColor(s) {
