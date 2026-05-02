@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     revoked_at          TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, device_id)
+    CONSTRAINT uq_auth_sessions_user_device UNIQUE (user_id, device_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id    ON auth_sessions(user_id);
@@ -63,12 +63,17 @@ CREATE TABLE IF NOT EXISTS categories (
     title       TEXT NOT NULL,
     sort_order  INT NOT NULL DEFAULT 0,
     is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TRIGGER trg_categories_updated_at
+    BEFORE UPDATE ON categories
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS topics (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    category_id         UUID NOT NULL REFERENCES categories(id),
+    category_id         UUID NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
     code                TEXT UNIQUE NOT NULL,
     title               TEXT NOT NULL,
     description         TEXT,
@@ -102,7 +107,7 @@ CREATE TABLE IF NOT EXISTS user_topic_preferences (
 CREATE TABLE IF NOT EXISTS conversations (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    topic_id            UUID REFERENCES topics(id),
+    topic_id            UUID REFERENCES topics(id) ON DELETE SET NULL,
     title               TEXT,
     status              TEXT NOT NULL DEFAULT 'active'
                             CHECK (status IN ('active','completed','abandoned')),
@@ -128,10 +133,8 @@ CREATE TABLE IF NOT EXISTS turns (
     conversation_id     UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     turn_number         INT NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (conversation_id, turn_number)
+    CONSTRAINT uq_turns_conv_turn UNIQUE (conversation_id, turn_number)
 );
-
-CREATE INDEX IF NOT EXISTS idx_turns_conversation ON turns(conversation_id, turn_number);
 
 CREATE TABLE IF NOT EXISTS messages (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -167,7 +170,7 @@ CREATE TABLE IF NOT EXISTS audio_assets (
     sample_rate_hz      INT,
     size_bytes          BIGINT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (message_id, audio_type)
+    CONSTRAINT uq_audio_assets_message_type UNIQUE (message_id, audio_type)
 );
 
 CREATE INDEX IF NOT EXISTS idx_audio_assets_message_id ON audio_assets(message_id);
@@ -181,11 +184,11 @@ CREATE TABLE IF NOT EXISTS pronunciation_assessments (
     message_id              UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     reference_text          TEXT,
     recognized_text         TEXT,
-    overall_score           NUMERIC(5,2),
-    accuracy_score          NUMERIC(5,2),
-    fluency_score           NUMERIC(5,2),
-    completeness_score      NUMERIC(5,2),
-    prosody_score           NUMERIC(5,2),
+    overall_score           NUMERIC(5,2) CHECK (overall_score      BETWEEN 0 AND 100),
+    accuracy_score          NUMERIC(5,2) CHECK (accuracy_score     BETWEEN 0 AND 100),
+    fluency_score           NUMERIC(5,2) CHECK (fluency_score      BETWEEN 0 AND 100),
+    completeness_score      NUMERIC(5,2) CHECK (completeness_score BETWEEN 0 AND 100),
+    prosody_score           NUMERIC(5,2) CHECK (prosody_score      BETWEEN 0 AND 100),
     error_rate              NUMERIC(6,3),
     azure_request_id        TEXT,
     raw_result_json         JSONB NOT NULL DEFAULT '{}',
@@ -207,7 +210,8 @@ CREATE TABLE IF NOT EXISTS pronunciation_word_details (
                                 'None','Omission','Insertion','Mispronunciation',
                                 'UnexpectedBreak','MissingBreak','Monotone')),
     start_ms                INT,
-    duration_ms             INT
+    duration_ms             INT,
+    CONSTRAINT uq_pron_word_position UNIQUE (assessment_id, word_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pron_word_assessment ON pronunciation_word_details(assessment_id);
@@ -225,10 +229,8 @@ CREATE TABLE IF NOT EXISTS agent_feedback (
     vocabulary_feedback     TEXT,
     next_tip                TEXT,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (turn_id)
+    CONSTRAINT uq_agent_feedback_turn UNIQUE (turn_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_agent_feedback_turn_id ON agent_feedback(turn_id);
 
 -- =========================
 -- 7) DAILY PROGRESS
@@ -244,7 +246,7 @@ CREATE TABLE IF NOT EXISTS daily_progress (
     avg_fluency_score       NUMERIC(5,2) CHECK (avg_fluency_score   BETWEEN 0 AND 100),
     avg_accuracy_score      NUMERIC(5,2) CHECK (avg_accuracy_score  BETWEEN 0 AND 100),
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, date)
+    CONSTRAINT uq_daily_progress_user_date UNIQUE (user_id, date)
 );
 
 CREATE TRIGGER trg_daily_progress_updated_at
