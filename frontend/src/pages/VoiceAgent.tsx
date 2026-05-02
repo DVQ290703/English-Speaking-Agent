@@ -265,10 +265,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         return {
           topic: initialMessagesAndId.topic as TopicId | null,
           label: null as string | null,
+          subOption: null as string | null,
         };
       }
       const raw = params.get('topic') || sessionStorage.getItem('va_selected_topic');
-      if (!raw) return { topic: null as TopicId | null, label: null as string | null };
+      if (!raw) {
+        return { topic: null as TopicId | null, label: null as string | null, subOption: null as string | null };
+      }
       sessionStorage.removeItem('va_selected_topic');
       const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
         'Daily Conversation': 'daily',
@@ -292,17 +295,46 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         'Culture & Customs': 'travel',
         'Airport English': 'travel',
       };
+      const DASHBOARD_TO_SUB_OPTION: Record<string, string> = {
+        'Daily Conversation': 'weekend_plans',
+        Shopping: 'shopping_return',
+        Healthcare: 'doctor_visit',
+        'Family & Friends': 'weekend_plans',
+        Hobbies: 'weekend_plans',
+        'IELTS Part 1': 'part_1_personal_questions',
+        'IELTS Part 2': 'part_2_cue_card',
+        'Academic Discussion': 'part_3_discussion',
+        'Describe a person': 'part_2_cue_card',
+        'Describe a place': 'part_2_cue_card',
+        'Job Interview': 'tell_me_about_yourself',
+        'Office Meeting': 'project_update_meeting',
+        Presentations: 'project_update_meeting',
+        Negotiation: 'salary_negotiation',
+        'Email & Phone': 'Email & Phone',
+        'Travel & Tourism': 'asking_directions',
+        'Food & Restaurant': 'ordering_food',
+        'Hotel & Booking': 'hotel_booking',
+        'Culture & Customs': 'Culture & Customs',
+        'Airport English': 'airport_check_in',
+      };
       const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
-      if (mappedId) return { topic: mappedId, label: null };
-      return { topic: null as TopicId | null, label: raw };
+      if (mappedId) {
+        return {
+          topic: mappedId,
+          label: null,
+          subOption: DASHBOARD_TO_SUB_OPTION[raw] ?? null,
+        };
+      }
+      return { topic: null as TopicId | null, label: raw, subOption: raw };
     } catch {
-      return { topic: null as TopicId | null, label: null as string | null };
+      return { topic: null as TopicId | null, label: null as string | null, subOption: null as string | null };
     }
   }, [initialMessagesAndId]);
   const [topic, setTopic] = useState<TopicId | null>(_initialTopicAndLabel.topic);
   const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(
     _initialTopicAndLabel.label
   );
+  const [subOption, setSubOption] = useState<string | null>(_initialTopicAndLabel.subOption);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [model, setModel] = useState<Model>('OpenAI GPT 5');
@@ -959,6 +991,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               TOPICS.find(item => item.id === (topic as TopicId | undefined))?.label ??
               topic ??
               undefined,
+            subOption: subOption ?? undefined,
             voiceGender: gender,
           });
 
@@ -1157,7 +1190,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         setAgentTyping(false);
       }
     },
-    [agentTyping, messages, playAgentAudio, topic, gender, language, trimLocalAudioUrls]
+    [agentTyping, messages, playAgentAudio, topic, subOption, gender, language, trimLocalAudioUrls]
   );
 
   // Auto-start/stop recognition when mic toggle or connection changes
@@ -2371,6 +2404,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     onClick={() => {
                       setTopic(tp.id);
                       setCustomTopicLabel(null);
+                      setSubOption(null);
                       setShowSettings(false);
                       try {
                         const url = new URL(window.location.href);
