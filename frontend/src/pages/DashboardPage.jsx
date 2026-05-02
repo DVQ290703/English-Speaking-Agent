@@ -4,199 +4,12 @@ import { LogOut, Mic } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchMe } from '../api/auth';
-import {
-  getSessions,
-  formatDuration,
-  deleteSession,
-  getStorageUsage,
-  formatBytes,
-  pruneOldestSessions,
-} from '../api/sessionHistory';
-import { fetchConversations, clearConversation } from '../api/conversations';
+import { fetchConversations } from '../api/conversations';
+import { TOPIC_CATEGORIES } from '../constants/topics';
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
 import { useT, useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
-import { queryClient } from '../lib/queryClient';
-import { dbGetConversations, dbUpsertConversations, dbClearConversationData } from '../lib/db';
-import { evictConversationAudio } from '../lib/audioCache';
-
-const TOPIC_ICONS = {
-  'Daily Conversation': '💬',
-  'Job Interview': '💼',
-  'Academic Discussion': '🎓',
-  'Travel & Tourism': '✈️',
-};
-
-const TOPIC_CATEGORIES = [
-  {
-    name: 'IELTS Speaking',
-    desc: 'Practise official IELTS-style speaking parts.',
-    accent: 'blue',
-    topics: [
-      {
-        key: 'IELTS Part 1',
-        icon: '🎤',
-        title: 'IELTS Part 1 — Intro',
-        desc: 'Personal questions about you and familiar topics.',
-        level: 'All levels',
-      },
-      {
-        key: 'IELTS Part 2',
-        icon: '📋',
-        title: 'IELTS Part 2 — Long turn',
-        desc: 'Speak for 1-2 minutes from a cue card.',
-        level: 'Intermediate+',
-      },
-      {
-        key: 'Academic Discussion',
-        icon: '🎓',
-        title: 'Academic Discussion',
-        desc: 'Part 3 style — opinions, comparisons, abstract topics.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Describe a person',
-        icon: '🧑',
-        title: 'Describe a Person',
-        desc: 'Vocabulary for character, appearance, relationships.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Describe a place',
-        icon: '🏞️',
-        title: 'Describe a Place',
-        desc: 'City, country, landmark, favourite location.',
-        level: 'Intermediate',
-      },
-    ],
-  },
-  {
-    name: 'Business & Career',
-    desc: 'Workplace English and professional speaking.',
-    accent: 'violet',
-    topics: [
-      {
-        key: 'Job Interview',
-        icon: '💼',
-        title: 'Job Interview',
-        desc: 'Common questions and structured answers.',
-        level: 'Intermediate+',
-      },
-      {
-        key: 'Office Meeting',
-        icon: '🗂️',
-        title: 'Office Meeting',
-        desc: 'Discuss projects, share opinions, agree/disagree.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Presentations',
-        icon: '📊',
-        title: 'Presentations',
-        desc: 'Open, structure, and close a short talk.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Negotiation',
-        icon: '🤝',
-        title: 'Negotiation',
-        desc: 'Bargain politely, propose terms, reach agreement.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Email & Phone',
-        icon: '📞',
-        title: 'Phone & Email Talk',
-        desc: 'Professional phone calls and follow-ups.',
-        level: 'Intermediate',
-      },
-    ],
-  },
-  {
-    name: 'Daily Life',
-    desc: 'Everyday situations you face all the time.',
-    accent: 'emerald',
-    topics: [
-      {
-        key: 'Daily Conversation',
-        icon: '💬',
-        title: 'Daily Conversation',
-        desc: 'Hobbies, family, weekend plans, weather.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Shopping',
-        icon: '🛍️',
-        title: 'Shopping',
-        desc: 'Ask prices, compare items, return products.',
-        level: 'Beginner',
-      },
-      {
-        key: 'Healthcare',
-        icon: '🏥',
-        title: 'Healthcare',
-        desc: 'Doctor visits, symptoms, pharmacy talk.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Family & Friends',
-        icon: '👨‍👩‍👧',
-        title: 'Family & Friends',
-        desc: 'Relationships, gatherings, personal stories.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Hobbies',
-        icon: '🎨',
-        title: 'Hobbies & Interests',
-        desc: 'Talk about passions and free time activities.',
-        level: 'Beginner+',
-      },
-    ],
-  },
-  {
-    name: 'Travel & Culture',
-    desc: 'From booking flights to cross-cultural chats.',
-    accent: 'amber',
-    topics: [
-      {
-        key: 'Travel & Tourism',
-        icon: '✈️',
-        title: 'Travel & Tourism',
-        desc: 'Booking, directions, holiday stories.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Food & Restaurant',
-        icon: '🍽️',
-        title: 'Food & Restaurant',
-        desc: 'Order, describe taste, ask about dishes.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Hotel & Booking',
-        icon: '🏨',
-        title: 'Hotel & Booking',
-        desc: 'Check-in, request services, handle problems.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Culture & Customs',
-        icon: '🌏',
-        title: 'Culture & Customs',
-        desc: 'Compare traditions and cross-cultural topics.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Airport English',
-        icon: '🛫',
-        title: 'Airport English',
-        desc: 'Check-in, security, customs vocabulary.',
-        level: 'Beginner+',
-      },
-    ],
-  },
-];
+import { dbGetConversations, dbUpsertConversations } from '../lib/db';
 
 const ACCENT_STYLES = {
   blue:   { card: 'from-blue-50 to-blue-100 border-blue-200 hover:border-blue-400',       chip: 'bg-blue-100 text-blue-700' },
@@ -402,7 +215,7 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
 
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl leading-none">{TOPIC_ICONS[session.topic] || '💬'}</span>
+          <span className="text-2xl leading-none">💬</span>
           <div>
             <div className="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
               {topicTitle}
@@ -447,86 +260,6 @@ function SessionCard({ session, onView, onDelete, highlight = false }) {
   );
 }
 
-function StorageUsageBar({ tick, onCleanup }) {
-  const t = useT();
-  const usage = useMemo(() => {
-    // `tick` is included in deps intentionally to refresh usage periodically.
-    // Reference it here so the linter recognises the dependency as used.
-    void tick;
-    return getStorageUsage();
-  }, [tick]);
-  const [confirming, setConfirming] = useState(false);
-
-  if (usage.sessionCount === 0) return null;
-
-  const isCritical = usage.percent >= 80;
-  const isWarning = usage.percent >= 50 && usage.percent < 80;
-  const barColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-emerald-500';
-  const cardBorder = isCritical
-    ? 'border-red-200 bg-red-50/50'
-    : isWarning
-      ? 'border-amber-200 bg-amber-50/50'
-      : 'border-gray-200 bg-white';
-
-  const handlePrune = () => {
-    if (!confirming) {
-      setConfirming(true);
-      window.setTimeout(() => setConfirming(false), 4000);
-      return;
-    }
-    pruneOldestSessions(0.5);
-    setConfirming(false);
-    onCleanup?.();
-  };
-
-  return (
-    <div
-      className={`mb-10 rounded-xl border ${cardBorder} px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors`}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-3 mb-1.5">
-          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-            {isCritical ? t('dash.storage.full') : t('dash.storage.usage')}
-          </span>
-          <span className="text-xs text-gray-500 tabular-nums">
-            {formatBytes(usage.bytes)} •{' '}
-            {t('dash.storage.sessionsCount', {
-              n: usage.sessionCount,
-              max: usage.max,
-            })}
-          </span>
-        </div>
-        <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-          <div
-            className={`h-full ${barColor} transition-all duration-500`}
-            style={{ width: `${Math.max(2, usage.percent)}%` }}
-          />
-        </div>
-        {isCritical && (
-          <p className="text-[11px] text-red-600 mt-1.5">{t('dash.storage.fullNote')}</p>
-        )}
-      </div>
-      {usage.sessionCount > 1 && (
-        <button
-          type="button"
-          onClick={handlePrune}
-          className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-            confirming
-              ? 'bg-red-600 text-white hover:bg-red-700'
-              : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          {confirming
-            ? t('dash.storage.confirmCleanup', {
-                n: Math.floor(usage.sessionCount / 2),
-              })
-            : t('dash.storage.cleanup')}
-        </button>
-      )}
-    </div>
-  );
-}
-
 export default function DashboardPage({ demoMode = false }) {
   const t = useT();
   const navigate = useNavigate();
@@ -539,7 +272,6 @@ export default function DashboardPage({ demoMode = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [historyTick, setHistoryTick] = useState(0);
   const [highlightId, setHighlightId] = useState(() => location.state?.highlightSessionId ?? null);
   const session = useMemo(() => getAuthSession(), []);
 
@@ -586,44 +318,21 @@ export default function DashboardPage({ demoMode = false }) {
     });
   }, []);
 
-  // Merge: server data wins once available; IndexedDB is the instant fallback
-  // Also merge with localStorage sessions for score/duration data (temporary until full API)
+  // Use server data only; IndexedDB is the instant fallback before server responds
   const realSessions = useMemo(() => {
-    const localSessions = getSessions();
-    const localById = Object.fromEntries(localSessions.map(s => [s.id, s]));
-
     const source = serverConversations ?? cachedConversations;
-    if (source.length === 0) {
-      // Pure localStorage fallback if server hasn't responded and IndexedDB is empty
-      return localSessions.map((s, idx) => ({
-        id: s.id ?? `real_${idx}`,
-        topic: s.topic,
-        date: s.date,
-        duration: formatDuration(s.durationMs ?? 0),
-        durationMs: s.durationMs ?? 0,
-        messages: s.sentenceCount ?? 0,
-        avgScore: s.avgScore ?? 0,
-        corrections: s.corrections ?? 0,
-        isReal: true,
-      }));
-    }
-
-    return source.map((c, idx) => {
-      const local = localById[c.id];
-      return {
-        id: c.id ?? `real_${idx}`,
-        topic: c.title ?? local?.topic ?? 'Daily Conversation',
-        date: c.started_at ?? local?.date,
-        duration: formatDuration(local?.durationMs ?? 0),
-        durationMs: local?.durationMs ?? 0,
-        messages: local?.sentenceCount ?? 0,
-        avgScore: local?.avgScore ?? 0,
-        corrections: local?.corrections ?? 0,
-        isReal: true,
-      };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverConversations, cachedConversations, historyTick]);
+    return (source ?? []).map((c, idx) => ({
+      id: c.id ?? `real_${idx}`,
+      topic: c.topic_code ?? c.title ?? 'General Chat',
+      date: c.started_at,
+      duration: '—',
+      durationMs: 0,
+      messages: 0,
+      avgScore: 0,
+      corrections: 0,
+      isReal: true,
+    }));
+  }, [serverConversations, cachedConversations]);
 
   // Derive the topic filter tabs dynamically from real session data so the
   // list always reflects what the user has actually practised — no hardcoded
@@ -634,12 +343,6 @@ export default function DashboardPage({ demoMode = false }) {
   }, [realSessions]);
 
   const allSessions = realSessions;
-
-  useEffect(() => {
-    const onFocus = () => setHistoryTick(t => t + 1);
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, []);
 
   useEffect(() => {
     if (demoMode) return;
@@ -860,8 +563,6 @@ export default function DashboardPage({ demoMode = false }) {
           />
         </div>
 
-        <StorageUsageBar tick={historyTick} onCleanup={() => setHistoryTick(t => t + 1)} />
-
         {/* Choose a topic */}
         <section className="mb-10">
           <div className="flex items-end justify-between mb-5">
@@ -951,7 +652,7 @@ export default function DashboardPage({ demoMode = false }) {
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {tab !== 'All' && TOPIC_ICONS[tab]} {tabLabel}
+                  {tabLabel}
                 </button>
               );
             })}
@@ -970,35 +671,8 @@ export default function DashboardPage({ demoMode = false }) {
                     key={s.id}
                     session={s}
                     highlight={s.id === highlightId}
-                    onView={() => {
-                      if (s.isReal) {
-                        navigate(`/VoiceAgent?session=${encodeURIComponent(s.id)}`);
-                      } else {
-                        navigate('/VoiceAgent');
-                      }
-                    }}
-                    onDelete={
-                      s.isReal
-                        ? async () => {
-                            // Optimistic: update UI immediately
-                            queryClient.setQueryData(['conversations'], (old) =>
-                              Array.isArray(old) ? old.filter(c => c.id !== s.id) : old
-                            );
-                            setCachedConversations(prev => prev.filter(c => c.id !== s.id));
-                            deleteSession(s.id); // keep localStorage in sync
-                            setHistoryTick(t => t + 1);
-                            // Sync to server + evict audio cache
-                            try {
-                              await clearConversation(session.token, s.id);
-                              await dbClearConversationData(s.id, new Date().toISOString());
-                              await evictConversationAudio(s.id);
-                            } catch {
-                              // On failure, invalidate to re-fetch from server
-                              queryClient.invalidateQueries({ queryKey: ['conversations'] });
-                            }
-                          }
-                        : undefined
-                    }
+                    onView={() => navigate(`/VoiceAgent?conversation=${encodeURIComponent(s.id)}`)}
+                    onDelete={null}
                   />
                 ))}
               </div>
