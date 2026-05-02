@@ -1,43 +1,33 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import { translate, type Lang } from "./translations";
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { translate, type Lang } from './translations';
 
-const STORAGE_KEY = "va-ui-lang";
+const STORAGE_KEY = 'va-ui-lang';
 
-type LanguageContextValue = {
+export type LanguageContextValue = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   toggleLang: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
-const LanguageContext = createContext<LanguageContextValue | undefined>(
-  undefined,
-);
+export const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 function readInitialLang(): Lang {
-  if (typeof window === "undefined") return "vi";
+  if (typeof window === 'undefined') return 'vi';
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (stored === "en" || stored === "vi") return stored;
+    if (stored === 'en' || stored === 'vi') return stored;
   } catch {
     // ignore storage failures (private mode, quota, etc.)
   }
   try {
-    const nav = window.navigator?.language?.toLowerCase() || "";
-    if (nav.startsWith("vi")) return "vi";
-    if (nav.startsWith("en")) return "en";
+    const nav = window.navigator?.language?.toLowerCase() || '';
+    if (nav.startsWith('vi')) return 'vi';
+    if (nav.startsWith('en')) return 'en';
   } catch {
     // ignore
   }
-  return "vi";
+  return 'vi';
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -50,7 +40,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     try {
-      document.documentElement.setAttribute("lang", lang);
+      document.documentElement.setAttribute('lang', lang);
     } catch {
       // ignore
     }
@@ -61,12 +51,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLangState((prev) => (prev === "vi" ? "en" : "vi"));
+    setLangState((prev) => (prev === 'vi' ? 'en' : 'vi'));
   }, []);
 
   const t = useCallback(
-    (key: string, vars?: Record<string, string | number>) =>
-      translate(lang, key, vars),
+    (key: string, vars?: Record<string, string | number>) => translate(lang, key, vars),
     [lang],
   );
 
@@ -75,21 +64,5 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     [lang, setLang, toggleLang, t],
   );
 
-  return (
-    <LanguageContext.Provider value={value}>
-      {children}
-    </LanguageContext.Provider>
-  );
-}
-
-export function useLanguage(): LanguageContextValue {
-  const ctx = useContext(LanguageContext);
-  if (!ctx) {
-    throw new Error("useLanguage must be used inside <LanguageProvider>");
-  }
-  return ctx;
-}
-
-export function useT(): LanguageContextValue["t"] {
-  return useLanguage().t;
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
