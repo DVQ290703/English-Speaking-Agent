@@ -5,7 +5,7 @@ import { registerRequest } from '../api/auth';
 import { saveAuthSession } from '../auth/tokenStorage';
 
 const initialForm = {
-  name: '',
+  display_name: '',
   email: '',
   password: '',
   confirmPassword: '',
@@ -23,7 +23,7 @@ export default function RegisterPage() {
 
   const validate = () => {
     const errs = {};
-    if (!form.name.trim()) errs.name = 'Please enter your name.';
+    if (!form.display_name.trim()) errs.display_name = 'Please enter your display name.';
     if (!form.email.trim()) {
       errs.email = 'Please enter your email.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
@@ -52,7 +52,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
     try {
       const data = await registerRequest({
-        name: form.name.trim(),
+        display_name: form.display_name.trim(),
         email: form.email.trim(),
         password: form.password,
       });
@@ -110,11 +110,11 @@ export default function RegisterPage() {
               <input
                 type="text"
                 placeholder="Nguyen Van A"
-                value={form.name}
-                onChange={updateField('name')}
+                value={form.display_name}
+                onChange={updateField('display_name')}
                 autoComplete="name"
               />
-              {errors.name && <small>{errors.name}</small>}
+              {errors.display_name && <small>{errors.display_name}</small>}
             </label>
 
             <label className="field">

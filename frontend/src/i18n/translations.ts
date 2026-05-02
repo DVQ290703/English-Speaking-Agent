@@ -215,8 +215,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.input.connectHint': 'Connect to start chatting',
     'va.input.listening': 'Listening to your voice...',
     'va.input.agentTyping': 'Agent is typing...',
-    'va.input.placeholder': 'Type a message... (Enter to send)',
-    'va.input.statusHint': '{n} messages • Enter to send, Shift+Enter for newline',
+    'va.input.placeholder': 'Type a message...',
+    'va.input.statusHint': '{n} messages',
 
     // VoiceAgent — settings overlay
     'va.settings.title': 'Practice topic',
@@ -458,8 +458,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.input.connectHint': 'Kết nối để bắt đầu trò chuyện',
     'va.input.listening': 'Đang nghe giọng nói...',
     'va.input.agentTyping': 'Trợ lý đang gõ...',
-    'va.input.placeholder': 'Nhập tin nhắn... (Enter để gửi)',
-    'va.input.statusHint': '{n} tin nhắn • Enter để gửi, Shift+Enter để xuống dòng',
+    'va.input.placeholder': 'Nhập tin nhắn...',
+    'va.input.statusHint': '{n} tin nhắn',
 
     // VoiceAgent — settings overlay
     'va.settings.title': 'Chủ đề luyện tập',
