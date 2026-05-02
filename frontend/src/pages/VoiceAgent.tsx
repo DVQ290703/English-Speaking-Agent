@@ -44,12 +44,11 @@ import {
 import type { Message, Mistake } from '../components/voice-agent';
 import { useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
-import { clearConversation } from '../api/conversations';
+import { clearConversation, fetchForTopic, deleteConversation, fetchMessagesWithScores } from '../api/conversations';
 import { dbClearConversationData } from '../lib/db';
 import { evictConversationAudio } from '../lib/audioCache';
 import { queryClient } from '../lib/queryClient';
 import { useQuery } from '@tanstack/react-query';
-import { fetchConversations, fetchMessagesWithScores } from '../api/conversations';
 import { ConversationSidebar } from '../components/voice-agent';
 import { TOPICS_FLAT, type TopicId as TopicIdConst } from '../constants/topics';
 import type { MessageWithScoreOut } from '../api/conversations';
@@ -224,10 +223,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const authSession = useMemo(() => getAuthSession(), []);
-  const { data: sidebarConversations = [] } = useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => fetchConversations(authSession?.token ?? ''),
-    enabled: !!authSession?.token,
+  const { data: forTopicData } = useQuery({
+    queryKey: ['for-topic', topic],
+    queryFn: () => fetchForTopic(authSession?.token ?? '', topic!),
+    enabled: !!topic && !!authSession?.token,
     staleTime: 30_000,
   });
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
@@ -1346,7 +1345,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       clearConversation(session?.token ?? '', convId)
         .then(() => dbClearConversationData(convId, clearedAt))
         .then(() => evictConversationAudio(convId))
-        .then(() => queryClient.invalidateQueries({ queryKey: ['conversations'] }))
+        .then(() => queryClient.invalidateQueries({ queryKey: ['for-topic', topic] }))
         .catch(err => console.warn('Failed to sync clear:', err));
     }
     setCurrentConversationId(null);
@@ -1460,13 +1459,84 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       await clearConversation(token, currentConversationId);
       setMessages([]);
       setExpandedMsgId(null);
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['for-topic', topic] });
     } catch (err) {
       console.warn('Failed to clear conversation:', err);
     } finally {
       setShowClearConfirm(false);
     }
   }, [currentConversationId]);
+
+  // Auto-resume: when forTopicData loads (after mount or topic change), set the
+  // most recent conversation as active if none is selected yet.
+  useEffect(() => {
+    if (!forTopicData) return;
+    const latest = forTopicData.conversations[0];
+    if (!latest || currentConversationId !== null) return;
+    const token = getAuthSession()?.token ?? '';
+    setCurrentConversationId(latest.id);
+    setHistoryLoading(true);
+    setMessages([]);
+    setExpandedMsgId(null);
+    fetchMessagesWithScores(token, latest.id)
+      .then((raw: MessageWithScoreOut[]) => {
+        const rehydrated: Message[] = raw.map((m, index) => ({
+          id: -(index + 1),
+          role: (m.role === 'assistant' ? 'agent' : m.role) as 'agent' | 'user',
+          text: m.text_content ?? '',
+          timestamp: new Date(m.created_at),
+          audioUrl: undefined,
+          _serverAudioUrl: m.audio_url ?? undefined,
+          isHistory: true,
+          scoreDetails: m.score
+            ? {
+                overall: m.score.overall_score ?? 0,
+                pronunciation: m.score.overall_score ?? 0,
+                fluency: m.score.fluency_score ?? 0,
+                accuracy: m.score.accuracy_score ?? 0,
+                completeness: m.score.completeness_score ?? undefined,
+              }
+            : undefined,
+          mistakes: m.score?.words
+            .filter(w => w.error_type && w.error_type !== 'None')
+            .map(w => ({
+              wrong: w.word,
+              correct: '',
+              type: 'Pronunciation' as const,
+              note: w.error_type ?? undefined,
+            })) ?? [],
+        }));
+        setMessages(rehydrated);
+        setTimeout(() => {
+          chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      })
+      .catch(err => console.warn('Auto-resume failed:', err))
+      .finally(() => setHistoryLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forTopicData]);
+
+  const handleNewChat = useCallback(() => {
+    if (forTopicData?.limit_reached) return;
+    setCurrentConversationId(null);
+    setMessages([]);
+    setExpandedMsgId(null);
+  }, [forTopicData?.limit_reached]);
+
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    const token = getAuthSession()?.token ?? '';
+    try {
+      await deleteConversation(token, conversationId);
+      if (conversationId === currentConversationId) {
+        setCurrentConversationId(null);
+        setMessages([]);
+        setExpandedMsgId(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ['for-topic', topic] });
+    } catch (err) {
+      console.warn('Failed to delete conversation:', err);
+    }
+  }, [currentConversationId, topic]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1649,12 +1719,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       <div data-va="content" className="flex flex-1 overflow-hidden">
         {/* Left sidebar — conversation history */}
         <ConversationSidebar
-          conversations={sidebarConversations}
+          conversations={forTopicData?.conversations ?? []}
           activeConversationId={currentConversationId}
           onSelect={handleSelectConversation}
           onNewChat={() => {
             setSidebarOpen(false);
-            startNewSession();
+            handleNewChat();
           }}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
