@@ -10,6 +10,8 @@ from app.api.schemas import (
     ConversationMessagesResponse,
     ConversationOut,
     ConversationWithScoresResponse,
+    ForTopicConversationOut,
+    ForTopicResponse,
     MessageOut,
     MessageScoreOut,
     MessageWithScoreOut,
@@ -60,6 +62,83 @@ def list_conversations(user_id: str = Depends(get_current_user_id)):
         for row in rows
     ]
     return ConversationListResponse(conversations=conversations)
+
+
+@router.get("/for-topic", response_model=ForTopicResponse)
+def get_conversations_for_topic(
+    topic_code: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers."""
+    logger.debug("get_conversations_for_topic user_id=%s topic_code=%s", user_id, topic_code)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
+                (topic_code.strip().lower(),),
+            )
+            topic_row = cur.fetchone()
+            if not topic_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Topic '{topic_code}' not found",
+                )
+            topic_id, topic_title = topic_row
+
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM conversations
+                WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+                """,
+                (user_id, topic_id),
+            )
+            total = cur.fetchone()[0]
+
+            cur.execute(
+                """
+                SELECT
+                    c.id::text,
+                    c.title,
+                    c.status,
+                    c.started_at,
+                    c.updated_at,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY c.topic_id ORDER BY c.started_at
+                    ) AS session_number
+                FROM conversations c
+                WHERE c.user_id = %s
+                  AND c.topic_id = %s
+                  AND c.deleted_at IS NULL
+                ORDER BY c.started_at DESC
+                LIMIT 5
+                """,
+                (user_id, topic_id),
+            )
+            rows = cur.fetchall()
+
+    conversations = [
+        ForTopicConversationOut(
+            id=row[0],
+            title=row[1],
+            status=row[2],
+            started_at=row[3],
+            updated_at=row[4],
+            session_number=row[5],
+        )
+        for row in rows
+    ]
+    logger.info(
+        "get_conversations_for_topic user_id=%s topic_code=%s returned=%d",
+        user_id, topic_code, len(conversations),
+    )
+    return ForTopicResponse(
+        topic_code=topic_code,
+        topic_title=topic_title,
+        conversations=conversations,
+        total=total,
+        limit_reached=total >= 5,
+    )
 
 
 @router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
