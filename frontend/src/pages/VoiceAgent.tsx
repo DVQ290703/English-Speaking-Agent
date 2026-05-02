@@ -2267,29 +2267,34 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 {t('va.input.connectHint')}
               </div>
             ) : (
-              <div className="flex items-end gap-2">
-                {/* Mic toggle (push-to-talk) */}
-                <button
-                  data-testid="button-mic-toggle"
-                  type="button"
-                  onClick={() => {
-                    const next = !micEnabled;
-                    userMicIntentRef.current = next;
-                    setMicEnabled(next);
-                  }}
-                  title={micEnabled ? t('va.input.listening') : t('va.left.microphone')}
-                  className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all border ${
-                    isRecording
-                      ? 'bg-red-100 border-red-300 text-red-600 animate-pulse'
-                      : micEnabled
-                        ? 'bg-blue-100 border-blue-300 text-blue-600 hover:bg-blue-200'
-                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+              <div className="flex items-center gap-2">
+                <div
+                  className={`flex items-center gap-2 w-full rounded-xl border px-2 py-1 bg-[#f1f5f9] transition-colors ${
+                    agentTyping ? 'opacity-60 cursor-not-allowed' : 'focus-within:ring-1 focus-within:ring-blue-200'
                   }`}
                 >
-                  {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                </button>
-                {/* Text input */}
-                <div className="flex-1 relative">
+                  {/* Mic toggle (push-to-talk) - placed inside the input container */}
+                  <button
+                    data-testid="button-mic-toggle"
+                    type="button"
+                    onClick={() => {
+                      const next = !micEnabled;
+                      userMicIntentRef.current = next;
+                      setMicEnabled(next);
+                    }}
+                    title={micEnabled ? t('va.input.listening') : t('va.left.microphone')}
+                    className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                      isRecording
+                        ? 'bg-red-100 text-red-600 animate-pulse ring-1 ring-red-300'
+                        : micEnabled
+                          ? 'bg-blue-100 text-blue-600'
+                          : 'bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                    }`}
+                  >
+                    {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                  </button>
+
+                  {/* Text input takes remaining space */}
                   <textarea
                     ref={inputRef}
                     data-testid="input-chat"
@@ -2310,69 +2315,30 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     }
                     rows={1}
                     data-va="textarea"
-                    className={`w-full resize-none rounded-xl border px-3 py-2 text-sm bg-[#f1f5f9] text-gray-800 placeholder-gray-400 outline-none transition-all leading-relaxed
-                      ${
-                        agentTyping
-                          ? 'border-gray-200 opacity-60 cursor-not-allowed'
-                          : 'border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-200'
-                      }`}
+                    className={`flex-1 resize-none bg-transparent border-0 px-2 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none leading-relaxed`}
                     style={{ minHeight: '38px', maxHeight: '120px' }}
                   />
-                </div>
 
-                {/* Send button */}
-                <button
-                  data-testid="button-send-chat"
-                  onClick={() => {
-                    if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
-                  }}
-                  disabled={!chatInput.trim() || agentTyping}
-                  className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
-                    chatInput.trim() && !agentTyping
-                      ? 'bg-blue-600 hover:bg-blue-500 text-gray-900 shadow-md shadow-blue-200'
-                      : 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  <SendHorizontal className="w-4 h-4" />
-                </button>
+                  {/* Send button */}
+                  <button
+                    data-testid="button-send-chat"
+                    onClick={() => {
+                      if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
+                    }}
+                    disabled={!chatInput.trim() || agentTyping}
+                    className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+                      chatInput.trim() && !agentTyping
+                        ? 'bg-blue-600 hover:bg-blue-500 text-gray-900 shadow-md shadow-blue-200'
+                        : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <SendHorizontal className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Status info below input */}
-            {isConnected && (
-              <div className="flex items-center justify-between mt-2 px-1">
-                <div className="flex items-center gap-2">
-                  {agentSpeaking && (
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-0.5 rounded-full bg-blue-500"
-                          style={{
-                            height: `${3 + Math.sin(i * 0.8) * 6}px`,
-                            animation: `agentWave 0.8s ease-in-out ${i * 60}ms infinite`,
-                            opacity: 0.65,
-                          }}
-                        />
-                      ))}
-                      <span className="ml-1 text-[10px] text-blue-600/80">
-                        {t('va.conv.agentSpeaking')}
-                      </span>
-                    </div>
-                  )}
-                  {agentTyping && !agentSpeaking && (
-                    <span className="text-[10px] text-gray-500 italic">
-                      {t('va.input.agentTyping')}
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] text-gray-600">
-                  {t('va.input.statusHint', {
-                    n: messages.filter(m => !m.typing).length,
-                  })}
-                </span>
-              </div>
-            )}
+            {/* Status info removed as requested */}
           </div>
         </div>
       </div>
