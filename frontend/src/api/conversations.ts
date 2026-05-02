@@ -8,6 +8,7 @@ export interface ConversationSummary {
   started_at: string;
   ended_at: string | null;
   topic_id: string | null;
+  topic_code: string | null;   // DB topic code e.g. "ielts_part1"
   cleared_at: string | null;
 }
 
@@ -18,6 +19,34 @@ export interface MessageSummary {
   text_content: string | null;
   created_at: string;
   audio_url: string | null;
+}
+
+export interface WordDetailOut {
+  word_index: number;
+  word: string;
+  accuracy_score: number | null;
+  error_type: string | null;
+  start_ms: number | null;
+  duration_ms: number | null;
+}
+
+export interface MessageScoreOut {
+  overall_score: number | null;
+  accuracy_score: number | null;
+  fluency_score: number | null;
+  completeness_score: number | null;
+  prosody_score: number | null;
+  words: WordDetailOut[];
+}
+
+export interface MessageWithScoreOut {
+  id: string;
+  role: string;
+  input_mode: string | null;
+  text_content: string | null;
+  created_at: string;
+  audio_url: string | null;
+  score: MessageScoreOut | null;
 }
 
 async function apiFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
@@ -36,9 +65,7 @@ async function apiFetch<T>(path: string, token: string, options?: RequestInit): 
   return resp.json() as Promise<T>;
 }
 
-export async function fetchConversations(
-  token: string
-): Promise<ConversationSummary[]> {
+export async function fetchConversations(token: string): Promise<ConversationSummary[]> {
   const data = await apiFetch<{ conversations: ConversationSummary[] }>(
     '/api/conversations',
     token
@@ -57,10 +84,18 @@ export async function fetchConversationMessages(
   return data.messages;
 }
 
-export async function clearConversation(
+export async function fetchMessagesWithScores(
   token: string,
   conversationId: string
-): Promise<void> {
+): Promise<MessageWithScoreOut[]> {
+  const data = await apiFetch<{ conversation_id: string; messages: MessageWithScoreOut[] }>(
+    `/api/conversations/${conversationId}/messages-with-scores`,
+    token
+  );
+  return data.messages;
+}
+
+export async function clearConversation(token: string, conversationId: string): Promise<void> {
   await apiFetch<void>(`/api/conversations/${conversationId}/clear`, token, {
     method: 'POST',
   });
