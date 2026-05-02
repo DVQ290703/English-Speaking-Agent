@@ -209,3 +209,78 @@ def test_delete_conversation_rejects_invalid_uuid():
             headers=_auth(user_id),
         )
     assert resp.status_code == 422
+
+
+def test_chat_respond_returns_409_when_5_conversations_exist():
+    """POST /chat/respond returns 409 when user already has 5 non-deleted conversations for this topic."""
+    from unittest.mock import patch as _patch
+    user_id = str(uuid.uuid4())
+    topic_id = str(uuid.uuid4())
+    conn, cursor = make_mock_connection(
+        fetchone_by_sql={
+            "select id::text, title from topics": (topic_id, "IELTS Part 1 — Intro"),
+            "select count(*) from conversations where user_id": (5,),
+        },
+    )
+    with (
+        _patch("app.api.chat.get_connection", return_value=conn),
+        _patch("app.api.chat.run_langraph_agent", return_value=("Hello", b"")),
+        _patch("app.api.chat._synthesize_audio_bytes", return_value=b""),
+        _patch("app.api.chat.store_user_audio", return_value=(None, "audio/webm")),
+        _patch("app.api.chat.get_presigned_url", return_value=None),
+        _patch("app.api.chat._upload"),
+    ):
+        with TestClient(app) as client:
+            resp = client.post(
+                "/api/chat/respond",
+                headers=_auth(user_id),
+                data={"text": "Hello", "topic": "ielts_part1"},
+            )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "Conversation limit reached"
+
+
+def test_chat_respond_creates_conversation_with_session_title():
+    """POST /chat/respond creates conversation titled '{topic_title} - Session N'."""
+    from unittest.mock import patch as _patch, call as _call
+    user_id = str(uuid.uuid4())
+    topic_id = str(uuid.uuid4())
+    new_conv_id = str(uuid.uuid4())
+    # fetchone_side_effect is consumed in call order:
+    # 1. SELECT id::text, title FROM topics → (topic_id, topic_title)
+    # 2. SELECT COUNT(*) ... deleted_at IS NULL → (0,)   [active count]
+    # 3. SELECT COUNT(*) ... (total ever)       → (0,)
+    # 4. INSERT ... RETURNING id::text           → (new_conv_id,)
+    # 5. SELECT COALESCE(MAX(turn_number)...)    → (1,)
+    # 6. _fetch_visible_history uses fetchall, not fetchone
+    conn, cursor = make_mock_connection(
+        fetchone_side_effect=[
+            (topic_id, "IELTS Part 1 — Intro"),
+            (0,),
+            (0,),
+            (new_conv_id,),
+            (1,),
+        ],
+    )
+    with (
+        _patch("app.api.chat.get_connection", return_value=conn),
+        _patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"")),
+        _patch("app.api.chat._synthesize_audio_bytes", return_value=b""),
+        _patch("app.api.chat.store_user_audio", return_value=(None, "audio/webm")),
+        _patch("app.api.chat.get_presigned_url", return_value=None),
+        _patch("app.api.chat._upload"),
+    ):
+        with TestClient(app) as client:
+            resp = client.post(
+                "/api/chat/respond",
+                headers=_auth(user_id),
+                data={"text": "Hello", "topic": "ielts_part1"},
+            )
+    assert resp.status_code == 200
+    # Check the cursor was called with an INSERT that contains the session title
+    insert_calls = [str(c) for c in cursor.execute.call_args_list]
+    title_insert = next(
+        (c for c in insert_calls if "insert into conversations" in c.lower()), None
+    )
+    assert title_insert is not None
+    assert "Session 1" in title_insert
