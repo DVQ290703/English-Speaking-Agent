@@ -404,13 +404,35 @@ class TestConversationTitle:
 
     def _chat_conn_with_topic(self, topic_found: bool):
         topic_id = _uid() if topic_found else None
-        return _make_conn(
-            fetchone_by_sql={
-                "from topics where code": (topic_id,) if topic_id else None,
-                "insert into conversations": (self._conv_id,),
-                "max(turn_number)": (1,),
-            }
-        )
+        if topic_found:
+            # Call order:
+            # 1. SELECT id::text, title FROM topics → (topic_id, "Topic Title")
+            # 2. SELECT COUNT(*) ... deleted_at IS NULL → (0,)  [active count]
+            # 3. SELECT COUNT(*) ... (total ever)       → (0,)
+            # 4. INSERT INTO conversations RETURNING id::text → (conv_id,)
+            # 5. SELECT COALESCE(MAX(turn_number)...)   → (1,)
+            return _make_conn(
+                fetchone_side_effect=[
+                    (topic_id, "IELTS Part 1 — Intro"),
+                    (0,),
+                    (0,),
+                    (self._conv_id,),
+                    (1,),
+                ]
+            )
+        else:
+            # No topic found: SELECT returns None, skip COUNT queries
+            # Call order:
+            # 1. SELECT id::text, title FROM topics → None
+            # 2. INSERT INTO conversations RETURNING id::text → (conv_id,)
+            # 3. SELECT COALESCE(MAX(turn_number)...) → (1,)
+            return _make_conn(
+                fetchone_side_effect=[
+                    None,
+                    (self._conv_id,),
+                    (1,),
+                ]
+            )
 
     def test_chat_with_known_topic_returns_200(self):
         conn = self._chat_conn_with_topic(topic_found=True)

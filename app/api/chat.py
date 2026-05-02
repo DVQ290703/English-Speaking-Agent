@@ -199,22 +199,52 @@ def chat_respond(
                 conv_id = row[0]
             else:
                 topic_id = None
-                topic_clean = topic.strip() if topic else ""
+                topic_title = None
+                topic_clean = topic.strip().lower() if topic else ""
                 if topic_clean:
                     cur.execute(
-                        "SELECT id::text FROM topics WHERE code = %s LIMIT 1",
-                        (topic_clean.lower(),),
+                        "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
+                        (topic_clean,),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:
-                        topic_id = topic_row[0]
-                title = f"Chat on {topic_clean}" if topic_clean else "New Conversation"
+                        topic_id, topic_title = topic_row[0], topic_row[1]
+
+                if topic_id:
+                    # 5-limit: count active (non-deleted) conversations for this topic
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) FROM conversations
+                        WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+                        """,
+                        (user_id, topic_id),
+                    )
+                    active_count = cur.fetchone()[0]
+                    if active_count >= 5:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Conversation limit reached",
+                        )
+
+                    # Session number = total ever (including deleted) + 1
+                    cur.execute(
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND topic_id = %s",
+                        (user_id, topic_id),
+                    )
+                    total_ever = cur.fetchone()[0]
+                    title = f"{topic_title} - Session {total_ever + 1}"
+                else:
+                    title = "New Conversation"
+
                 cur.execute(
                     "INSERT INTO conversations (user_id, topic_id, title) VALUES (%s, %s, %s) RETURNING id::text",
                     (user_id, topic_id, title),
                 )
                 conv_id = cur.fetchone()[0]
-                logger.info("New conversation created conv_id=%s topic_id=%s", conv_id, topic_id)
+                logger.info(
+                    "New conversation created conv_id=%s topic_id=%s title=%r",
+                    conv_id, topic_id, title,
+                )
 
             cur.execute(
                 "SELECT COALESCE(MAX(turn_number), 0) + 1 FROM turns WHERE conversation_id = %s",
