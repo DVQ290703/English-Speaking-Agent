@@ -86,6 +86,23 @@ class ConversationListResponse(BaseModel):
     conversations: list[ConversationOut]
 
 
+class ForTopicConversationOut(BaseModel):
+    id: str
+    title: str | None
+    status: str
+    session_number: int
+    started_at: datetime
+    updated_at: datetime
+
+
+class ForTopicResponse(BaseModel):
+    topic_code: str
+    topic_title: str
+    conversations: list[ForTopicConversationOut]
+    total: int
+    limit_reached: bool
+
+
 class ConversationMessagesResponse(BaseModel):
     conversation_id: str
     messages: list[MessageOut]
