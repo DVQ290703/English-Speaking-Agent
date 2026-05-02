@@ -129,8 +129,8 @@ LIMIT 5
 ### Updated: `GET /api/conversations`
 
 - Add `AND c.deleted_at IS NULL` to the WHERE clause.
-- Add `session_number` (computed via `ROW_NUMBER`) to `ConversationOut` schema and response.
 - No change to sort order or limit.
+- Note: the sidebar no longer uses this endpoint (replaced by `for-topic`). The existing `useQuery(['conversations'])` call in `VoiceAgent.tsx` should be removed; sidebar data comes from `useQuery(['for-topic', topicCode])` instead.
 
 ---
 
@@ -209,7 +209,7 @@ Sidebar initialises directly in topic-history view for that topic (calls `for-to
 
 **Delete conversation:**
 1. Trash icon click → show inline confirm row: *"Delete this session?"* + Confirm / Cancel.
-2. On confirm: `DELETE /api/conversations/{id}` → remove from local `topicConversations` list → invalidate `['conversations']` React Query key.
+2. On confirm: `DELETE /api/conversations/{id}` → remove from local `topicConversations` list → invalidate `['for-topic', browseTopic]` React Query key.
 3. If deleted conversation was the active one: clear `currentConversationId` and `messages`.
 
 ### Client-Side Caching
