@@ -128,6 +128,8 @@ CREATE INDEX IF NOT EXISTS idx_conversations_topic
     ON conversations(topic_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_cleared_at
     ON conversations(cleared_at) WHERE cleared_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_conversations_deleted_at
+    ON conversations(deleted_at) WHERE deleted_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS turns (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
