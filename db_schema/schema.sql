@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     status              TEXT NOT NULL DEFAULT 'active'
                             CHECK (status IN ('active','completed','abandoned')),
     cleared_at          TIMESTAMPTZ,
+    deleted_at          TIMESTAMPTZ,
     started_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at            TIMESTAMPTZ,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
