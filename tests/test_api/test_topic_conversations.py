@@ -81,3 +81,88 @@ def test_list_conversations_excludes_deleted():
     data = resp.json()
     assert len(data["conversations"]) == 1
     assert data["conversations"][0]["title"] == "Live Session"
+
+
+def test_for_topic_returns_conversations_with_session_number():
+    """GET /conversations/for-topic returns conversations with session_number."""
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    conn, _ = make_mock_connection(
+        fetchall_by_sql={
+            "row_number": [
+                (str(uuid.uuid4()), "IELTS Part 1 — Intro - Session 2", "active", now, now, 2),
+                (str(uuid.uuid4()), "IELTS Part 1 — Intro - Session 1", "active", now, now, 1),
+            ],
+        },
+        fetchone_by_sql={
+            "select id::text, title from topics": ("topic-uuid", "IELTS Part 1 — Intro"),
+            "select count(*)": (2,),
+        },
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/conversations/for-topic",
+                params={"topic_code": "ielts_part1"},
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["topic_code"] == "ielts_part1"
+    assert data["topic_title"] == "IELTS Part 1 — Intro"
+    assert len(data["conversations"]) == 2
+    assert data["conversations"][0]["session_number"] == 2
+    assert data["limit_reached"] is False
+    assert data["total"] == 2
+
+
+def test_for_topic_limit_reached_when_5_conversations():
+    """GET /conversations/for-topic sets limit_reached=True when total == 5."""
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    five_convs = [
+        (str(uuid.uuid4()), f"Session {i}", "active", now, now, i)
+        for i in range(5, 0, -1)
+    ]
+    conn, _ = make_mock_connection(
+        fetchall_by_sql={"row_number": five_convs},
+        fetchone_by_sql={
+            "select id::text, title from topics": ("topic-uuid", "IELTS Part 1 — Intro"),
+            "select count(*)": (5,),
+        },
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/conversations/for-topic",
+                params={"topic_code": "ielts_part1"},
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["limit_reached"] is True
+    assert data["total"] == 5
+
+
+def test_for_topic_missing_topic_code_returns_422():
+    """GET /conversations/for-topic without topic_code returns 422."""
+    user_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        resp = client.get("/api/conversations/for-topic", headers=_auth(user_id))
+    assert resp.status_code == 422
+
+
+def test_for_topic_unknown_topic_returns_404():
+    """GET /conversations/for-topic with unknown topic_code returns 404."""
+    user_id = str(uuid.uuid4())
+    conn, _ = make_mock_connection(
+        fetchone_by_sql={"select id::text, title from topics": None},
+    )
+    with patch("app.api.conversations.get_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/conversations/for-topic",
+                params={"topic_code": "nonexistent_topic"},
+                headers=_auth(user_id),
+            )
+    assert resp.status_code == 404
