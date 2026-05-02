@@ -837,12 +837,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             token: session.token,
             text: trimmed,
             audioBlob,
-            topic:
-              TOPICS.find(item => item.id === (topic as TopicId | undefined))?.label ??
-              topic ??
-              undefined,
+            topic: topic ?? undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
+            conversationId: currentConversationId ?? undefined,
           });
 
           if (data.conversation_id) {
