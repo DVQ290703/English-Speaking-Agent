@@ -830,6 +830,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       inputRef.current?.focus();
       setAgentTyping(true);
 
+      let serverUserMessageId: string | undefined;
       try {
         if (session?.token) {
           const data = await chatRespond({
@@ -844,6 +845,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
           if (data.conversation_id) {
             setCurrentConversationId(data.conversation_id);
+          }
+          if (data.user_message_id) {
+            serverUserMessageId = data.user_message_id;
           }
 
           const responseText =
@@ -906,6 +910,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               audioBlob,
               referenceText: trimmed,
               language: LANGUAGE_CODES[language],
+              messageId: serverUserMessageId ?? null,
             });
 
             const pron = Math.round(assessment.pron_score ?? 0);
