@@ -241,10 +241,22 @@ function StatCard({ icon, label, value, sub }) {
 }
 
 const ACCENT_DARK = {
-  blue:    { card: 'dark:from-blue-950/40 dark:to-blue-900/30 dark:border-blue-900/60 dark:hover:border-blue-500',          chip: 'dark:bg-blue-900/50 dark:text-blue-200' },
-  violet:  { card: 'dark:from-violet-950/40 dark:to-violet-900/30 dark:border-violet-900/60 dark:hover:border-violet-500',  chip: 'dark:bg-violet-900/50 dark:text-violet-200' },
-  emerald: { card: 'dark:from-emerald-950/40 dark:to-emerald-900/30 dark:border-emerald-900/60 dark:hover:border-emerald-500', chip: 'dark:bg-emerald-900/50 dark:text-emerald-200' },
-  amber:   { card: 'dark:from-amber-950/40 dark:to-amber-900/30 dark:border-amber-900/60 dark:hover:border-amber-500',      chip: 'dark:bg-amber-900/50 dark:text-amber-200' },
+  blue: {
+    card: 'dark:from-blue-950/40 dark:to-blue-900/30 dark:border-blue-900/60 dark:hover:border-blue-500',
+    chip: 'dark:bg-blue-900/50 dark:text-blue-200',
+  },
+  violet: {
+    card: 'dark:from-violet-950/40 dark:to-violet-900/30 dark:border-violet-900/60 dark:hover:border-violet-500',
+    chip: 'dark:bg-violet-900/50 dark:text-violet-200',
+  },
+  emerald: {
+    card: 'dark:from-emerald-950/40 dark:to-emerald-900/30 dark:border-emerald-900/60 dark:hover:border-emerald-500',
+    chip: 'dark:bg-emerald-900/50 dark:text-emerald-200',
+  },
+  amber: {
+    card: 'dark:from-amber-950/40 dark:to-amber-900/30 dark:border-amber-900/60 dark:hover:border-amber-500',
+    chip: 'dark:bg-amber-900/50 dark:text-amber-200',
+  },
 };
 
 function TopicCard({ topic, accent, onStart }) {
@@ -282,7 +294,7 @@ function CategoryTabsRow({ categories, onStart }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef(null);
   const active = categories[activeIdx];
-  const scroll = dir => {
+  const scroll = (dir) => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollBy({ left: dir * 320, behavior: 'smooth' });
@@ -325,21 +337,20 @@ function CategoryTabsRow({ categories, onStart }) {
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-500 dark:text-slate-400 mb-3 px-1">{t(`category.${active.name}.desc`)}</p>
+      <p className="text-sm text-gray-500 dark:text-slate-400 mb-3 px-1">
+        {t(`category.${active.name}.desc`)}
+      </p>
       <div
         ref={scrollerRef}
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
       >
-        {active.topics.map(t => (
+        {active.topics.map((t) => (
           <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key)} />
         ))}
       </div>
     </div>
   );
 }
-
-
-
 
 // Convert 0-100 pronunciation score → IELTS Band 0-9 (stepped, official mapping)
 function toBand(score) {
@@ -374,11 +385,20 @@ function BandTooltip({ active, payload, label }) {
     <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-32.5">
       <p className="text-gray-400 dark:text-slate-400 text-xs mb-1">{label}</p>
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: bc.color }}>Band</span>
-        <span className="text-xl font-black" style={{ color: bc.color }}>{band.toFixed(1)}</span>
+        <span
+          className="text-xs font-semibold uppercase tracking-wider"
+          style={{ color: bc.color }}
+        >
+          Band
+        </span>
+        <span className="text-xl font-black" style={{ color: bc.color }}>
+          {band.toFixed(1)}
+        </span>
       </div>
       {payload[0].payload.topic && (
-        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-37.5">{payload[0].payload.topic}</p>
+        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-37.5">
+          {payload[0].payload.topic}
+        </p>
       )}
     </div>
   );
@@ -391,13 +411,76 @@ function seedDemoSessions() {
   const day = 86400000;
   const now = Date.now();
   const samples = [
-    { topic: 'IELTS Part 1',         topicKey: 'IELTS Part 1',         avgScore: 62, sentenceCount: 12, corrections: 4, durationMs: 480000, scores: { pronunciation: 65, fluency: 58, accuracy: 63 }, daysAgo: 6 },
-    { topic: 'IELTS Part 2',         topicKey: 'IELTS Part 2',         avgScore: 68, sentenceCount: 15, corrections: 3, durationMs: 540000, scores: { pronunciation: 70, fluency: 64, accuracy: 70 }, daysAgo: 5 },
-    { topic: 'Job Interview',        topicKey: 'Job Interview',        avgScore: 71, sentenceCount: 14, corrections: 2, durationMs: 600000, scores: { pronunciation: 73, fluency: 68, accuracy: 72 }, daysAgo: 4 },
-    { topic: 'Academic Discussion',  topicKey: 'Academic Discussion',  avgScore: 75, sentenceCount: 18, corrections: 2, durationMs: 720000, scores: { pronunciation: 76, fluency: 72, accuracy: 77 }, daysAgo: 3 },
-    { topic: 'Describe a place',     topicKey: 'Describe a place',     avgScore: 78, sentenceCount: 20, corrections: 1, durationMs: 660000, scores: { pronunciation: 80, fluency: 74, accuracy: 79 }, daysAgo: 2 },
-    { topic: 'IELTS Part 2',         topicKey: 'IELTS Part 2',         avgScore: 82, sentenceCount: 22, corrections: 1, durationMs: 750000, scores: { pronunciation: 84, fluency: 78, accuracy: 83 }, daysAgo: 1 },
-    { topic: 'Academic Discussion',  topicKey: 'Academic Discussion',  avgScore: 86, sentenceCount: 24, corrections: 0, durationMs: 780000, scores: { pronunciation: 88, fluency: 83, accuracy: 87 }, daysAgo: 0 },
+    {
+      topic: 'IELTS Part 1',
+      topicKey: 'IELTS Part 1',
+      avgScore: 62,
+      sentenceCount: 12,
+      corrections: 4,
+      durationMs: 480000,
+      scores: { pronunciation: 65, fluency: 58, accuracy: 63 },
+      daysAgo: 6,
+    },
+    {
+      topic: 'IELTS Part 2',
+      topicKey: 'IELTS Part 2',
+      avgScore: 68,
+      sentenceCount: 15,
+      corrections: 3,
+      durationMs: 540000,
+      scores: { pronunciation: 70, fluency: 64, accuracy: 70 },
+      daysAgo: 5,
+    },
+    {
+      topic: 'Job Interview',
+      topicKey: 'Job Interview',
+      avgScore: 71,
+      sentenceCount: 14,
+      corrections: 2,
+      durationMs: 600000,
+      scores: { pronunciation: 73, fluency: 68, accuracy: 72 },
+      daysAgo: 4,
+    },
+    {
+      topic: 'Academic Discussion',
+      topicKey: 'Academic Discussion',
+      avgScore: 75,
+      sentenceCount: 18,
+      corrections: 2,
+      durationMs: 720000,
+      scores: { pronunciation: 76, fluency: 72, accuracy: 77 },
+      daysAgo: 3,
+    },
+    {
+      topic: 'Describe a place',
+      topicKey: 'Describe a place',
+      avgScore: 78,
+      sentenceCount: 20,
+      corrections: 1,
+      durationMs: 660000,
+      scores: { pronunciation: 80, fluency: 74, accuracy: 79 },
+      daysAgo: 2,
+    },
+    {
+      topic: 'IELTS Part 2',
+      topicKey: 'IELTS Part 2',
+      avgScore: 82,
+      sentenceCount: 22,
+      corrections: 1,
+      durationMs: 750000,
+      scores: { pronunciation: 84, fluency: 78, accuracy: 83 },
+      daysAgo: 1,
+    },
+    {
+      topic: 'Academic Discussion',
+      topicKey: 'Academic Discussion',
+      avgScore: 86,
+      sentenceCount: 24,
+      corrections: 0,
+      durationMs: 780000,
+      scores: { pronunciation: 88, fluency: 83, accuracy: 87 },
+      daysAgo: 0,
+    },
   ];
   samples.forEach((s, i) => {
     saveSession({
@@ -416,7 +499,12 @@ function seedDemoSessions() {
   });
 }
 
-const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoadDemo, dark = false }) {
+const ScoreTrendChart = memo(function ScoreTrendChart({
+  sessions,
+  onStart,
+  onLoadDemo,
+  dark = false,
+}) {
   const t = useT();
   const [tab, setTab] = useState('line');
   // Theme-aware chart palette so axes/grid stay legible in dark mode.
@@ -428,14 +516,16 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
 
   const chartData = useMemo(() => {
     const sorted = [...sessions]
-      .filter(s => s.avgScore > 0)
+      .filter((s) => s.avgScore > 0)
       .sort((a, b) => new Date(a.date) - new Date(b.date));
-    return sorted.map(s => ({
+    return sorted.map((s) => ({
       label: (() => {
         try {
           const d = new Date(s.date);
           return `${d.getDate()}/${d.getMonth() + 1}`;
-        } catch { return s.date; }
+        } catch {
+          return s.date;
+        }
       })(),
       band: toBand(s.avgScore),
       topic: s.topic,
@@ -445,26 +535,27 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
 
   // Radar: average sub-scores across all sessions that have them
   const radarData = useMemo(() => {
-    const withScores = sessions.filter(s => s.scores);
+    const withScores = sessions.filter((s) => s.scores);
     if (withScores.length === 0) return null;
-    const avg = key => {
-      const vals = withScores.map(s => s.scores[key] ?? 0).filter(v => v > 0);
+    const avg = (key) => {
+      const vals = withScores.map((s) => s.scores[key] ?? 0).filter((v) => v > 0);
       return vals.length ? Math.round(vals.reduce((a, v) => a + v, 0) / vals.length) : 0;
     };
     return [
       { axis: t('dash.chart.radar.pronunciation'), value: toBand(avg('pronunciation')) },
-      { axis: t('dash.chart.radar.fluency'),       value: toBand(avg('fluency')) },
-      { axis: t('dash.chart.radar.accuracy'),      value: toBand(avg('accuracy')) },
+      { axis: t('dash.chart.radar.fluency'), value: toBand(avg('fluency')) },
+      { axis: t('dash.chart.radar.accuracy'), value: toBand(avg('accuracy')) },
     ];
   }, [sessions, t]);
 
   const latestBand = chartData.length ? chartData[chartData.length - 1].band : null;
-  const prevBand   = chartData.length > 1 ? chartData[chartData.length - 2].band : null;
-  const trend      = latestBand !== null && prevBand !== null ? +(latestBand - prevBand).toFixed(1) : null;
+  const prevBand = chartData.length > 1 ? chartData[chartData.length - 2].band : null;
+  const trend =
+    latestBand !== null && prevBand !== null ? +(latestBand - prevBand).toFixed(1) : null;
   // Median band — robust to outliers (1 session điểm thấp không kéo cả nhóm xuống)
   const medianBand = chartData.length
     ? (() => {
-        const sorted = chartData.map(d => d.band).sort((a, b) => a - b);
+        const sorted = chartData.map((d) => d.band).sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
         const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
         return +med.toFixed(1);
@@ -480,10 +571,17 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
     return (
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm dark:shadow-black/30 p-10 text-center">
         <div className="text-5xl mb-4">📈</div>
-        <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 mb-2">{t('dash.chart.emptyTitle')}</h3>
-        <p className="text-sm text-gray-500 dark:text-slate-400 mb-6 max-w-xs mx-auto">{t('dash.chart.emptyBody')}</p>
+        <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 mb-2">
+          {t('dash.chart.emptyTitle')}
+        </h3>
+        <p className="text-sm text-gray-500 dark:text-slate-400 mb-6 max-w-xs mx-auto">
+          {t('dash.chart.emptyBody')}
+        </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button onClick={onStart} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors">
+          <button
+            onClick={onStart}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors"
+          >
             {t('dash.chart.emptyBtn')}
           </button>
           <button
@@ -494,7 +592,9 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
             ✨ {t('dash.chart.loadDemo')}
           </button>
         </div>
-        <p className="text-xs text-gray-400 dark:text-slate-500 mt-4">{t('dash.chart.loadDemoHint')}</p>
+        <p className="text-xs text-gray-400 dark:text-slate-500 mt-4">
+          {t('dash.chart.loadDemoHint')}
+        </p>
       </div>
     );
   }
@@ -504,33 +604,51 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
       {/* Header */}
       <div className="px-6 py-5 border-b border-gray-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">{t('dash.chart.title')}</h2>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">{t('dash.chart.subtitle')}</p>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-slate-100">
+            {t('dash.chart.title')}
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-0.5">
+            {t('dash.chart.subtitle')}
+          </p>
         </div>
         <div className="flex items-center gap-4">
           {/* Band badge */}
           <div className="text-right">
-            <div className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">{t('dash.chart.avgLabel')}</div>
+            <div className="text-xs text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">
+              {t('dash.chart.avgLabel')}
+            </div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-black" style={{ color: avgBandColor.color }}>
                 {avgBand.toFixed(1)}
               </span>
-              <span className="text-xs text-gray-400 dark:text-slate-500 font-medium">{t('dash.chart.band')}</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500 font-medium">
+                {t('dash.chart.band')}
+              </span>
             </div>
           </div>
           {trend !== null && (
-            <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold ${trend >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-500/15 text-red-500 dark:text-red-300'}`}>
+            <div
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold ${trend >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-500/15 text-red-500 dark:text-red-300'}`}
+            >
               <span>{trend >= 0 ? '▲' : '▼'}</span>
-              <span>{Math.abs(trend)} {t('dash.chart.pts')}</span>
+              <span>
+                {Math.abs(trend)} {t('dash.chart.pts')}
+              </span>
             </div>
           )}
           {/* Tab toggle */}
           <div className="flex rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden text-xs font-semibold">
-            <button onClick={() => setTab('line')} className={`px-3 py-1.5 transition-colors ${tab === 'line' ? 'bg-blue-600 text-white' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
+            <button
+              onClick={() => setTab('line')}
+              className={`px-3 py-1.5 transition-colors ${tab === 'line' ? 'bg-blue-600 text-white' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
+            >
               {t('dash.chart.tabLine')}
             </button>
             {radarData && (
-              <button onClick={() => setTab('radar')} className={`px-3 py-1.5 transition-colors ${tab === 'radar' ? 'bg-blue-600 text-white' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}>
+              <button
+                onClick={() => setTab('radar')}
+                className={`px-3 py-1.5 transition-colors ${tab === 'radar' ? 'bg-blue-600 text-white' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}
+              >
                 {t('dash.chart.tabRadar')}
               </button>
             )}
@@ -544,21 +662,47 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={chartData} margin={{ top: 8, right: 20, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: axisFill }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: axisFill }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
               <YAxis
                 domain={[3, 9]}
                 ticks={yTicks}
                 tick={{ fontSize: 11, fill: axisFill }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={v => v % 1 === 0 ? `${v}.0` : `${v}`}
+                tickFormatter={(v) => (v % 1 === 0 ? `${v}.0` : `${v}`)}
               />
               <Tooltip content={<BandTooltip />} />
               {/* Target band reference lines */}
-              <ReferenceLine y={6.5} stroke="#f59e0b" strokeDasharray="5 3" strokeWidth={1.5}
-                label={{ value: 'B 6.5', position: 'insideTopRight', fontSize: 10, fill: '#f59e0b' }} />
-              <ReferenceLine y={7.0} stroke="#16a34a" strokeDasharray="5 3" strokeWidth={1.5}
-                label={{ value: 'B 7.0', position: 'insideTopRight', fontSize: 10, fill: '#16a34a' }} />
+              <ReferenceLine
+                y={6.5}
+                stroke="#f59e0b"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{
+                  value: 'B 6.5',
+                  position: 'insideTopRight',
+                  fontSize: 10,
+                  fill: '#f59e0b',
+                }}
+              />
+              <ReferenceLine
+                y={7.0}
+                stroke="#16a34a"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{
+                  value: 'B 7.0',
+                  position: 'insideTopRight',
+                  fontSize: 10,
+                  fill: '#16a34a',
+                }}
+              />
               <Line
                 type="monotone"
                 dataKey="band"
@@ -566,7 +710,17 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
                 strokeWidth={2.5}
                 dot={({ cx, cy, payload }) => {
                   const bc = bandColor(payload.band);
-                  return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={5} fill={bc.color} stroke={dotStrokeColor} strokeWidth={2} />;
+                  return (
+                    <circle
+                      key={`dot-${cx}-${cy}`}
+                      cx={cx}
+                      cy={cy}
+                      r={5}
+                      fill={bc.color}
+                      stroke={dotStrokeColor}
+                      strokeWidth={2}
+                    />
+                  );
                 }}
                 activeDot={{ r: 7, fill: '#2563eb', stroke: dotStrokeColor, strokeWidth: 2 }}
               />
@@ -579,7 +733,10 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
             <ResponsiveContainer width="100%" height={260}>
               <RadarChart data={radarData} margin={{ top: 10, right: 30, left: 30, bottom: 10 }}>
                 <PolarGrid stroke={radarGrid} />
-                <PolarAngleAxis dataKey="axis" tick={{ fontSize: 12, fill: radarTickFill, fontWeight: 600 }} />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fontSize: 12, fill: radarTickFill, fontWeight: 600 }}
+                />
                 <Radar
                   name={t('dash.chart.radar.label')}
                   dataKey="value"
@@ -588,24 +745,45 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, onLoa
                   fillOpacity={0.18}
                   strokeWidth={2}
                 />
-                <Legend formatter={() => t('dash.chart.radar.label')} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, color: radarTickFill }} />
+                <Legend
+                  formatter={() => t('dash.chart.radar.label')}
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 12, color: radarTickFill }}
+                />
                 <Tooltip
                   formatter={(v) => [`${Number(v).toFixed(1)} Band`, '']}
-                  contentStyle={dark ? { background: '#1e293b', border: '1px solid #334155', borderRadius: 12, color: '#e2e8f0' } : undefined}
+                  contentStyle={
+                    dark
+                      ? {
+                          background: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: 12,
+                          color: '#e2e8f0',
+                        }
+                      : undefined
+                  }
                   itemStyle={dark ? { color: '#e2e8f0' } : undefined}
                   labelStyle={dark ? { color: '#cbd5e1' } : undefined}
                 />
               </RadarChart>
             </ResponsiveContainer>
-            <p className="text-xs text-gray-400 dark:text-slate-500 -mt-2 mb-2">{t('dash.chart.radar.note')}</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 -mt-2 mb-2">
+              {t('dash.chart.radar.note')}
+            </p>
           </div>
         )}
       </div>
 
       {/* Footer */}
       <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-linear-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
-        <p className="text-sm text-gray-500 dark:text-slate-400">{t('dash.chart.sessionCount', { n: chartData.length })}</p>
-        <button onClick={onStart} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
+        <p className="text-sm text-gray-500 dark:text-slate-400">
+          {t('dash.chart.sessionCount', { n: chartData.length })}
+        </p>
+        <button
+          onClick={onStart}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors"
+        >
           {t('dash.chart.practiceBtn')}
         </button>
       </div>
@@ -640,7 +818,7 @@ export default function DashboardPage() {
   }, [historyTick]);
 
   useEffect(() => {
-    const onFocus = () => setHistoryTick(n => n + 1);
+    const onFocus = () => setHistoryTick((n) => n + 1);
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
@@ -656,7 +834,7 @@ export default function DashboardPage() {
       return;
     }
     fetchMe(session.token)
-      .then(user => setProfile(user))
+      .then((user) => setProfile(user))
       .catch(() => {
         clearAuthSession();
         setError('Session expired. Please sign in again.');
@@ -670,18 +848,17 @@ export default function DashboardPage() {
     navigate('/', { replace: true });
   };
 
-  const startSession = topicKey => {
+  const startSession = (topicKey) => {
     // VoiceAgent persists `topicKey` as the canonical `TopicId` (e.g. 'ielts1'),
     // but the demo seed and dashboard cards use the human label (e.g. 'IELTS Part 1').
     // Try both keys so we can resume regardless of which form was stored.
     const mappedId = DASHBOARD_TO_TOPIC_ID[topicKey];
     const prior =
-      getLatestSessionByTopic(topicKey) ||
-      (mappedId ? getLatestSessionByTopic(mappedId) : null);
+      getLatestSessionByTopic(topicKey) || (mappedId ? getLatestSessionByTopic(mappedId) : null);
     if (prior?.id && Array.isArray(prior.messages) && prior.messages.length > 0) {
       toast.success(t('toast.resumingTopic'));
       navigate(
-        `/VoiceAgent?topic=${encodeURIComponent(topicKey)}&session=${encodeURIComponent(prior.id)}`
+        `/VoiceAgent?topic=${encodeURIComponent(topicKey)}&session=${encodeURIComponent(prior.id)}`,
       );
       return;
     }
@@ -694,7 +871,7 @@ export default function DashboardPage() {
 
   const handleChartLoadDemo = useCallback(() => {
     seedDemoSessions();
-    setHistoryTick(n => n + 1);
+    setHistoryTick((n) => n + 1);
     toast.success(t('toast.demoLoaded'));
   }, [t]);
 
@@ -710,14 +887,14 @@ export default function DashboardPage() {
     if (allSessions.length === 0) return 0;
     const daySet = new Set(
       allSessions
-        .map(s => {
+        .map((s) => {
           try {
             return new Date(s.date).toDateString();
           } catch {
             return null;
           }
         })
-        .filter(Boolean)
+        .filter(Boolean),
     );
     let count = 0;
     const today = new Date();
@@ -766,13 +943,13 @@ export default function DashboardPage() {
             <Skeleton className="h-9 w-72 mb-3" />
             <Skeleton className="h-4 w-96 mb-10" />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-10">
-              {[0, 1, 2, 3].map(i => (
+              {[0, 1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-24" rounded="2xl" />
               ))}
             </div>
             <Skeleton className="h-7 w-48 mb-5" />
             <div className="flex gap-4 mb-10 overflow-hidden">
-              {[0, 1, 2, 3].map(i => (
+              {[0, 1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-44 w-65 shrink-0" rounded="2xl" />
               ))}
             </div>
@@ -788,178 +965,192 @@ export default function DashboardPage() {
 
   return (
     <div className={dark ? 'dark' : ''}>
-    <div className="min-h-screen bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100">
-      {/* Top bar */}
-      <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
-            <span className="text-[11px] font-black text-white leading-none">VIN</span>
+      <div className="min-h-screen bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100">
+        {/* Top bar */}
+        <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
+              <span className="text-[11px] font-black text-white leading-none">VIN</span>
+            </div>
+            <span className="text-base font-semibold text-gray-800 dark:text-slate-100">
+              {t('brand.name')}
+            </span>
           </div>
-          <span className="text-base font-semibold text-gray-800 dark:text-slate-100">{t('brand.name')}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <LanguageToggle />
-          <ThemeToggle dark={dark} onToggle={toggleDark} />
-          <div className="relative">
-            <button
-              onClick={() => setShowUserMenu(v => !v)}
-              className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
-              title={displayName}
-            >
-              <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
-                {displayName?.[0]?.toUpperCase() ?? '?'}
-              </div>
-              <span className="text-xs text-gray-700 dark:text-slate-200 hidden sm:inline">{displayName}</span>
-              <svg
-                className={`w-3 h-3 text-gray-500 dark:text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
-                viewBox="0 0 20 20"
-                fill="currentColor"
+          <div className="flex items-center gap-3">
+            <LanguageToggle />
+            <ThemeToggle dark={dark} onToggle={toggleDark} />
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
+                title={displayName}
               >
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-
-            {showUserMenu && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
-                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg dark:shadow-black/50 z-40 overflow-hidden animate-fadeIn">
-                  <div className="px-3 py-2.5 border-b border-gray-100 dark:border-slate-800">
-                    <div className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">
-                      {displayName}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-slate-400 truncate">{profile?.email}</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      navigate('/VoiceAgent');
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center">
-                      <Mic className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="font-medium">{t('dash.newSession')}</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      setShowLogoutConfirm(true);
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 transition-colors border-t border-gray-100 dark:border-slate-800"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span className="ml-1">{t('common.signOut')}</span>
-                  </button>
+                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
+                  {displayName?.[0]?.toUpperCase() ?? '?'}
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
+                <span className="text-xs text-gray-700 dark:text-slate-200 hidden sm:inline">
+                  {displayName}
+                </span>
+                <svg
+                  className={`w-3 h-3 text-gray-500 dark:text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
-        {/* Welcome */}
-        <div className="mb-10">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-slate-100">
-            {t('dash.greeting', {
-              name: displayName.split(' ').slice(-1)[0],
-            })}
-          </h1>
-          <p className="text-base text-gray-500 dark:text-slate-400 mt-2">{t('dash.subtitle')}</p>
-        </div>
-
-        {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
-          <StatCard
-            icon="🎙️"
-            label={t('dash.stats.totalSessions')}
-            value={totalSessions}
-            sub={t('dash.stats.totalSessions.sub')}
-          />
-          <StatCard
-            icon="⭐"
-            label={t('dash.stats.avgScore')}
-            value={avgScore}
-            sub={t('dash.stats.avgScore.sub')}
-          />
-          <StatCard
-            icon="⏱"
-            label={t('dash.stats.practice')}
-            value={t('dash.stats.minutes', { n: totalMins })}
-            sub={t('dash.stats.practice.sub')}
-          />
-          <StatCard
-            icon="🔥"
-            label={t('dash.stats.streak')}
-            value={t('dash.stats.streak.value', { n: streak })}
-            sub={t('dash.stats.streak.sub')}
-          />
-        </div>
-
-        {/* Choose a topic */}
-        <section className="mb-10">
-          <div className="flex items-end justify-between mb-5">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">{t('dash.topics.title')}</h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{t('dash.topics.subtitle')}</p>
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg dark:shadow-black/50 z-40 overflow-hidden animate-fadeIn">
+                    <div className="px-3 py-2.5 border-b border-gray-100 dark:border-slate-800">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-slate-100 truncate">
+                        {displayName}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                        {profile?.email}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        navigate('/VoiceAgent');
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center">
+                        <Mic className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="font-medium">{t('dash.newSession')}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowLogoutConfirm(true);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 transition-colors border-t border-gray-100 dark:border-slate-800"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="ml-1">{t('common.signOut')}</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
-          <CategoryTabsRow categories={TOPIC_CATEGORIES} onStart={startSession} />
-        </section>
+        </header>
 
-        {/* Score trend chart */}
-        <ScoreTrendChart
-          sessions={allSessions}
-          dark={dark}
-          onStart={handleChartStart}
-          onLoadDemo={handleChartLoadDemo}
-        />
-      </main>
+        <main className="max-w-6xl mx-auto px-6 py-10">
+          {/* Welcome */}
+          <div className="mb-10">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-slate-100">
+              {t('dash.greeting', {
+                name: displayName.split(' ').slice(-1)[0],
+              })}
+            </h1>
+            <p className="text-base text-gray-500 dark:text-slate-400 mt-2">{t('dash.subtitle')}</p>
+          </div>
 
-      {showLogoutConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
-          onClick={() => setShowLogoutConfirm(false)}
-        >
-          <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-w-sm w-full p-6"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-xl shrink-0">
-                👋
-              </div>
+          {/* Stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
+            <StatCard
+              icon="🎙️"
+              label={t('dash.stats.totalSessions')}
+              value={totalSessions}
+              sub={t('dash.stats.totalSessions.sub')}
+            />
+            <StatCard
+              icon="⭐"
+              label={t('dash.stats.avgScore')}
+              value={avgScore}
+              sub={t('dash.stats.avgScore.sub')}
+            />
+            <StatCard
+              icon="⏱"
+              label={t('dash.stats.practice')}
+              value={t('dash.stats.minutes', { n: totalMins })}
+              sub={t('dash.stats.practice.sub')}
+            />
+            <StatCard
+              icon="🔥"
+              label={t('dash.stats.streak')}
+              value={t('dash.stats.streak.value', { n: streak })}
+              sub={t('dash.stats.streak.sub')}
+            />
+          </div>
+
+          {/* Choose a topic */}
+          <section className="mb-10">
+            <div className="flex items-end justify-between mb-5">
               <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">{t('dash.logout.title')}</h3>
-                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{t('dash.logout.body')}</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
+                  {t('dash.topics.title')}
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                  {t('dash.topics.subtitle')}
+                </p>
               </div>
             </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={() => setShowLogoutConfirm(false)}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={() => {
-                  setShowLogoutConfirm(false);
-                  handleLogout();
-                }}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
-              >
-                {t('dash.logout.confirm')}
-              </button>
+            <CategoryTabsRow categories={TOPIC_CATEGORIES} onStart={startSession} />
+          </section>
+
+          {/* Score trend chart */}
+          <ScoreTrendChart
+            sessions={allSessions}
+            dark={dark}
+            onStart={handleChartStart}
+            onLoadDemo={handleChartLoadDemo}
+          />
+        </main>
+
+        {showLogoutConfirm && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+            onClick={() => setShowLogoutConfirm(false)}
+          >
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-w-sm w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-xl shrink-0">
+                  👋
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-slate-100">
+                    {t('dash.logout.title')}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                    {t('dash.logout.body')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    handleLogout();
+                  }}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                >
+                  {t('dash.logout.confirm')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     </div>
   );
 }
