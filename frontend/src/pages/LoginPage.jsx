@@ -1,39 +1,45 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 
-import { loginRequest } from "../api/auth";
-import { saveAuthSession } from "../auth/tokenStorage";
+import { loginRequest } from '../api/auth';
+import { useAuth } from '../auth/AuthContext';
+import Spinner from '../components/ui/Spinner';
+import { useT } from '../i18n/useLanguage';
+import OAuthButtons from '../components/auth/OAuthButtons';
 
 const initialForm = {
-  email: "",
-  password: "",
+  email: '',
+  password: '',
   rememberMe: true,
 };
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const t = useT();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState("");
+  const [apiError, setApiError] = useState('');
 
   const updateField = (field) => (event) => {
-    const value = field === "rememberMe" ? event.target.checked : event.target.value;
+    const value = field === 'rememberMe' ? event.target.checked : event.target.value;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const validate = () => {
     const nextErrors = {};
     if (!form.email.trim()) {
-      nextErrors.email = "Please enter your email.";
+      nextErrors.email = 'Please enter your email.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      nextErrors.email = "Email format is invalid.";
+      nextErrors.email = 'Email format is invalid.';
     }
     if (!form.password) {
-      nextErrors.password = "Please enter your password.";
+      nextErrors.password = 'Please enter your password.';
     } else if (form.password.length < 8) {
-      nextErrors.password = "Password must have at least 8 characters.";
+      nextErrors.password = 'Password must have at least 8 characters.';
     }
     return nextErrors;
   };
@@ -42,7 +48,7 @@ export default function LoginPage() {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
-    setApiError("");
+    setApiError('');
     if (Object.keys(nextErrors).length > 0) return;
 
     setIsSubmitting(true);
@@ -51,16 +57,20 @@ export default function LoginPage() {
         email: form.email.trim(),
         password: form.password,
       });
-      saveAuthSession({
+      login({
         token: data.access_token,
         expiresIn: data.expires_in,
         user: data.user,
         remembered: form.rememberMe,
         loggedAt: Date.now(),
       });
-      navigate("/dashboard", { replace: true });
+      toast.success(
+        t('toast.welcomeBack', { name: data.user?.display_name || t('dash.fallbackName') }),
+      );
+      navigate('/dashboard', { replace: true });
     } catch (error) {
-      setApiError(error.message || "Login failed");
+      const msg = error.message || t('toast.loginFailed');
+      setApiError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -76,11 +86,13 @@ export default function LoginPage() {
         <section className="brand-panel">
           <p className="eyebrow">VOICE TRAINER</p>
           <h1>
-            Speak with<br />
+            Speak with
+            <br />
             <em>clarity, every day.</em>
           </h1>
           <p className="subtitle">
-            Practice English speaking with guided prompts, pronunciation scoring, and instant voice feedback.
+            Practice English speaking with guided prompts, pronunciation scoring, and instant voice
+            feedback.
           </p>
           <ul className="feature-list">
             <li>Topic-based conversation drills</li>
@@ -102,7 +114,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="you@example.com"
                 value={form.email}
-                onChange={updateField("email")}
+                onChange={updateField('email')}
                 autoComplete="email"
               />
               {errors.email ? <small>{errors.email}</small> : null}
@@ -112,27 +124,45 @@ export default function LoginPage() {
               <span>Password</span>
               <div className="password-row">
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
                   value={form.password}
-                  onChange={updateField("password")}
+                  onChange={updateField('password')}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   className="toggle-btn"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
                   ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
                     </svg>
                   )}
                 </button>
@@ -145,27 +175,46 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   checked={form.rememberMe}
-                  onChange={updateField("rememberMe")}
+                  onChange={updateField('rememberMe')}
                 />
                 <span>Remember me</span>
               </label>
-              <a href="#">Forgot password?</a>
+              <Link to="/forgot-password">Forgot password?</Link>
             </div>
 
             <button type="submit" className="submit-btn" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              {isSubmitting ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size={14} color="#fff" />
+                  {t('auth.signingIn')}
+                </span>
+              ) : (
+                'Sign in'
+              )}
             </button>
 
             {apiError ? <p className="error-msg">{apiError}</p> : null}
           </form>
 
-          <p className="switch-link">
-            Don't have an account?
-            <a href="/register" onClick={(e) => { e.preventDefault(); navigate("/register"); }}>
-              Sign up free
-            </a>
-          </p>
+          <div className="oauth-divider">
+            <span>or continue with</span>
+          </div>
+          <OAuthButtons />
 
+          <div className="switch-link">
+            <p style={{ margin: 0 }}>
+              Don&apos;t have an account?{' '}
+              <a
+                href="/register"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/register');
+                }}
+              >
+                Sign up free
+              </a>
+            </p>
+          </div>
         </section>
       </main>
     </div>
