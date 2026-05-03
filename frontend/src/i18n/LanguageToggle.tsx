@@ -18,14 +18,16 @@ export default function LanguageToggle({ className = '', size = 'sm' }: Language
       role="group"
       aria-label={t('lang.toggle.title')}
       title={t('lang.toggle.title')}
-      className={`inline-flex items-center bg-gray-100 border border-gray-200 rounded-full ${padding} ${className}`}
+      className={`inline-flex items-center bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-full ${padding} ${className}`}
     >
       <button
         type="button"
         onClick={() => setLang('en')}
         aria-pressed={!isVi}
         className={`${segPad} ${textSize} font-semibold rounded-full transition-colors ${
-          !isVi ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          !isVi
+            ? 'bg-blue-600 text-white shadow-sm'
+            : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100'
         }`}
       >
         {t('lang.en.short')}
@@ -35,7 +37,9 @@ export default function LanguageToggle({ className = '', size = 'sm' }: Language
         onClick={() => setLang('vi')}
         aria-pressed={isVi}
         className={`${segPad} ${textSize} font-semibold rounded-full transition-colors ${
-          isVi ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          isVi
+            ? 'bg-blue-600 text-white shadow-sm'
+            : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-100'
         }`}
       >
         {t('lang.vi.short')}

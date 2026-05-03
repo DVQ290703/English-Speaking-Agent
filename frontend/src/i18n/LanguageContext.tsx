@@ -59,17 +59,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLangState(prev => (prev === 'vi' ? 'en' : 'vi'));
+    setLangState((prev) => (prev === 'vi' ? 'en' : 'vi'));
   }, []);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => translate(lang, key, vars),
-    [lang]
+    [lang],
   );
 
   const value = useMemo<LanguageContextValue>(
     () => ({ lang, setLang, toggleLang, t }),
-    [lang, setLang, toggleLang, t]
+    [lang, setLang, toggleLang, t],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
