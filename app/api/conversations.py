@@ -79,9 +79,13 @@ def get_conversations_for_topic(
             )
             topic_row = cur.fetchone()
             if not topic_row:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Topic '{topic_code}' not found",
+                logger.warning("get_conversations_for_topic unknown topic_code=%s user_id=%s", topic_code, user_id)
+                return ForTopicResponse(
+                    topic_code=topic_code.strip().lower(),
+                    topic_title=topic_code,
+                    conversations=[],
+                    total=0,
+                    limit_reached=False,
                 )
             topic_id, topic_title = topic_row
 

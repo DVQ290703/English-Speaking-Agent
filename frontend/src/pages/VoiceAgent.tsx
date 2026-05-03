@@ -1523,6 +1523,20 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setExpandedMsgId(null);
   }, [forTopicData?.limit_reached]);
 
+  const handleTopicSelect = useCallback((topicCode: string) => {
+    setTopic(topicCode as TopicId);
+    setCustomTopicLabel(null);
+    setSubOption(null);
+    setCurrentConversationId(null);
+    setMessages([]);
+    setExpandedMsgId(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('topic', topicCode);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, []);
+
   const handleDeleteConversation = useCallback(async (conversationId: string) => {
     const token = getAuthSession()?.token ?? '';
     try {
@@ -1728,6 +1742,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onSelectConversation={handleSelectConversation}
           onNewChat={handleNewChat}
           onDeleteConversation={handleDeleteConversation}
+          onTopicSelect={handleTopicSelect}
         />
         {/* Left panel: Audio & Video */}
         <div
