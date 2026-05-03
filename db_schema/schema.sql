@@ -184,14 +184,20 @@ CREATE INDEX IF NOT EXISTS idx_audio_assets_message_id ON audio_assets(message_i
 
 CREATE TABLE IF NOT EXISTS pronunciation_assessments (
     id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    message_id              UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    message_id              UUID REFERENCES messages(id) ON DELETE CASCADE,
+    user_id                 UUID REFERENCES users(id) ON DELETE CASCADE,
     reference_text          TEXT,
     recognized_text         TEXT,
+    recognition_status      TEXT,                              -- e.g. "Success", "NoMatch"
     overall_score           NUMERIC(5,2) CHECK (overall_score      BETWEEN 0 AND 100),
     accuracy_score          NUMERIC(5,2) CHECK (accuracy_score     BETWEEN 0 AND 100),
     fluency_score           NUMERIC(5,2) CHECK (fluency_score      BETWEEN 0 AND 100),
     completeness_score      NUMERIC(5,2) CHECK (completeness_score BETWEEN 0 AND 100),
     prosody_score           NUMERIC(5,2) CHECK (prosody_score      BETWEEN 0 AND 100),
+    nbest_confidence        NUMERIC(6,4),                      -- top NBest confidence score
+    snr                     NUMERIC(8,3),                      -- signal-to-noise ratio
+    offset_ticks            BIGINT,                            -- utterance start (100ns ticks)
+    duration_ticks          BIGINT,                            -- utterance duration (100ns ticks)
     error_rate              NUMERIC(6,3),
     azure_request_id        TEXT,
     raw_result_json         JSONB NOT NULL DEFAULT '{}',
@@ -204,20 +210,55 @@ CREATE INDEX IF NOT EXISTS idx_pron_assessments_created
     ON pronunciation_assessments(created_at);
 
 CREATE TABLE IF NOT EXISTS pronunciation_word_details (
-    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    assessment_id           UUID NOT NULL REFERENCES pronunciation_assessments(id) ON DELETE CASCADE,
-    word_index              INT NOT NULL,
-    word                    TEXT NOT NULL,
-    accuracy_score          NUMERIC(5,2),
-    error_type              TEXT CHECK (error_type IN (
-                                'None','Omission','Insertion','Mispronunciation',
-                                'UnexpectedBreak','MissingBreak','Monotone')),
-    start_ms                INT,
-    duration_ms             INT,
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assessment_id               UUID NOT NULL REFERENCES pronunciation_assessments(id) ON DELETE CASCADE,
+    word_index                  INT NOT NULL,
+    word                        TEXT NOT NULL,
+    accuracy_score              NUMERIC(5,2),
+    error_type                  TEXT CHECK (error_type IN (
+                                    'None','Omission','Insertion','Mispronunciation',
+                                    'UnexpectedBreak','MissingBreak','Monotone')),
+    offset_ticks                BIGINT,                        -- word start (100ns ticks)
+    duration_ticks              BIGINT,                        -- word duration (100ns ticks)
+    -- Prosody: break
+    break_error_types           TEXT[],                        -- e.g. ["None"] or ["UnexpectedBreak"]
+    unexpected_break_confidence NUMERIC(6,4),
+    missing_break_confidence    NUMERIC(6,4),
+    break_length_ticks          BIGINT,
+    -- Prosody: intonation
+    intonation_error_types      TEXT[],                        -- e.g. ["Monotone"]
+    monotone_confidence         NUMERIC(6,4),
     CONSTRAINT uq_pron_word_position UNIQUE (assessment_id, word_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_pron_word_assessment ON pronunciation_word_details(assessment_id);
+
+CREATE TABLE IF NOT EXISTS pronunciation_syllable_details (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    word_detail_id  UUID NOT NULL REFERENCES pronunciation_word_details(id) ON DELETE CASCADE,
+    syllable_index  INT NOT NULL,
+    syllable        TEXT NOT NULL,                             -- phonetic form, e.g. "tax"
+    grapheme        TEXT,                                      -- written form, e.g. "to"
+    accuracy_score  NUMERIC(5,2),
+    offset_ticks    BIGINT,
+    duration_ticks  BIGINT,
+    CONSTRAINT uq_pron_syllable_position UNIQUE (word_detail_id, syllable_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pron_syllable_word ON pronunciation_syllable_details(word_detail_id);
+
+CREATE TABLE IF NOT EXISTS pronunciation_phoneme_details (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    word_detail_id  UUID NOT NULL REFERENCES pronunciation_word_details(id) ON DELETE CASCADE,
+    phoneme_index   INT NOT NULL,
+    phoneme         TEXT NOT NULL,
+    accuracy_score  NUMERIC(5,2),
+    offset_ticks    BIGINT,
+    duration_ticks  BIGINT,
+    CONSTRAINT uq_pron_phoneme_position UNIQUE (word_detail_id, phoneme_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pron_phoneme_word ON pronunciation_phoneme_details(word_detail_id);
 
 -- =========================
 -- 6) AGENT FEEDBACK
