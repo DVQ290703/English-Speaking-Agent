@@ -11,7 +11,7 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   if (value === undefined) return key;
   if (vars) {
     return value.replace(/\{(\w+)\}/g, (_, name) =>
-      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`
+      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`,
     );
   }
   return value;
@@ -72,7 +72,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.chart.sessionCount': '{n} sessions recorded',
     'dash.chart.practiceBtn': 'Start new session →',
     'dash.chart.emptyTitle': 'No data yet',
-    'dash.chart.emptyBody': 'Complete a speaking session to see your IELTS band score trend over time.',
+    'dash.chart.emptyBody':
+      'Complete a speaking session to see your IELTS band score trend over time.',
     'dash.chart.emptyBtn': 'Start speaking →',
     'dash.chart.loadDemo': 'Load sample data',
     'dash.chart.loadDemoHint': 'Just want to preview the charts? Load fake data.',
@@ -328,7 +329,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.chart.sessionCount': '{n} phiên đã ghi nhận',
     'dash.chart.practiceBtn': 'Bắt đầu phiên mới →',
     'dash.chart.emptyTitle': 'Chưa có dữ liệu',
-    'dash.chart.emptyBody': 'Hoàn thành một phiên nói để xem xu hướng band IELTS của bạn theo thời gian.',
+    'dash.chart.emptyBody':
+      'Hoàn thành một phiên nói để xem xu hướng band IELTS của bạn theo thời gian.',
     'dash.chart.loadDemo': 'Tạo dữ liệu mẫu',
     'dash.chart.loadDemoHint': 'Chỉ muốn xem trước biểu đồ? Tạo dữ liệu mẫu.',
     'dash.chart.emptyBtn': 'Bắt đầu nói →',
