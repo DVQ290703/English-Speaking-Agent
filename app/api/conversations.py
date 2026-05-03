@@ -322,9 +322,11 @@ def get_conversation_messages_with_scores(
                 cur.execute(
                     """
                     SELECT assessment_id::text, word_index, word,
-                           accuracy_score, error_type, start_ms, duration_ms
+                           accuracy_score, error_type,
+                           (offset_ticks / 10000)::int   AS start_ms,
+                           (duration_ticks / 10000)::int AS duration_ms
                     FROM pronunciation_word_details
-                    WHERE assessment_id = ANY(%s)
+                    WHERE assessment_id = ANY(%s::uuid[])
                     ORDER BY assessment_id, word_index
                     """,
                     (assessment_ids,),
