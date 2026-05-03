@@ -36,8 +36,10 @@ export function AgentWaveform({ active }: { active: boolean }) {
   );
 }
 
-export function MicWaveform({ active }: { active: boolean }) {
+export function MicWaveform({ active, speaking }: { active: boolean; speaking?: boolean }) {
   const randoms = useStableRandom(28, 77);
+  // When `speaking` is not provided, fall back to `active` for backward compat.
+  const isAnimating = active && (speaking ?? true);
 
   return (
     <div className="flex items-center justify-center gap-0.5 h-16 w-full">
@@ -46,12 +48,12 @@ export function MicWaveform({ active }: { active: boolean }) {
           key={i}
           className="w-0.75 rounded-full bg-blue-500"
           style={{
-            height: active ? `${12 + Math.sin(i * 0.5) * 16 + randoms[i] * 10}px` : '4px',
-            animation: active
+            height: isAnimating ? `${12 + Math.sin(i * 0.5) * 16 + randoms[i] * 10}px` : '4px',
+            animation: isAnimating
               ? `agentWave ${0.6 + randoms[i] * 0.8}s ease-in-out ${i * 40}ms infinite`
               : 'none',
-            opacity: active ? 0.85 : 0.3,
-            transition: 'height 0.3s ease',
+            opacity: active ? (isAnimating ? 0.85 : 0.4) : 0.3,
+            transition: 'height 0.25s ease, opacity 0.2s ease',
           }}
         />
       ))}

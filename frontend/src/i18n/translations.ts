@@ -11,7 +11,7 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   if (value === undefined) return key;
   if (vars) {
     return value.replace(/\{(\w+)\}/g, (_, name) =>
-      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`
+      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`,
     );
   }
   return value;
@@ -29,6 +29,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'lang.en.long': 'English',
     'lang.vi.long': 'Tiếng Việt',
 
+    // Theme toggle
+    'theme.toggle.toDark': 'Switch to dark mode',
+    'theme.toggle.toLight': 'Switch to light mode',
+
     // Common
     'common.signIn': 'Sign in',
     'common.signUp': 'Sign up',
@@ -40,8 +44,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.agent': 'Agent',
     'common.start': 'Start',
     'common.replay': 'Replay',
-    'common.delete': 'Delete',
-    'common.confirm': 'Confirm',
     'common.dashboard': 'Dashboard',
 
     // Dashboard
@@ -60,34 +62,31 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.stats.streak.sub': 'keep it up!',
     'dash.stats.minutes': '{n} min',
 
-    'dash.storage.full': '⚠ Storage almost full',
-    'dash.storage.usage': 'Storage usage',
-    'dash.storage.fullNote':
-      'New sessions may start dropping audio or older history. Clean up to free space.',
-    'dash.storage.cleanup': 'Clean up old sessions',
-    'dash.storage.confirmCleanup': 'Confirm: remove oldest {n}?',
-    'dash.storage.sessionsCount': '{n}/{max} sessions',
+    'dash.chart.title': 'IELTS Band Score Trend',
+    'dash.chart.subtitle': 'Your estimated IELTS band across all sessions',
+    'dash.chart.avgLabel': 'Avg Band',
+    'dash.chart.band': 'Band',
+    'dash.chart.pts': 'band',
+    'dash.chart.tabLine': 'Trend',
+    'dash.chart.tabRadar': 'Skills',
+    'dash.chart.sessionCount': '{n} sessions recorded',
+    'dash.chart.practiceBtn': 'Start new session →',
+    'dash.chart.emptyTitle': 'No data yet',
+    'dash.chart.emptyBody':
+      'Complete a speaking session to see your IELTS band score trend over time.',
+    'dash.chart.emptyBtn': 'Start speaking →',
+    'dash.chart.loadDemo': 'Load sample data',
+    'dash.chart.loadDemoHint': 'Just want to preview the charts? Load fake data.',
+    'dash.chart.radar.pronunciation': 'Pronunciation',
+    'dash.chart.radar.fluency': 'Fluency',
+    'dash.chart.radar.accuracy': 'Accuracy',
+    'dash.chart.radar.label': 'Avg Band',
+    'dash.chart.radar.note': 'Based on sub-scores from sessions with pronunciation assessment',
 
     'dash.topics.title': 'Choose a practice topic',
     'dash.topics.subtitle': 'Browse by category and pick what you want to practise today.',
     'dash.topics.scrollLeft': 'Scroll left',
     'dash.topics.scrollRight': 'Scroll right',
-
-    'dash.history.title': 'Session History',
-    'dash.history.count': '{n} sessions',
-    'dash.history.searchPlaceholder': 'Search by topic, date, or score...',
-    'dash.history.clearSearch': 'Clear search',
-    'dash.history.empty': 'No sessions yet for this topic.',
-    'dash.history.cta': 'Ready to practise? Start a new session.',
-    'dash.history.startSpeaking': 'Start speaking →',
-    'dash.history.tabAll': 'All',
-
-    'dash.session.justSaved': 'Just saved',
-    'dash.session.viewTranscript': 'View transcript →',
-    'dash.session.turns': '{n} turns',
-    'dash.session.fixes': '{n} fixes',
-    'dash.session.deleteConfirm': 'Delete this practice session? This cannot be undone.',
-    'dash.session.deleteAria': 'Delete session',
 
     'dash.logout.title': 'Sign out?',
     'dash.logout.body': 'Are you sure you want to sign out of your account?',
@@ -96,6 +95,21 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.error.back': 'Back to login',
     'dash.loading': 'Loading your workspace...',
     'dash.fallbackName': 'Learner',
+
+    // Error boundary
+    'error.title': 'Something went wrong',
+    'error.body': 'The page failed to load. Please try again or reload.',
+    'error.retry': 'Try again',
+    'error.reload': 'Reload page',
+
+    // Toasts
+    'toast.signedOut': 'Signed out successfully.',
+    'toast.demoLoaded': 'Demo sessions loaded.',
+    'toast.resumingTopic': 'Resuming your last conversation on this topic.',
+    'toast.welcomeBack': 'Welcome back, {name}!',
+    'toast.loginFailed': 'Login failed',
+    'toast.accountCreated': 'Account created!',
+    'toast.registerFailed': 'Registration failed. Please try again.',
 
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',
@@ -272,6 +286,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'lang.en.long': 'English',
     'lang.vi.long': 'Tiếng Việt',
 
+    // Theme toggle
+    'theme.toggle.toDark': 'Chuyển sang giao diện tối',
+    'theme.toggle.toLight': 'Chuyển sang giao diện sáng',
+
     // Common
     'common.signIn': 'Đăng nhập',
     'common.signUp': 'Đăng ký',
@@ -283,8 +301,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.agent': 'Trợ lý',
     'common.start': 'Bắt đầu',
     'common.replay': 'Phát lại',
-    'common.delete': 'Xóa',
-    'common.confirm': 'Xác nhận',
     'common.dashboard': 'Trang chính',
 
     // Dashboard
@@ -303,34 +319,31 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.stats.streak.sub': 'cố lên!',
     'dash.stats.minutes': '{n} phút',
 
-    'dash.storage.full': '⚠ Bộ nhớ gần đầy',
-    'dash.storage.usage': 'Mức sử dụng bộ nhớ',
-    'dash.storage.fullNote':
-      'Phiên mới có thể bị mất audio hoặc lịch sử cũ. Hãy dọn dẹp để giải phóng dung lượng.',
-    'dash.storage.cleanup': 'Dọn dẹp phiên cũ',
-    'dash.storage.confirmCleanup': 'Xác nhận: xóa {n} phiên cũ nhất?',
-    'dash.storage.sessionsCount': '{n}/{max} phiên',
+    'dash.chart.title': 'Xu hướng Band IELTS',
+    'dash.chart.subtitle': 'Band IELTS ước tính qua các phiên luyện tập',
+    'dash.chart.avgLabel': 'Band TB',
+    'dash.chart.band': 'Band',
+    'dash.chart.pts': 'band',
+    'dash.chart.tabLine': 'Xu hướng',
+    'dash.chart.tabRadar': 'Kỹ năng',
+    'dash.chart.sessionCount': '{n} phiên đã ghi nhận',
+    'dash.chart.practiceBtn': 'Bắt đầu phiên mới →',
+    'dash.chart.emptyTitle': 'Chưa có dữ liệu',
+    'dash.chart.emptyBody':
+      'Hoàn thành một phiên nói để xem xu hướng band IELTS của bạn theo thời gian.',
+    'dash.chart.loadDemo': 'Tạo dữ liệu mẫu',
+    'dash.chart.loadDemoHint': 'Chỉ muốn xem trước biểu đồ? Tạo dữ liệu mẫu.',
+    'dash.chart.emptyBtn': 'Bắt đầu nói →',
+    'dash.chart.radar.pronunciation': 'Phát âm',
+    'dash.chart.radar.fluency': 'Lưu loát',
+    'dash.chart.radar.accuracy': 'Chính xác',
+    'dash.chart.radar.label': 'Band TB',
+    'dash.chart.radar.note': 'Dựa trên điểm thành phần từ các phiên có đánh giá phát âm',
 
     'dash.topics.title': 'Chọn chủ đề luyện tập',
     'dash.topics.subtitle': 'Duyệt theo danh mục và chọn chủ đề bạn muốn luyện hôm nay.',
     'dash.topics.scrollLeft': 'Cuộn sang trái',
     'dash.topics.scrollRight': 'Cuộn sang phải',
-
-    'dash.history.title': 'Lịch sử phiên',
-    'dash.history.count': '{n} phiên',
-    'dash.history.searchPlaceholder': 'Tìm theo chủ đề, ngày, hoặc điểm...',
-    'dash.history.clearSearch': 'Xóa tìm kiếm',
-    'dash.history.empty': 'Chưa có phiên nào cho chủ đề này.',
-    'dash.history.cta': 'Sẵn sàng luyện tập? Bắt đầu một phiên mới.',
-    'dash.history.startSpeaking': 'Bắt đầu nói →',
-    'dash.history.tabAll': 'Tất cả',
-
-    'dash.session.justSaved': 'Vừa lưu',
-    'dash.session.viewTranscript': 'Xem hội thoại →',
-    'dash.session.turns': '{n} lượt',
-    'dash.session.fixes': '{n} sửa',
-    'dash.session.deleteConfirm': 'Xóa phiên luyện tập này? Hành động này không thể hoàn tác.',
-    'dash.session.deleteAria': 'Xóa phiên',
 
     'dash.logout.title': 'Đăng xuất?',
     'dash.logout.body': 'Bạn có chắc muốn đăng xuất khỏi tài khoản không?',
@@ -339,6 +352,21 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.error.back': 'Quay lại đăng nhập',
     'dash.loading': 'Đang tải không gian làm việc...',
     'dash.fallbackName': 'Học viên',
+
+    // Error boundary
+    'error.title': 'Đã có lỗi xảy ra',
+    'error.body': 'Trang không tải được. Vui lòng thử lại hoặc tải lại trang.',
+    'error.retry': 'Thử lại',
+    'error.reload': 'Tải lại trang',
+
+    // Toasts
+    'toast.signedOut': 'Đã đăng xuất.',
+    'toast.demoLoaded': 'Đã nạp dữ liệu demo.',
+    'toast.resumingTopic': 'Đang tiếp tục cuộc trò chuyện gần nhất của chủ đề này.',
+    'toast.welcomeBack': 'Chào bạn trở lại, {name}!',
+    'toast.loginFailed': 'Đăng nhập thất bại',
+    'toast.accountCreated': 'Đã tạo tài khoản!',
+    'toast.registerFailed': 'Đăng ký thất bại. Vui lòng thử lại.',
 
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',

@@ -64,7 +64,7 @@ export interface AssessPronunciationResult {
 }
 
 export function assessPronunciation(
-  params: AssessPronunciationParams
+  params: AssessPronunciationParams,
 ): Promise<AssessPronunciationResult>;
 
 export function toWav(blob: Blob): Promise<Blob>;

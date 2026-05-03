@@ -31,10 +31,14 @@
   background: #0d1117 !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
-[data-va='root'].va-dark [data-va='textarea'] {
-  background: #131929 !important;
-  color: #e2e8f0 !important;
+[data-va='root'].va-dark [data-va='input-inner'] {
+  background: #1a2236 !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
+}
+[data-va='root'].va-dark [data-va='textarea'] {
+  background: #1a2236 !important;
+  color: #e2e8f0 !important;
+  border-color: transparent !important;
 }
 [data-va='root'].va-dark [data-va='textarea']::placeholder {
   color: #475569 !important;
@@ -207,4 +211,25 @@
 
 [data-va='root'].va-dark .va-stat-card .text-lg {
   font-weight: 700;
+}
+
+/* Pronunciation tip card (PronunciationDetailModal) — amber palette dark overrides */
+[data-va='root'].va-dark .bg-amber-50 {
+  background-color: rgba(120, 53, 15, 0.35) !important;
+}
+[data-va='root'].va-dark .bg-amber-200\/70 {
+  background-color: rgba(217, 119, 6, 0.35) !important;
+}
+[data-va='root'].va-dark .border-amber-300\/70 {
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+[data-va='root'].va-dark .text-amber-700 {
+  color: #fcd34d !important;
+}
+[data-va='root'].va-dark .text-amber-800 {
+  color: #fde68a !important;
+}
+[data-va='root'].va-dark .bg-amber-50 .text-gray-800,
+[data-va='root'].va-dark .bg-amber-50 p {
+  color: #fef3c7 !important;
 }

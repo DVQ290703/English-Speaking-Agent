@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { loginRequest } from '../api/auth';
 import { saveAuthSession } from '../auth/tokenStorage';
+import { useT } from '../i18n/LanguageContext';
 
 const initialForm = {
   email: '',
@@ -12,15 +14,16 @@ const initialForm = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const t = useT();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState('');
 
-  const updateField = field => event => {
+  const updateField = (field) => (event) => {
     const value = field === 'rememberMe' ? event.target.checked : event.target.value;
-    setForm(prev => ({ ...prev, [field]: value }));
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const validate = () => {
@@ -38,7 +41,7 @@ export default function LoginPage() {
     return nextErrors;
   };
 
-  const handleSubmit = async event => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
@@ -58,9 +61,13 @@ export default function LoginPage() {
         remembered: form.rememberMe,
         loggedAt: Date.now(),
       });
+      toast.success(
+        t('toast.welcomeBack', { name: data.user?.display_name || t('dash.fallbackName') }),
+      );
       navigate('/dashboard', { replace: true });
     } catch (error) {
-      setApiError(error.message || 'Login failed');
+      const msg = error.message || t('toast.loginFailed');
+      setApiError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -123,7 +130,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="toggle-btn"
-                  onClick={() => setShowPassword(prev => !prev)}
+                  onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? (
@@ -179,18 +186,20 @@ export default function LoginPage() {
             {apiError ? <p className="error-msg">{apiError}</p> : null}
           </form>
 
-          <p className="switch-link">
-            Don&apos;t have an account?
-            <a
-              href="/register"
-              onClick={e => {
-                e.preventDefault();
-                navigate('/register');
-              }}
-            >
-              Sign up free
-            </a>
-          </p>
+          <div className="switch-link">
+            <p style={{ margin: 0 }}>
+              Don&apos;t have an account?{' '}
+              <a
+                href="/register"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/register');
+                }}
+              >
+                Sign up free
+              </a>
+            </p>
+          </div>
         </section>
       </main>
     </div>

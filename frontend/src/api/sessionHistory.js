@@ -43,11 +43,24 @@ export function getSessions() {
 }
 
 export function getSession(id) {
-  return getSessions().find(s => s.id === id) ?? null;
+  return getSessions().find((s) => s.id === id) ?? null;
+}
+
+// Look up the most recent session whose topicKey matches `topicKey`.
+// Sessions are stored newest-first, so the first match wins. Returns
+// `null` when nothing matches — used by the dashboard to resume a
+// topic from where the user left off.
+export function getLatestSessionByTopic(topicKey) {
+  if (!topicKey) return null;
+  const all = getSessions();
+  for (const s of all) {
+    if (s && s.topicKey === topicKey) return s;
+  }
+  return null;
 }
 
 export function deleteSession(id) {
-  const next = getSessions().filter(s => s.id !== id);
+  const next = getSessions().filter((s) => s.id !== id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     invalidateSessionsCache();
@@ -69,7 +82,7 @@ function trimMessage(m) {
 // Yield to the browser between heavy stringify+setItem passes so the UI
 // thread can repaint between retries on lower-end devices.
 function yieldToBrowser() {
-  return new Promise(resolve => setTimeout(resolve, 0));
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 // Serialise concurrent writes so two rapid saveSession calls (e.g. one from
@@ -85,7 +98,7 @@ let pendingResolvers = [];
 
 function scheduleWrite(next) {
   pendingPayload = next;
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     pendingResolvers.push(resolve);
     writeChain = writeChain.then(async () => {
       // Snapshot whatever is queued *now* — earlier callers will all be
@@ -93,7 +106,7 @@ function scheduleWrite(next) {
       if (pendingPayload === null) {
         const resolvers = pendingResolvers;
         pendingResolvers = [];
-        resolvers.forEach(r => r(null));
+        resolvers.forEach((r) => r(null));
         return;
       }
       const toWrite = pendingPayload;
@@ -102,12 +115,12 @@ function scheduleWrite(next) {
       pendingResolvers = [];
       try {
         const result = await writeSessions(toWrite);
-        resolvers.forEach(r => r(result));
+        resolvers.forEach((r) => r(result));
       } catch (err) {
         if (typeof console !== 'undefined') {
           console.warn('[sessionHistory] write chain rejected:', err);
         }
-        resolvers.forEach(r => r(null));
+        resolvers.forEach((r) => r(null));
       }
     });
   });
@@ -132,15 +145,15 @@ function scheduleWrite(next) {
 // fallback failed.
 async function writeSessions(next) {
   const stages = [
-    arr => arr,
-    arr =>
-      arr.map(s => ({
+    (arr) => arr,
+    (arr) =>
+      arr.map((s) => ({
         ...s,
         messages: Array.isArray(s.messages) ? s.messages.map(trimMessage) : s.messages,
       })),
-    arr => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
-    arr => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
-    arr => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
+    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 2))),
+    (arr) => arr.slice(0, Math.max(1, Math.ceil(arr.length / 4))),
+    (arr) => (arr.length > 0 ? [{ ...arr[0], messages: [] }] : arr),
   ];
 
   let attempt = next;
@@ -160,7 +173,7 @@ async function writeSessions(next) {
       invalidateSessionsCache();
       if (i > 0 && typeof console !== 'undefined') {
         console.warn(
-          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} retr${i === 1 ? 'y' : 'ies'}.`
+          `[sessionHistory] storage quota tight — kept ${attempt.length} session(s) after ${i} retr${i === 1 ? 'y' : 'ies'}.`,
         );
       }
       return attempt;
@@ -196,7 +209,7 @@ export function saveSession(session) {
     messages: cappedMessages,
     topicKey: session.topicKey ?? null,
   };
-  const filtered = all.filter(s => s.id !== id);
+  const filtered = all.filter((s) => s.id !== id);
   const next = [entry, ...filtered].slice(0, MAX_SESSIONS);
 
   // Fast path: attempt a fully synchronous write, which is critical for
@@ -229,7 +242,7 @@ export function saveSession(session) {
     invalidateSessionsCache();
     if (typeof console !== 'undefined') {
       console.warn(
-        '[sessionHistory] storage quota tight — saved only latest session without transcript.'
+        '[sessionHistory] storage quota tight — saved only latest session without transcript.',
       );
     }
     return entry;
@@ -241,7 +254,7 @@ export function saveSession(session) {
     // more we can do synchronously.
     if (typeof console !== 'undefined') {
       console.warn(
-        '[sessionHistory] sync write failed entirely — falling back to async write queue.'
+        '[sessionHistory] sync write failed entirely — falling back to async write queue.',
       );
     }
     void scheduleWrite(next);
