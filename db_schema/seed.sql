@@ -2,8 +2,31 @@
 -- SEED DATA
 -- =========================
 
+-- Ensure deleted_at column exists (idempotent migration)
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_conversations_deleted_at ON conversations(deleted_at) WHERE deleted_at IS NOT NULL;
+
 -- Remove legacy flat topics replaced by categorized sub-topics
 DELETE FROM topics WHERE code IN ('daily_conversation', 'travel', 'job_interview', 'business_meeting', 'academic');
+-- Rename mismatched topic codes to match frontend constants (tech_, env_, ent_)
+UPDATE topics SET code = 'tech_social_media'     WHERE code = 'technology_social_media';
+UPDATE topics SET code = 'tech_ai'               WHERE code = 'technology_ai';
+UPDATE topics SET code = 'tech_gadgets'          WHERE code = 'technology_gadgets';
+UPDATE topics SET code = 'tech_cybersecurity'    WHERE code = 'technology_cybersecurity';
+UPDATE topics SET code = 'tech_ecommerce'        WHERE code = 'technology_ecommerce';
+UPDATE topics SET code = 'tech_gaming'           WHERE code = 'technology_gaming';
+UPDATE topics SET code = 'env_climate'           WHERE code = 'environment_climate';
+UPDATE topics SET code = 'env_sustainable'       WHERE code = 'environment_sustainable';
+UPDATE topics SET code = 'env_social_issues'     WHERE code = 'environment_social_issues';
+UPDATE topics SET code = 'env_immigration'       WHERE code = 'environment_immigration';
+UPDATE topics SET code = 'env_urban_rural'       WHERE code = 'environment_urban_rural';
+UPDATE topics SET code = 'env_politics'          WHERE code = 'environment_politics';
+UPDATE topics SET code = 'ent_movies'            WHERE code = 'entertainment_movies';
+UPDATE topics SET code = 'ent_music'             WHERE code = 'entertainment_music';
+UPDATE topics SET code = 'ent_books'             WHERE code = 'entertainment_books';
+UPDATE topics SET code = 'ent_sports'            WHERE code = 'entertainment_sports';
+UPDATE topics SET code = 'ent_celebrities'       WHERE code = 'entertainment_celebrities';
+UPDATE topics SET code = 'ent_news'              WHERE code = 'entertainment_news';
 
 -- =========================
 -- Categories (10)
@@ -204,27 +227,27 @@ INSERT INTO topics (id, category_id, code, title, description, difficulty_level,
 
   -- Technology & Innovation (6)
   ('t0000000-0000-0000-0000-000000000041','ca000000-0000-0000-0000-000000000007',
-   'technology_social_media','Social Media & Internet Culture',
+   'tech_social_media','Social Media & Internet Culture',
    'Discuss platforms, online behaviour, and digital communication',
    'beginner', 1),
   ('t0000000-0000-0000-0000-000000000042','ca000000-0000-0000-0000-000000000007',
-   'technology_ai','Artificial Intelligence & Future',
+   'tech_ai','Artificial Intelligence & Future',
    'Discuss AI trends, automation, and the future of work',
    'advanced', 2),
   ('t0000000-0000-0000-0000-000000000043','ca000000-0000-0000-0000-000000000007',
-   'technology_gadgets','Gadgets & Devices',
+   'tech_gadgets','Gadgets & Devices',
    'Compare products, describe features, and discuss consumer tech',
    'beginner', 3),
   ('t0000000-0000-0000-0000-000000000044','ca000000-0000-0000-0000-000000000007',
-   'technology_cybersecurity','Cybersecurity & Privacy',
+   'tech_cybersecurity','Cybersecurity & Privacy',
    'Discuss online safety, data privacy, and digital threats',
    'advanced', 4),
   ('t0000000-0000-0000-0000-000000000045','ca000000-0000-0000-0000-000000000007',
-   'technology_ecommerce','E-commerce & Digital Life',
+   'tech_ecommerce','E-commerce & Digital Life',
    'Discuss online shopping, digital payments, and platform economies',
    'intermediate', 5),
   ('t0000000-0000-0000-0000-000000000046','ca000000-0000-0000-0000-000000000007',
-   'technology_gaming','Gaming & Virtual Reality',
+   'tech_gaming','Gaming & Virtual Reality',
    'Talk about video games, esports, and immersive digital experiences',
    'intermediate', 6),
 
@@ -256,53 +279,53 @@ INSERT INTO topics (id, category_id, code, title, description, difficulty_level,
 
   -- Environment & Society (6)
   ('t0000000-0000-0000-0000-000000000053','ca000000-0000-0000-0000-000000000009',
-   'environment_climate','Climate Change & Environment',
+   'env_climate','Climate Change & Environment',
    'Discuss environmental issues, climate science, and global impact',
    'advanced', 1),
   ('t0000000-0000-0000-0000-000000000054','ca000000-0000-0000-0000-000000000009',
-   'environment_sustainable','Sustainable Living',
+   'env_sustainable','Sustainable Living',
    'Talk about eco-friendly habits, recycling, and green choices',
    'intermediate', 2),
   ('t0000000-0000-0000-0000-000000000055','ca000000-0000-0000-0000-000000000009',
-   'environment_social_issues','Social Issues & Inequality',
+   'env_social_issues','Social Issues & Inequality',
    'Discuss poverty, discrimination, and systemic social challenges',
    'advanced', 3),
   ('t0000000-0000-0000-0000-000000000056','ca000000-0000-0000-0000-000000000009',
-   'environment_immigration','Immigration & Identity',
+   'env_immigration','Immigration & Identity',
    'Talk about migration, cultural identity, and belonging',
    'advanced', 4),
   ('t0000000-0000-0000-0000-000000000057','ca000000-0000-0000-0000-000000000009',
-   'environment_urban_rural','Urban vs Rural Life',
+   'env_urban_rural','Urban vs Rural Life',
    'Compare city and countryside living, pros and cons',
    'intermediate', 5),
   ('t0000000-0000-0000-0000-000000000058','ca000000-0000-0000-0000-000000000009',
-   'environment_politics','Politics & Current Events',
+   'env_politics','Politics & Current Events',
    'Discuss news, political systems, and civic responsibility',
    'advanced', 6),
 
   -- Entertainment & Media (6)
   ('t0000000-0000-0000-0000-000000000059','ca000000-0000-0000-0000-000000000010',
-   'entertainment_movies','Movies & TV Shows',
+   'ent_movies','Movies & TV Shows',
    'Review films and series, discuss genres and recommendations',
    'beginner', 1),
   ('t0000000-0000-0000-0000-000000000060','ca000000-0000-0000-0000-000000000010',
-   'entertainment_music','Music & Concerts',
+   'ent_music','Music & Concerts',
    'Talk about music genres, artists, and live performances',
    'beginner', 2),
   ('t0000000-0000-0000-0000-000000000061','ca000000-0000-0000-0000-000000000010',
-   'entertainment_books','Books & Literature',
+   'ent_books','Books & Literature',
    'Discuss books, authors, and reading habits',
    'intermediate', 3),
   ('t0000000-0000-0000-0000-000000000062','ca000000-0000-0000-0000-000000000010',
-   'entertainment_sports','Sports & Competition',
+   'ent_sports','Sports & Competition',
    'Discuss teams, sporting events, and athletic achievement',
    'beginner', 4),
   ('t0000000-0000-0000-0000-000000000063','ca000000-0000-0000-0000-000000000010',
-   'entertainment_celebrities','Celebrities & Pop Culture',
+   'ent_celebrities','Celebrities & Pop Culture',
    'Discuss famous people, trends, and popular culture',
    'beginner', 5),
   ('t0000000-0000-0000-0000-000000000064','ca000000-0000-0000-0000-000000000010',
-   'entertainment_news','News & Current Events',
+   'ent_news','News & Current Events',
    'Summarise news stories and discuss their significance',
    'intermediate', 6)
 

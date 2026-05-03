@@ -152,8 +152,8 @@ def test_for_topic_missing_topic_code_returns_422():
     assert resp.status_code == 422
 
 
-def test_for_topic_unknown_topic_returns_404():
-    """GET /conversations/for-topic with unknown topic_code returns 404."""
+def test_for_topic_unknown_topic_returns_empty():
+    """GET /conversations/for-topic with unknown topic_code returns 200 with empty list."""
     user_id = str(uuid.uuid4())
     conn, _ = make_mock_connection(
         fetchone_by_sql={"select id::text, title from topics": None},
@@ -165,7 +165,11 @@ def test_for_topic_unknown_topic_returns_404():
                 params={"topic_code": "nonexistent_topic"},
                 headers=_auth(user_id),
             )
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["conversations"] == []
+    assert body["total"] == 0
+    assert body["limit_reached"] is False
 
 
 def test_delete_conversation_returns_204():

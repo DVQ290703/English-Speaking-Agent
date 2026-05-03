@@ -15,6 +15,7 @@ interface ConversationSidebarProps {
   onSelectConversation: (conversationId: string) => void;
   onNewChat: () => void;
   onDeleteConversation: (conversationId: string) => void;
+  onTopicSelect: (topicCode: string) => void;
 }
 
 type SidebarView = 'browse' | 'topic-history';
@@ -40,6 +41,7 @@ export default function ConversationSidebar({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  onTopicSelect,
 }: ConversationSidebarProps) {
   const [view, setView] = useState<SidebarView>('browse');
   const [browseTopic, setBrowseTopic] = useState<string | null>(null);
@@ -138,6 +140,7 @@ export default function ConversationSidebar({
                               onClick={() => {
                                 setBrowseTopic(topic.id);
                                 setView('topic-history');
+                                onTopicSelect(topic.id);
                               }}
                               className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg mx-1 my-0.5 text-sm transition-colors ${isActive ? itemActive : itemBase}`}
                               style={{ width: 'calc(100% - 8px)' }}
