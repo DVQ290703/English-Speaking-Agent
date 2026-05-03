@@ -270,14 +270,26 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
+    # Convert DB history (list[dict]) to the "Role: text" string format the
+    # pipeline expects, and prepend topic/sub_option context lines so
+    # extract_prompt_context can build the dynamic system prompt.
+    history_lines: list[str] = []
+    if topic:
+        history_lines.append(f"Topic: {topic.strip()}")
+    if sub_option:
+        history_lines.append(f"Sub-option: {sub_option.strip()}")
+    for msg in conversation_history:
+        role_label = "User" if msg["role"] == "user" else "Assistant"
+        history_lines.append(f"{role_label}: {msg['content']}")
+
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),
-        len(conversation_history),
+        len(history_lines),
     )
     response_text, response_audio_bytes = run_langraph_agent(
         user_input=user_input,
-        history=conversation_history,
+        history=history_lines,
         voice_gender=voice_gender,
     )
 
@@ -406,4 +418,5 @@ def chat_respond(
         user_audio_url=user_audio_url,
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
+        user_message_id=user_message_id,
     )

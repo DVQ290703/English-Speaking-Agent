@@ -60,6 +60,7 @@ class ChatResponse(BaseModel):
     user_audio_url: str | None = None
     assistant_audio_url: str | None = None
     conversation_id: str
+    user_message_id: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -180,6 +181,7 @@ class WordResult(BaseModel):
 
 
 class AssessmentResponse(BaseModel):
+    assessment_id: str | None = None
     mode: Literal["scripted", "unscripted"]
     recognized_text: str
     pron_score: float
