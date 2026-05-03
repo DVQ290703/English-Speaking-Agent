@@ -96,6 +96,7 @@ export async function assessPronunciation({
   audioBlob,
   referenceText = null,
   language = null,
+  messageId = null,
 }) {
   const wavBlob = await toWav(audioBlob);
   const formData = new FormData();
@@ -107,6 +108,10 @@ export async function assessPronunciation({
 
   if (language && language.trim()) {
     formData.append('language', language.trim());
+  }
+
+  if (messageId) {
+    formData.append('message_id', messageId);
   }
 
   const response = await fetch(`${API_BASE_URL}/api/assess`, {
