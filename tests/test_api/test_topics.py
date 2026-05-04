@@ -53,7 +53,7 @@ def test_get_categories_returns_grouped_structure():
         ("ielts", "IELTS Speaking", 1, "ielts_part2", "Part 2", "Long turn", "intermediate", 2),
     ]
     mock_conn = make_mock_conn(db_rows)
-    with patch("app.core.database.get_connection", return_value=mock_conn):
+    with patch("app.api.topics.get_connection", return_value=mock_conn):
         resp = client.get("/api/topics/categories")
 
     assert resp.status_code == 200
@@ -75,7 +75,7 @@ def test_get_categories_two_categories():
         ("business", "Business",       2, "business_job_interview", "Job Interview", None, "intermediate", 1),
     ]
     mock_conn = make_mock_conn(db_rows)
-    with patch("app.core.database.get_connection", return_value=mock_conn):
+    with patch("app.api.topics.get_connection", return_value=mock_conn):
         resp = client.get("/api/topics/categories")
 
     assert resp.status_code == 200
@@ -88,7 +88,7 @@ def test_get_categories_two_categories():
 def test_get_categories_empty_db():
     """Empty DB returns an empty list (not an error)."""
     mock_conn = make_mock_conn([])
-    with patch("app.core.database.get_connection", return_value=mock_conn):
+    with patch("app.api.topics.get_connection", return_value=mock_conn):
         resp = client.get("/api/topics/categories")
 
     assert resp.status_code == 200
@@ -98,6 +98,6 @@ def test_get_categories_empty_db():
 def test_get_categories_no_auth_required():
     """Endpoint must be accessible without an Authorization header."""
     mock_conn = make_mock_conn([])
-    with patch("app.core.database.get_connection", return_value=mock_conn):
+    with patch("app.api.topics.get_connection", return_value=mock_conn):
         resp = client.get("/api/topics/categories")
     assert resp.status_code == 200
