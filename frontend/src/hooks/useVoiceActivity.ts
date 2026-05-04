@@ -50,13 +50,19 @@ export default function useVoiceActivity(
       }
       try {
         source?.disconnect();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       try {
         analyser?.disconnect();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       try {
         if (ctx && ctx.state !== 'closed') void ctx.close();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
       source = null;
       analyser = null;
       ctx = null;

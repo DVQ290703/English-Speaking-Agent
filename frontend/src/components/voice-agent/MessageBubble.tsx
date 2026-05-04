@@ -32,8 +32,6 @@ export interface Message {
   mistakes?: Mistake[];
   assessmentStatus?: 'available' | 'unavailable' | 'failed' | 'pending';
   assessmentNote?: string;
-  isHistory?: boolean;          // true for messages loaded from server history
-  _serverAudioUrl?: string;     // presigned URL, loaded lazily on play click
 }
 
 const PHONEME_TIPS_BASE: Record<string, string> = {
@@ -186,10 +184,7 @@ function ScoreBadge({ score }: { score: number }) {
       className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border text-[10px] font-bold leading-4 tracking-wide select-none ${cls}`}
     >
       <span className="tabular-nums font-bold">{score}</span>
-      <span
-        data-score-suffix
-        className="text-black/30 dark:text-white/80 font-normal text-[9px] ml-0.5"
-      >
+      <span data-score-suffix className="font-normal text-[10px] ml-0.5 opacity-70">
         /<span className="font-semibold">100</span>
       </span>
     </span>
@@ -253,9 +248,7 @@ export default function MessageBubble({
             {isAgent ? t('common.agent') : t('common.you')}
           </span>
           <span className="text-[10px] text-gray-400">{timeStr}</span>
-          {!message.typing && (onReplay || (message.isHistory && message._serverAudioUrl)) && (
-            <ReplayButton onClick={onReplay ?? (() => {})} />
-          )}
+          {!message.typing && onReplay && <ReplayButton onClick={onReplay} />}
           {!message.typing &&
             !isAgent &&
             (message.score !== undefined || message.scoreDetails?.overall !== undefined) && (

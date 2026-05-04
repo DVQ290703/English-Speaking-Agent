@@ -44,7 +44,6 @@ export function computeStreak(sessions: SessionLite[]): number {
 }
 
 export function bandFromScore(score: number): number {
-  // The dashboard stores `avgScore` as a 0-100 integer. Convert to a 0-9 IELTS band.
   return Math.max(0, Math.min(9, score / 11.11));
 }
 
@@ -66,14 +65,11 @@ export function computeBadges(sessions: SessionLite[]): Badge[] {
   ];
 }
 
-// Compare two equal-length time slices and return the band delta.
-// Returns null when not enough data to compare.
 export function computePeriodDelta(
   sessions: SessionLite[],
   periodSize: number,
 ): { current: number; previous: number; delta: number } | null {
   if (sessions.length < periodSize * 2) return null;
-  // Sessions arrive newest-first OR are sliced ascending — sort by date asc.
   const sorted = [...sessions].sort((a, b) => +new Date(a.date) - +new Date(b.date));
   const recent = sorted.slice(-periodSize);
   const prior = sorted.slice(-periodSize * 2, -periodSize);

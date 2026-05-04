@@ -5,10 +5,16 @@ import type { Message } from './MessageBubble';
 export interface InitialSessionState {
   messages: Message[];
   sessionId: string | null;
+  conversationId: string | null;
   topic: TopicId | null;
   customTopicLabel: string | null;
   subOption: string | null;
   nextMsgId: number;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isDbUuid(id: string): boolean {
+  return UUID_RE.test(id);
 }
 
 /**
@@ -23,6 +29,7 @@ export function getInitialSessionState(): InitialSessionState {
   const fallback: InitialSessionState = {
     messages: [],
     sessionId: null,
+    conversationId: null,
     topic: null,
     customTopicLabel: null,
     subOption: null,
@@ -31,36 +38,44 @@ export function getInitialSessionState(): InitialSessionState {
 
   let messages: Message[] = [];
   let sessionId: string | null = null;
+  let conversationId: string | null = null;
   let restoredTopic: TopicId | null = null;
 
   try {
     const params = new URLSearchParams(window.location.search);
     const sid = params.get('session');
     if (sid) {
-      const saved = getSessionHistory(sid);
-      if (saved) {
-        messages = ((saved.messages as Message[]) ?? []).map((m) => {
-          const ts =
-            m.timestamp instanceof Date
-              ? m.timestamp
-              : new Date(m.timestamp as unknown as string | number);
-          const userAudioUrl =
-            typeof m.userAudioUrl === 'string' && m.userAudioUrl.startsWith('blob:')
-              ? undefined
-              : m.userAudioUrl;
-          return {
-            ...m,
-            timestamp: ts,
-            audioUrl: undefined,
-            userAudioUrl,
-            audioBlob: undefined,
-          };
-        });
-        sessionId = sid;
-        restoredTopic = (saved.topicKey as TopicId | null) ?? null;
+      // If the session param is a DB UUID, skip localStorage and load async later.
+      if (isDbUuid(sid)) {
+        conversationId = sid;
+      } else {
+        const saved = getSessionHistory(sid);
+        if (saved) {
+          messages = ((saved.messages as Message[]) ?? []).map((m) => {
+            const ts =
+              m.timestamp instanceof Date
+                ? m.timestamp
+                : new Date(m.timestamp as unknown as string | number);
+            const userAudioUrl =
+              typeof m.userAudioUrl === 'string' && m.userAudioUrl.startsWith('blob:')
+                ? undefined
+                : m.userAudioUrl;
+            return {
+              ...m,
+              timestamp: ts,
+              audioUrl: undefined,
+              userAudioUrl,
+              audioBlob: undefined,
+            };
+          });
+          sessionId = sid;
+          restoredTopic = (saved.topicKey as TopicId | null) ?? null;
+        }
       }
     }
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 
   // Compute the next message id counter. Math.max(...spread) returns
   // -Infinity on an empty array and silently ignores non-numeric IDs
@@ -77,10 +92,23 @@ export function getInitialSessionState(): InitialSessionState {
 
   try {
     const params = new URLSearchParams(window.location.search);
+    if (conversationId) {
+      // DB conversation — messages will be loaded async in VoiceAgent.
+      return {
+        messages: [],
+        sessionId: null,
+        conversationId,
+        topic: null,
+        customTopicLabel: null,
+        subOption: null,
+        nextMsgId: 101,
+      };
+    }
     if (params.get('session') && restoredTopic) {
       return {
         messages,
         sessionId,
+        conversationId: null,
         topic: restoredTopic,
         customTopicLabel: null,
         subOption: null,
@@ -103,5 +131,13 @@ export function getInitialSessionState(): InitialSessionState {
     return { ...fallback, messages, sessionId, nextMsgId };
   }
 
-  return { messages, sessionId, topic, customTopicLabel, subOption, nextMsgId };
+  return {
+    messages,
+    sessionId,
+    conversationId: null,
+    topic,
+    customTopicLabel,
+    subOption,
+    nextMsgId,
+  };
 }

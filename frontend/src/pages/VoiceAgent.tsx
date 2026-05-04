@@ -8,13 +8,17 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Settings, Circle } from 'lucide-react';
+import { Settings, Circle } from 'lucide-react';
+import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
+import { fetchConversations, fetchMessagesWithScores } from '../api/conversations';
+import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
   AiFeedbackPanel,
   ChatInputBar,
+  ConversationSidebar,
   HistorySidebar,
   LeftAudioPanel,
   LogoutConfirmModal,
@@ -28,6 +32,7 @@ import type { Message, SessionSummary } from '../components/voice-agent';
 import {
   LANGUAGES,
   MODELS,
+  TOPIC_ID_TO_DB_CODES,
   TOPICS,
   type AuthUser,
   type ConnectionStatus,
@@ -184,6 +189,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [isRecording, setIsRecording] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [convsLoading, setConvsLoading] = useState(false);
+  const [convsRefreshKey, setConvsRefreshKey] = useState(0);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -195,6 +204,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const sessionVersionRef = useRef(0);
   const msgCounterRef = useRef(initialState.nextMsgId);
   const feedbackCounterRef = useRef(200);
+  // Tracks the DB conversation_id returned by the backend on each chat turn.
+  // Sent back with every subsequent message so all turns belong to one conversation.
+  const conversationIdRef = useRef<string | null>(initialState.conversationId ?? null);
   // Guards against double-saving the same session when both visibilitychange
   // and the unmount cleanup fire in rapid succession (e.g. tab close on
   // mobile). Reset to false at the start of every new session.
@@ -349,6 +361,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     gender,
     language,
     agentTyping,
+    conversationIdRef,
     msgCounterRef,
     feedbackCounterRef,
     timersRef,
@@ -437,6 +450,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setFeedbacks([]);
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
+    conversationIdRef.current = null;
     setStatusSync('connecting');
 
     const t0 = setTimeout(() => {
@@ -472,6 +486,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       return;
     }
     if (currentStatus === 'disconnected') {
+      // Topic limit check — only for brand-new sessions (no existing conversation)
+      if (!conversationIdRef.current && topic) {
+        const dbCodes = TOPIC_ID_TO_DB_CODES[topic] ?? [];
+        if (dbCodes.length > 0) {
+          const count = conversations.filter(
+            (c) => c.topic_code && dbCodes.includes(c.topic_code),
+          ).length;
+          if (count >= 5) {
+            toast.error(t('va.sidebar.limitReached'));
+            return;
+          }
+        }
+      }
       setSummaryDismissed(true);
       clearTimers();
       // Allow the upcoming session to be persisted when it ends.
@@ -491,7 +518,65 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       timersRef.current.push(t0);
     }
-  }, [clearTimers, persistSession, setStatusSync, ttsActiveRef]);
+  }, [clearTimers, conversations, persistSession, setStatusSync, t, topic, ttsActiveRef]);
+
+  // Fetch all conversations from DB for the sidebar; re-runs whenever
+  // convsRefreshKey is bumped (e.g. after delete or new-session events).
+  useEffect(() => {
+    const session = getAuthSession();
+    if (!session?.token) return;
+    setConvsLoading(true);
+    fetchConversations(session.token)
+      .then(setConversations)
+      .catch(() => {})
+      .finally(() => setConvsLoading(false));
+  }, [convsRefreshKey]);
+
+  // If a DB conversation_id was supplied via ?session=<uuid>, load its messages
+  // from the backend on mount. The conversation is set to read-only view
+  // (disconnected) so the user can review then start a new session.
+  useEffect(() => {
+    const convId = initialState.conversationId;
+    if (!convId) return;
+    const session = getAuthSession();
+    if (!session?.token) return;
+
+    function dbMsgToFrontend(m: MessageWithScoreOut, idx: number): Message {
+      return {
+        id: idx + 1,
+        role: m.role === 'assistant' ? 'agent' : 'user',
+        text: m.text_content ?? '',
+        timestamp: new Date(m.created_at),
+        assessmentStatus: m.score ? 'available' : 'unavailable',
+        scoreDetails: m.score
+          ? {
+              overall: Math.round(m.score.overall_score ?? 0),
+              pronunciation: Math.round(m.score.accuracy_score ?? 0),
+              fluency: Math.round(m.score.fluency_score ?? 0),
+              accuracy: Math.round(m.score.accuracy_score ?? 0),
+              completeness:
+                m.score.completeness_score != null
+                  ? Math.round(m.score.completeness_score)
+                  : undefined,
+            }
+          : undefined,
+      };
+    }
+
+    fetchMessagesWithScores(session.token, convId)
+      .then((dbMessages) => {
+        const loaded = dbMessages.map((m, idx) => dbMsgToFrontend(m, idx));
+        if (loaded.length > 0) {
+          msgCounterRef.current = loaded.length + 101;
+          setMessages(loaded);
+        }
+      })
+      .catch(() => {
+        /* silently ignore — user can still start fresh */
+      });
+    // Run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Final unmount cleanup — flush in-flight timers and stream after the
   // session-persistence hook has saved the latest snapshot.
@@ -554,6 +639,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         onNavigateDashboard={() => navigate('/dashboard')}
         onNavigateSignIn={() => navigate('/')}
         onNavigateSignUp={() => navigate('/register')}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
       />
 
       {/* Description bar */}
@@ -571,15 +657,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            data-testid="button-history"
-            onClick={() => setShowHistory(true)}
-            title={t('va.history.open')}
-            aria-label={t('va.history.open')}
-            className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
-          >
-            <Clock className="w-3.5 h-3.5" />
-          </button>
           <button
             data-testid="button-mobile-panel"
             onClick={() => setShowLeftPanelMobile((v) => !v)}
@@ -629,6 +706,28 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </button>
         </div>
       </div>
+
+      {/* Conversation history drawer — fixed overlay, toggled from header hamburger */}
+      <ConversationSidebar
+        open={showSidebar}
+        onClose={() => setShowSidebar(false)}
+        token={getAuthSession()?.token ?? null}
+        conversations={conversations}
+        loading={convsLoading}
+        activeConversationId={conversationIdRef.current}
+        currentTopicId={topic}
+        onSelectConversation={(id) => {
+          window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
+        }}
+        onNewChat={() => {
+          if (isConnected) persistSession();
+          startNewSession();
+          setConvsRefreshKey((k) => k + 1);
+        }}
+        onConversationDeleted={(id) => {
+          setConversations((prev) => prev.filter((c) => c.id !== id));
+        }}
+      />
 
       {/* Main content */}
       <div data-va="content" className="flex flex-1 overflow-hidden relative">
@@ -800,13 +899,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
       </div>
 
-      <HistorySidebar
-        open={showHistory}
-        onClose={() => setShowHistory(false)}
-        onSelectSession={(id) => {
-          window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
-        }}
-      />
+      {showHistory && (
+        <HistorySidebar
+          open={showHistory}
+          onClose={() => setShowHistory(false)}
+          token={getAuthSession()?.token ?? null}
+          onSelectSession={(id) => {
+            window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
+          }}
+        />
+      )}
 
       {showSettings && (
         <SettingsPanel

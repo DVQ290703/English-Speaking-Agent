@@ -233,3 +233,8 @@
 [data-va='root'].va-dark .bg-amber-50 p {
   color: #fef3c7 !important;
 }
+
+/* ScoreBadge "/100" suffix in dark mode (text-black/30 fallback is invisible on dark badge bg) */
+[data-va='root'].va-dark [data-score-suffix] {
+  color: rgba(255, 255, 255, 0.75) !important;
+}

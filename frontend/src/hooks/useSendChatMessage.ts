@@ -2,7 +2,6 @@ import { useCallback, type MutableRefObject } from 'react';
 import { assessPronunciation, chatRespond } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
 import {
-  AGENT_REPLIES,
   LANGUAGE_CODES,
   TOPICS,
   type FeedbackItem,
@@ -19,6 +18,7 @@ export interface UseSendChatMessageParams {
   gender: Gender;
   language: Language;
   agentTyping: boolean;
+  conversationIdRef: MutableRefObject<string | null>;
   msgCounterRef: MutableRefObject<number>;
   feedbackCounterRef: MutableRefObject<number>;
   timersRef: MutableRefObject<ReturnType<typeof setTimeout>[]>;
@@ -54,9 +54,10 @@ export default function useSendChatMessage({
   gender,
   language,
   agentTyping,
+  conversationIdRef,
   msgCounterRef,
   feedbackCounterRef,
-  timersRef,
+  timersRef: _timersRef,
   localAudioUrlsRef,
   audioBlobsRef,
   inputRef,
@@ -122,6 +123,7 @@ export default function useSendChatMessage({
       setAgentTyping(true);
 
       try {
+        let userMessageId: string | null = null;
         if (session?.token) {
           const data = await chatRespond({
             token: session.token,
@@ -134,54 +136,68 @@ export default function useSendChatMessage({
               undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
+            conversationId: conversationIdRef.current ?? undefined,
           });
-
-          const responseText =
-            String(data.response_text || '').trim() || 'I am ready to help you practice.';
-
-          // audio_base64 is the real-time delivery format — always use it for
-          // immediate playback. assistant_audio_url is a MinIO presigned URL with
-          // a Docker-internal hostname (minio:9000) that the browser cannot reach;
-          // it is only useful for conversation history replay via the messages API.
-          let audioUrl: string | undefined;
-          if (data.audio_base64) {
-            audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
-          } else if (data.assistant_audio_url) {
-            audioUrl = data.assistant_audio_url;
+          if (data.conversation_id) {
+            conversationIdRef.current = data.conversation_id;
           }
+          userMessageId = data.user_message_id ?? null;
 
-          const playedUrl = playAgentAudio(responseText, audioUrl);
+          const responseText = String(data.response_text || '').trim();
 
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.id === userId
-                ? {
-                    ...message,
-                    // Keep the local blob URL (created before the API call).
-                    // MinIO presigned URLs use the internal Docker hostname and
-                    // are unreachable from the browser.
-                    userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
-                  }
-                : message.id === typingId
+          if (!responseText) {
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === typingId
                   ? {
                       ...message,
-                      text: responseText,
+                      text: "Sorry, I couldn't get a response. Please try again.",
                       typing: false,
-                      audioUrl: playedUrl,
-                      minioUrl: data.assistant_audio_url || undefined,
                     }
                   : message,
-            ),
-          );
+              ),
+            );
+          } else {
+            // audio_base64 is the real-time delivery format — always use it for
+            // immediate playback. assistant_audio_url is a MinIO presigned URL with
+            // a Docker-internal hostname (minio:9000) that the browser cannot reach;
+            // it is only useful for conversation history replay via the messages API.
+            let audioUrl: string | undefined;
+            if (data.audio_base64) {
+              audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
+            } else if (data.assistant_audio_url) {
+              audioUrl = data.assistant_audio_url;
+            }
+
+            const playedUrl = playAgentAudio(responseText, audioUrl);
+
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === userId
+                  ? {
+                      ...message,
+                      // Keep the local blob URL (created before the API call).
+                      // MinIO presigned URLs use the internal Docker hostname and
+                      // are unreachable from the browser.
+                      userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
+                    }
+                  : message.id === typingId
+                    ? {
+                        ...message,
+                        text: responseText,
+                        typing: false,
+                        audioUrl: playedUrl,
+                        minioUrl: data.assistant_audio_url || undefined,
+                      }
+                    : message,
+              ),
+            );
+          }
         } else {
-          await new Promise<void>((res) => {
-            timersRef.current.push(setTimeout(res, 700 + Math.random() * 600));
-          });
-          const reply = AGENT_REPLIES[Math.floor(Math.random() * AGENT_REPLIES.length)];
-          playAgentAudio(reply);
+          const errorReply = "Sorry, I couldn't get a response. Please try again.";
           setMessages((prev) =>
             prev.map((message) =>
-              message.id === typingId ? { ...message, text: reply, typing: false } : message,
+              message.id === typingId ? { ...message, text: errorReply, typing: false } : message,
             ),
           );
         }
@@ -196,6 +212,7 @@ export default function useSendChatMessage({
               audioBlob,
               referenceText: trimmed,
               language: LANGUAGE_CODES[language],
+              messageId: userMessageId,
             });
 
             const pron = Math.round(assessment.pron_score ?? 0);
@@ -335,11 +352,11 @@ export default function useSendChatMessage({
       gender,
       language,
       trimLocalAudioUrls,
+      conversationIdRef,
       localAudioUrlsRef,
       audioBlobsRef,
       msgCounterRef,
       feedbackCounterRef,
-      timersRef,
       inputRef,
       setMessages,
       setFeedbacks,

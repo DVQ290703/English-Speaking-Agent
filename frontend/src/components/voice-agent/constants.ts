@@ -60,28 +60,15 @@ export const MODELS: Model[] = [
 export const GENDERS: Gender[] = ['Male', 'Female'];
 
 export const TOPICS = [
-  { id: 'daily', label: 'Daily Conversation', desc: 'Giao tiếp hàng ngày' },
+  { id: 'daily_conversation', label: 'Daily Conversation', desc: 'Everyday English practice' },
+  { id: 'travel', label: 'Travel English', desc: 'Travel, tourism, directions' },
+  { id: 'job_interview', label: 'Job Interview', desc: 'Interview questions and answers' },
   {
-    id: 'ielts1',
-    label: 'IELTS Speaking Part 1',
-    desc: 'Giới thiệu bản thân, cuộc sống',
+    id: 'business_meeting',
+    label: 'Business Meeting',
+    desc: 'Meetings, negotiations, presentations',
   },
-  {
-    id: 'ielts2',
-    label: 'IELTS Speaking Part 2',
-    desc: 'Nói dài về một chủ đề',
-  },
-  {
-    id: 'ielts3',
-    label: 'IELTS Speaking Part 3',
-    desc: 'Thảo luận ý kiến, phân tích',
-  },
-  { id: 'travel', label: 'Travel & Tourism', desc: 'Du lịch, khám phá' },
-  { id: 'career', label: 'Work & Career', desc: 'Công việc, sự nghiệp' },
-  { id: 'education', label: 'Education', desc: 'Giáo dục, học tập' },
-  { id: 'environment', label: 'Environment', desc: 'Môi trường, thiên nhiên' },
-  { id: 'technology', label: 'Technology', desc: 'Công nghệ, đổi mới' },
-  { id: 'health', label: 'Health & Lifestyle', desc: 'Sức khỏe, lối sống' },
+  { id: 'academic', label: 'Academic Discussion', desc: 'IELTS-style opinions and analysis' },
 ] as const;
 
 export type TopicId = (typeof TOPICS)[number]['id'];
@@ -90,16 +77,6 @@ export const LANGUAGE_CODES: Record<Language, string> = {
   English: 'en-US',
   Vietnamese: 'vi-VN',
 };
-
-export const AGENT_REPLIES = [
-  "That's a great question! Let me think about that for a moment. Based on my knowledge, I'd say the answer involves multiple perspectives worth exploring.",
-  "Interesting! I can definitely help you with that. Here's what I know about this topic — it's quite fascinating when you dig deeper into it.",
-  "Sure! I understand what you're looking for. Let me provide you with a comprehensive response that covers the key points.",
-  'Great point! I agree with your thinking here. To add to that, there are a few additional considerations that might be helpful.',
-  "I appreciate you asking about this! It's an area I find quite interesting. The short answer is yes, and here's why that matters in practice.",
-  "Absolutely! That's something I can explain clearly. The main idea is straightforward, though the details do get nuanced depending on your specific use case.",
-  "Of course! Let me break that down for you step by step so it's easy to follow and understand.",
-];
 
 export interface ISpeechRecognition extends EventTarget {
   lang: string;
@@ -123,26 +100,47 @@ declare global {
 }
 
 export const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
-  'Daily Conversation': 'daily',
-  'IELTS Part 1': 'ielts1',
-  'IELTS Part 2': 'ielts2',
-  'Academic Discussion': 'ielts3',
-  'Describe a person': 'ielts2',
-  'Describe a place': 'ielts2',
-  'Job Interview': 'career',
-  'Office Meeting': 'career',
-  Presentations: 'career',
-  Negotiation: 'career',
-  'Email & Phone': 'career',
-  Shopping: 'daily',
-  Healthcare: 'health',
-  'Family & Friends': 'daily',
-  Hobbies: 'daily',
+  // Human-readable labels (legacy / hardcoded dashboard)
+  'Daily Conversation': 'daily_conversation',
+  'IELTS Part 1': 'academic',
+  'IELTS Part 2': 'academic',
+  'IELTS Part 3': 'academic',
+  'Academic Discussion': 'academic',
+  'Describe a person': 'academic',
+  'Describe a place': 'academic',
+  'Job Interview': 'job_interview',
+  'Office Meeting': 'business_meeting',
+  Presentations: 'business_meeting',
+  Negotiation: 'business_meeting',
+  'Email & Phone': 'business_meeting',
+  Shopping: 'daily_conversation',
+  Healthcare: 'daily_conversation',
+  'Family & Friends': 'daily_conversation',
+  Hobbies: 'daily_conversation',
   'Travel & Tourism': 'travel',
+  'Travel English': 'travel',
   'Food & Restaurant': 'travel',
   'Hotel & Booking': 'travel',
   'Culture & Customs': 'travel',
   'Airport English': 'travel',
+  // DB codes → TOPICS ids (same value now)
+  daily_conversation: 'daily_conversation',
+  travel: 'travel',
+  job_interview: 'job_interview',
+  business_meeting: 'business_meeting',
+  academic: 'academic',
+  ielts_part1: 'academic',
+  ielts_part2: 'academic',
+  ielts_part3: 'academic',
+};
+
+/** Maps a frontend TopicId to the DB topic codes used in conversations.topic_code */
+export const TOPIC_ID_TO_DB_CODES: Partial<Record<TopicId, string[]>> = {
+  daily_conversation: ['daily_conversation'],
+  travel: ['travel'],
+  job_interview: ['job_interview'],
+  business_meeting: ['business_meeting'],
+  academic: ['academic'],
 };
 
 export const DASHBOARD_TO_SUB_OPTION: Record<string, string> = {

@@ -29,14 +29,14 @@ export default function OnboardingTip() {
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-9000 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
+      className="fixed inset-0 z-[9000] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fadeIn"
       onClick={dismiss}
     >
       <div
         className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-w-md w-full p-6 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-linear-to-br from-blue-500 to-violet-600 text-white text-3xl mx-auto mb-4 shadow-md">
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 text-white text-3xl mx-auto mb-4 shadow-md">
           🎙️
         </div>
         <h2 className="text-xl font-bold text-center text-gray-900 dark:text-slate-100 mb-2">
