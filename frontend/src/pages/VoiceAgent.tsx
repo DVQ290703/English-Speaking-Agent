@@ -495,6 +495,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setExpandedMsgId(null);
       clearTimers();
       persistSession();
+      // Refresh the sidebar conversation list so the just-ended session
+      // appears immediately without requiring a manual "New Chat" press.
+      setConvsRefreshKey((k) => k + 1);
       return;
     }
     if (currentStatus === 'disconnected') {
@@ -528,7 +531,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       timersRef.current.push(t0);
     }
-  }, [clearTimers, conversations, persistSession, setStatusSync, t, topic, ttsActiveRef]);
+  }, [clearTimers, conversations, persistSession, setConvsRefreshKey, setStatusSync, t, topic, ttsActiveRef]);
 
   // When we transition to "connected" and a greeting was queued (brand-new
   // topic session with no prior conversations), send the AI opening message.
@@ -874,14 +877,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         {/* Left panel: Audio & Video — drawer on mobile, persistent on md+ */}
         {showLeftPanelMobile && (
           <div
-            className="md:hidden fixed inset-0 z-[7000] bg-black/40"
+            className="md:hidden fixed inset-0 z-7000 bg-black/40"
             onClick={() => setShowLeftPanelMobile(false)}
           />
         )}
         <div
           data-va="left"
           className={`${
-            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-[7001] w-72 shadow-2xl' : 'hidden'
+            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
           } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
         >
           <LeftAudioPanel
