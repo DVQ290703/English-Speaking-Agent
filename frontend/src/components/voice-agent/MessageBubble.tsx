@@ -32,6 +32,8 @@ export interface Message {
   mistakes?: Mistake[];
   assessmentStatus?: 'available' | 'unavailable' | 'failed' | 'pending';
   assessmentNote?: string;
+  isHistory?: boolean;          // true for messages loaded from server history
+  _serverAudioUrl?: string;     // presigned URL, loaded lazily on play click
 }
 
 const _PHONEME_TIPS: Record<string, string> = {
@@ -161,7 +163,9 @@ export default function MessageBubble({
             {isAgent ? t('common.agent') : t('common.you')}
           </span>
           <span className="text-[10px] text-gray-400">{timeStr}</span>
-          {!message.typing && onReplay && <ReplayButton onClick={onReplay} />}
+          {!message.typing && (onReplay || (message.isHistory && message._serverAudioUrl)) && (
+            <ReplayButton onClick={onReplay ?? (() => {})} />
+          )}
           {!message.typing &&
             !isAgent &&
             (message.score !== undefined || message.scoreDetails?.overall !== undefined) && (

@@ -33,10 +33,6 @@ import {
 import { SiOpenai } from 'react-icons/si';
 
 import { chatRespond, assessPronunciation, toWav } from '../api/chat';
-import {
-  saveSession as saveSessionHistory,
-  getSession as getSessionHistory,
-} from '../api/sessionHistory';
 import { getAuthSession, clearAuthSession } from '../auth/tokenStorage';
 import {
   AgentWaveform,
@@ -48,6 +44,14 @@ import {
 import type { Message, Mistake } from '../components/voice-agent';
 import { useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
+import { clearConversation, fetchForTopic, deleteConversation, fetchMessagesWithScores } from '../api/conversations';
+import { dbClearConversationData } from '../lib/db';
+import { evictConversationAudio } from '../lib/audioCache';
+import { queryClient } from '../lib/queryClient';
+import { useQuery } from '@tanstack/react-query';
+import { ConversationSidebar } from '../components/voice-agent';
+import { TOPICS_FLAT, type TopicId as TopicIdConst } from '../constants/topics';
+import type { MessageWithScoreOut } from '../api/conversations';
 
 interface AuthUser {
   display_name: string;
@@ -104,31 +108,8 @@ const LANGUAGES: Language[] = ['English', 'Vietnamese'];
 const MODELS: Model[] = ['OpenAI GPT 5', 'OpenAI GPT 4o', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro'];
 const GENDERS: Gender[] = ['Male', 'Female'];
 
-const TOPICS = [
-  { id: 'daily', label: 'Daily Conversation', desc: 'Giao tiếp hàng ngày' },
-  {
-    id: 'ielts1',
-    label: 'IELTS Speaking Part 1',
-    desc: 'Giới thiệu bản thân, cuộc sống',
-  },
-  {
-    id: 'ielts2',
-    label: 'IELTS Speaking Part 2',
-    desc: 'Nói dài về một chủ đề',
-  },
-  {
-    id: 'ielts3',
-    label: 'IELTS Speaking Part 3',
-    desc: 'Thảo luận ý kiến, phân tích',
-  },
-  { id: 'travel', label: 'Travel & Tourism', desc: 'Du lịch, khám phá' },
-  { id: 'career', label: 'Work & Career', desc: 'Công việc, sự nghiệp' },
-  { id: 'education', label: 'Education', desc: 'Giáo dục, học tập' },
-  { id: 'environment', label: 'Environment', desc: 'Môi trường, thiên nhiên' },
-  { id: 'technology', label: 'Technology', desc: 'Công nghệ, đổi mới' },
-  { id: 'health', label: 'Health & Lifestyle', desc: 'Sức khỏe, lối sống' },
-];
-type TopicId = (typeof TOPICS)[number]['id'];
+const TOPICS = TOPICS_FLAT;
+type TopicId = TopicIdConst;
 
 const LANGUAGE_CODES: Record<Language, string> = {
   English: 'en-US',
@@ -214,127 +195,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     // This dropdown controls the speech/assessment language only.
     setLanguage(next);
   }, []);
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const initialMessagesAndId = useMemo(() => {
+  const [topic, setTopic] = useState<TopicId | null>(() => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const sid = params.get('session');
-      if (sid) {
-        const saved = getSessionHistory(sid);
-        if (saved) {
-          const rehydrated = ((saved.messages as Message[]) ?? []).map(m => {
-            const ts =
-              m.timestamp instanceof Date
-                ? m.timestamp
-                : new Date(m.timestamp as unknown as string | number);
-            // Drop any persisted `blob:` object URLs — they are not valid after
-            // a page reload. Also ensure we don't rehydrate binary Blobs.
-            const userAudioUrl =
-              typeof m.userAudioUrl === 'string' && m.userAudioUrl.startsWith('blob:')
-                ? undefined
-                : m.userAudioUrl;
-            return {
-              ...m,
-              timestamp: ts,
-              audioUrl: undefined,
-              userAudioUrl,
-              audioBlob: undefined,
-            };
-          });
-          return {
-            messages: rehydrated,
-            sessionId: sid,
-            topic: saved.topicKey as TopicId | null,
-          };
-        }
-      }
-    } catch {}
-    return {
-      messages: [] as Message[],
-      sessionId: null as string | null,
-      topic: null as TopicId | null,
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const _initialTopicAndLabel = useMemo(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('session') && initialMessagesAndId.topic) {
-        return {
-          topic: initialMessagesAndId.topic as TopicId | null,
-          label: null as string | null,
-          subOption: null as string | null,
-        };
-      }
-      const raw = params.get('topic') || sessionStorage.getItem('va_selected_topic');
-      if (!raw) {
-        return { topic: null as TopicId | null, label: null as string | null, subOption: null as string | null };
-      }
-      sessionStorage.removeItem('va_selected_topic');
-      const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
-        'Daily Conversation': 'daily',
-        'IELTS Part 1': 'ielts1',
-        'IELTS Part 2': 'ielts2',
-        'Academic Discussion': 'ielts3',
-        'Describe a person': 'ielts2',
-        'Describe a place': 'ielts2',
-        'Job Interview': 'career',
-        'Office Meeting': 'career',
-        Presentations: 'career',
-        Negotiation: 'career',
-        'Email & Phone': 'career',
-        Shopping: 'daily',
-        Healthcare: 'health',
-        'Family & Friends': 'daily',
-        Hobbies: 'daily',
-        'Travel & Tourism': 'travel',
-        'Food & Restaurant': 'travel',
-        'Hotel & Booking': 'travel',
-        'Culture & Customs': 'travel',
-        'Airport English': 'travel',
-      };
-      const DASHBOARD_TO_SUB_OPTION: Record<string, string> = {
-        'Daily Conversation': 'weekend_plans',
-        Shopping: 'shopping_return',
-        Healthcare: 'doctor_visit',
-        'Family & Friends': 'weekend_plans',
-        Hobbies: 'weekend_plans',
-        'IELTS Part 1': 'part_1_personal_questions',
-        'IELTS Part 2': 'part_2_cue_card',
-        'Academic Discussion': 'part_3_discussion',
-        'Describe a person': 'part_2_cue_card',
-        'Describe a place': 'part_2_cue_card',
-        'Job Interview': 'tell_me_about_yourself',
-        'Office Meeting': 'project_update_meeting',
-        Presentations: 'project_update_meeting',
-        Negotiation: 'salary_negotiation',
-        'Email & Phone': 'Email & Phone',
-        'Travel & Tourism': 'asking_directions',
-        'Food & Restaurant': 'ordering_food',
-        'Hotel & Booking': 'hotel_booking',
-        'Culture & Customs': 'Culture & Customs',
-        'Airport English': 'airport_check_in',
-      };
-      const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
-      if (mappedId) {
-        return {
-          topic: mappedId,
-          label: null,
-          subOption: DASHBOARD_TO_SUB_OPTION[raw] ?? null,
-        };
-      }
-      return { topic: null as TopicId | null, label: raw, subOption: raw };
-    } catch {
-      return { topic: null as TopicId | null, label: null as string | null, subOption: null as string | null };
-    }
-  }, [initialMessagesAndId]);
-  const [topic, setTopic] = useState<TopicId | null>(_initialTopicAndLabel.topic);
-  const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(
-    _initialTopicAndLabel.label
-  );
-  const [subOption, setSubOption] = useState<string | null>(_initialTopicAndLabel.subOption);
+      const raw = new URLSearchParams(window.location.search).get('topic');
+      return (TOPICS_FLAT.find(t => t.id === raw)?.id ?? null) as TopicId | null;
+    } catch { return null; }
+  });
+  const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(null);
+  const [subOption, setSubOption] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [model, setModel] = useState<Model>('OpenAI GPT 5');
@@ -349,13 +217,18 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const selectedMicIdRef = useRef<string>('');
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  // Computed once via useMemo with empty deps — this hits localStorage and
-  // parses URL params, so we don't want to redo it on every render. Empty
-  // deps guarantee a single computation and a stable identity across all
-  // renders, so any code that closes over it (like the topic-init effect
-  // below) sees the exact same object that initialised state.
-  const [messages, setMessages] = useState<Message[]>(initialMessagesAndId.messages);
-  const sessionIdRef = useRef<string | null>(initialMessagesAndId.sessionId);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const authSession = useMemo(() => getAuthSession(), []);
+  const { data: forTopicData } = useQuery({
+    queryKey: ['for-topic', topic],
+    queryFn: () => fetchForTopic(authSession?.token ?? '', topic!),
+    enabled: !!topic && !!authSession?.token,
+    staleTime: 30_000,
+  });
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
   const selectedMsg =
     expandedMsgId !== null ? (messages.find(m => m.id === expandedMsgId) ?? null) : null;
@@ -445,27 +318,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // rapid clicks on "New session" / Connect can never let a stale timer
   // overwrite the current status / typing state.
   const sessionVersionRef = useRef(0);
-  const msgCounterRef = useRef(
-    (() => {
-      // Math.max(...spread) returns -Infinity on an empty array and silently
-      // ignores non-numeric IDs mapped to 0, which could produce a counter
-      // lower than an existing string-form ID. Use reduce instead so we can
-      // explicitly skip non-finite values and always start above every
-      // existing message ID regardless of its original type.
-      const maxId = initialMessagesAndId.messages.reduce((max, m) => {
-        const id = typeof m.id === 'number' ? m.id : Number(m.id);
-        return Number.isFinite(id) && id > 0 ? Math.max(max, id) : max;
-      }, 100);
-      return maxId + 1;
-    })()
-  );
+  const msgCounterRef = useRef(1);
+  const messagesRef = useRef<Message[]>([]);
   const feedbackCounterRef = useRef(200);
   const micPermissionInFlightRef = useRef<Promise<boolean> | null>(null);
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
-  // Guards against double-saving the same session when both visibilitychange
-  // and the unmount cleanup fire in rapid succession (e.g. tab close on
-  // mobile). Reset to false at the start of every new session.
-  const hasSavedCurrentSessionRef = useRef(false);
   const ttsActiveRef = useRef(false);
   const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
@@ -493,6 +350,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   useEffect(() => {
     selectedMicIdRef.current = selectedMicId;
   }, [selectedMicId]);
+  useLayoutEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   // `currentUser` is initialised from `initialUser` in the useState initializer above.
   // We intentionally avoid calling setState synchronously from an effect here.
 
@@ -955,16 +815,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // even if something else later clears the `audioBlob` property.
       if (audioBlob) audioBlobsRef.current[userId] = audioBlob;
 
-      const historyPayload: { role: string; text: string }[] = [
-        ...messages
-          .filter(message => !message.typing)
-          .map(message => ({
-            role: message.role === 'agent' ? 'assistant' : 'user',
-            text: message.text,
-          })),
-        { role: 'user', text: trimmed },
-      ];
-
       setMessages((prev: Message[]) => [
         ...prev,
         userMsg,
@@ -980,20 +830,25 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       inputRef.current?.focus();
       setAgentTyping(true);
 
+      let serverUserMessageId: string | undefined;
       try {
         if (session?.token) {
           const data = await chatRespond({
             token: session.token,
             text: trimmed,
             audioBlob,
-            history: historyPayload,
-            topic:
-              TOPICS.find(item => item.id === (topic as TopicId | undefined))?.label ??
-              topic ??
-              undefined,
+            topic: topic ?? undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
+            conversationId: currentConversationId ?? undefined,
           });
+
+          if (data.conversation_id) {
+            setCurrentConversationId(data.conversation_id);
+          }
+          if (data.user_message_id) {
+            serverUserMessageId = data.user_message_id;
+          }
 
           const responseText =
             String(data.response_text || '').trim() || 'I am ready to help you practice.';
@@ -1055,6 +910,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               audioBlob,
               referenceText: trimmed,
               language: LANGUAGE_CODES[language],
+              messageId: serverUserMessageId ?? null,
             });
 
             const pron = Math.round(assessment.pron_score ?? 0);
@@ -1453,27 +1309,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     [chatInput, status, agentTyping, sendChatMessage]
   );
 
-  // Mirror the values persistSession needs into refs. Using useLayoutEffect
-  // instead of bare render-body assignments ensures these refs are only
-  // updated when React actually commits the render to the DOM. In Concurrent
-  // Mode, React can render a component multiple times without committing
-  // (e.g. for priority-based preemption); bare assignments would leave refs
-  // holding values from an abandoned, never-committed render, which could
-  // cause persistSession to save stale data.
-  const messagesRef = useRef<Message[]>([]);
-  const sessionSummaryRef = useRef<typeof sessionSummary | null>(null);
-  const topicRef = useRef<TopicId | null>(null);
-  const customTopicLabelRef = useRef<string | null>(null);
-  // Sync refs with latest values on commit. This pattern intentionally
-  // mutates `.current` so the persisted handlers read the latest state.
-  /* eslint-disable react-hooks/immutability */
-  useLayoutEffect(() => {
-    messagesRef.current = messages;
-    sessionSummaryRef.current = sessionSummary;
-    topicRef.current = topic;
-    customTopicLabelRef.current = customTopicLabel;
-  }, [messages, sessionSummary, topic, customTopicLabel]);
-  /* eslint-enable react-hooks/immutability */
   // ---------------------------------------------------------------------------
   // statusRef + setStatusSync
   // ---------------------------------------------------------------------------
@@ -1493,41 +1328,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setStatus(next); // triggers async React re-render
   }, []); // stable: closes only over refs and the React state setter (both stable)
 
-  const persistSession = useCallback(() => {
-    if (hasSavedCurrentSessionRef.current) return;
-    const currentMessages = messagesRef.current;
-    if (!currentMessages.length) return;
-    hasSavedCurrentSessionRef.current = true;
-    const currentSummary = sessionSummaryRef.current;
-    const currentTopic = topicRef.current;
-    const currentCustomTopicLabel = customTopicLabelRef.current;
-    const topicLabel =
-      currentCustomTopicLabel ??
-      TOPICS.find(t => t.id === currentTopic)?.label ??
-      'Daily Conversation';
-    const startedAt = sessionStartRef.current ?? Date.now();
-    if (!sessionIdRef.current) {
-      sessionIdRef.current = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    }
-    saveSessionHistory({
-      id: sessionIdRef.current,
-      topic: topicLabel,
-      topicKey: currentTopic,
-      avgScore: currentSummary?.scores.overall ?? 0,
-      sentenceCount: currentSummary?.sentenceCount ?? 0,
-      corrections: currentSummary?.totalErrors ?? 0,
-      durationMs: Date.now() - startedAt,
-      scores: currentSummary?.scores ?? null,
-      topErrors: currentSummary?.topErrors ?? [],
-      messages: currentMessages,
-    });
-  }, []);
 
   const startNewSession = useCallback(() => {
     window.speechSynthesis?.cancel();
     ttsActiveRef.current = false;
-    // Allow the new session to be persisted when the time comes.
-    hasSavedCurrentSessionRef.current = false;
     // Cancel any in-flight connect timers from a previous startNewSession /
     // handleConnect call so they can't fire after we've moved on.
     clearTimers();
@@ -1538,7 +1342,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     clearLocalAudioUrls();
     setFeedbacks([]);
     sessionStartRef.current = Date.now();
-    sessionIdRef.current = null;
+
+    if (currentConversationId) {
+      const session = getAuthSession();
+      const convId = currentConversationId;
+      const clearedAt = new Date().toISOString();
+      clearConversation(session?.token ?? '', convId)
+        .then(() => dbClearConversationData(convId, clearedAt))
+        .then(() => evictConversationAudio(convId))
+        .then(() => queryClient.invalidateQueries({ queryKey: ['for-topic', topic] }))
+        .catch(err => console.warn('Failed to sync clear:', err));
+    }
+    setCurrentConversationId(null);
+
     setStatusSync('connecting');
 
     const t0 = setTimeout(() => {
@@ -1550,7 +1366,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }, 600);
 
     timersRef.current.push(t0);
-  }, [clearTimers, clearLocalAudioUrls, setStatusSync]);
+  }, [clearTimers, clearLocalAudioUrls, setStatusSync, currentConversationId]);
 
   const handleConnect = useCallback(() => {
     // Read status from a ref so rapid clicks within a single event-loop
@@ -1573,14 +1389,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setAgentTyping(false);
       setExpandedMsgId(null);
       clearTimers();
-      persistSession();
       return;
     }
     if (currentStatus === 'disconnected') {
       setSummaryDismissed(true);
       clearTimers();
-      // Allow the upcoming session to be persisted when it ends.
-      hasSavedCurrentSessionRef.current = false;
       const myVersion = ++sessionVersionRef.current;
       if (sessionStartRef.current === null) {
         sessionStartRef.current = Date.now();
@@ -1596,39 +1409,165 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       timersRef.current.push(t0);
     }
-  }, [clearTimers, persistSession, setStatusSync]);
+  }, [clearTimers, setStatusSync]);
 
-  const persistSessionRef = useRef(persistSession);
-  // Keep ref updated synchronously after render but before paint so the
-  // handlers (visibilitychange / beforeunload) always see the latest
-  // closure. useLayoutEffect mirrors the intent without violating render
-  // rules.
-  useLayoutEffect(() => {
-    persistSessionRef.current = persistSession;
-  }, [persistSession]);
-
-  useEffect(() => {
-    const onHide = () => {
-      try {
-        persistSessionRef.current?.();
-      } catch {}
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') onHide();
-    };
-    window.addEventListener('beforeunload', onHide);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      window.removeEventListener('beforeunload', onHide);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
+  const handleSelectConversation = useCallback(async (conversationId: string) => {
+    const token = getAuthSession()?.token ?? '';
+    setSidebarOpen(false);
+    setHistoryLoading(true);
+    setMessages([]);
+    setExpandedMsgId(null);
+    setCurrentConversationId(conversationId);
+    try {
+      const raw = await fetchMessagesWithScores(token, conversationId);
+      const rehydrated: Message[] = raw.map((m: MessageWithScoreOut, index: number) => ({
+        id: -(index + 1),
+        role: (m.role === 'assistant' ? 'agent' : m.role) as 'agent' | 'user',
+        text: m.text_content ?? '',
+        timestamp: new Date(m.created_at),
+        audioUrl: undefined,
+        _serverAudioUrl: m.audio_url ?? undefined,
+        isHistory: true,
+        scoreDetails: m.score
+          ? {
+              overall: m.score.overall_score ?? 0,
+              pronunciation: m.score.overall_score ?? 0,
+              fluency: m.score.fluency_score ?? 0,
+              accuracy: m.score.accuracy_score ?? 0,
+              completeness: m.score.completeness_score ?? undefined,
+            }
+          : undefined,
+        mistakes: m.score?.words
+          .filter(w => w.error_type && w.error_type !== 'None')
+          .map(w => ({
+            wrong: w.word,
+            correct: '',
+            type: 'Pronunciation' as const,
+            note: w.error_type ?? undefined,
+          })) ?? [],
+      }));
+      setMessages(rehydrated);
+      setTimeout(() => {
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } catch (err) {
+      console.warn('Failed to load conversation history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
   }, []);
 
+  const handleClearHistory = useCallback(async () => {
+    if (!currentConversationId) return;
+    const token = getAuthSession()?.token ?? '';
+    try {
+      await clearConversation(token, currentConversationId);
+      setMessages([]);
+      setExpandedMsgId(null);
+      queryClient.invalidateQueries({ queryKey: ['for-topic', topic] });
+    } catch (err) {
+      console.warn('Failed to clear conversation:', err);
+    } finally {
+      setShowClearConfirm(false);
+    }
+  }, [currentConversationId]);
+
+  // Auto-resume: when forTopicData loads (after mount or topic change), set the
+  // most recent conversation as active if none is selected yet.
+  useEffect(() => {
+    if (!forTopicData) return;
+    const latest = forTopicData.conversations[0];
+    if (!latest || currentConversationId !== null) return;
+    const token = getAuthSession()?.token ?? '';
+    setCurrentConversationId(latest.id);
+    setHistoryLoading(true);
+    setMessages([]);
+    setExpandedMsgId(null);
+    fetchMessagesWithScores(token, latest.id)
+      .then((raw: MessageWithScoreOut[]) => {
+        const rehydrated: Message[] = raw.map((m, index) => ({
+          id: -(index + 1),
+          role: (m.role === 'assistant' ? 'agent' : m.role) as 'agent' | 'user',
+          text: m.text_content ?? '',
+          timestamp: new Date(m.created_at),
+          audioUrl: undefined,
+          _serverAudioUrl: m.audio_url ?? undefined,
+          isHistory: true,
+          scoreDetails: m.score
+            ? {
+                overall: m.score.overall_score ?? 0,
+                pronunciation: m.score.overall_score ?? 0,
+                fluency: m.score.fluency_score ?? 0,
+                accuracy: m.score.accuracy_score ?? 0,
+                completeness: m.score.completeness_score ?? undefined,
+              }
+            : undefined,
+          mistakes: m.score?.words
+            .filter(w => w.error_type && w.error_type !== 'None')
+            .map(w => ({
+              wrong: w.word,
+              correct: '',
+              type: 'Pronunciation' as const,
+              note: w.error_type ?? undefined,
+            })) ?? [],
+        }));
+        setMessages(rehydrated);
+        setTimeout(() => {
+          chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      })
+      .catch(err => console.warn('Auto-resume failed:', err))
+      .finally(() => setHistoryLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forTopicData]);
+
+  const handleNewChat = useCallback(() => {
+    if (forTopicData?.limit_reached) return;
+    setCurrentConversationId(null);
+    setMessages([]);
+    setExpandedMsgId(null);
+  }, [forTopicData?.limit_reached]);
+
+  const handleTopicSelect = useCallback((topicCode: string) => {
+    setTopic(topicCode as TopicId);
+    setCustomTopicLabel(null);
+    setSubOption(null);
+    setCurrentConversationId(null);
+    setMessages([]);
+    setExpandedMsgId(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('topic', topicCode);
+      window.history.replaceState({}, '', url.toString());
+    } catch {}
+  }, []);
+
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    const token = getAuthSession()?.token ?? '';
+    try {
+      await deleteConversation(token, conversationId);
+      if (conversationId === currentConversationId) {
+        setCurrentConversationId(null);
+        setMessages([]);
+        setExpandedMsgId(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ['for-topic', topic] });
+    } catch (err) {
+      console.warn('Failed to delete conversation:', err);
+    }
+  }, [currentConversationId, topic]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const convId = params.get('conversation');
+    if (convId && authSession?.token) {
+      void handleSelectConversation(convId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally run only once on mount
+
   useEffect(() => {
     return () => {
-      try {
-        persistSessionRef.current?.();
-      } catch {}
       clearTimers();
       clearLocalAudioUrls();
       if (mediaRecorderRef.current?.state === 'recording') {
@@ -1652,6 +1591,17 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         data-va="header"
         className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]"
       >
+        {/* Mobile sidebar toggle */}
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(v => !v)}
+          className="md:hidden mr-2 p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+          aria-label="Toggle sidebar"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={() => navigate('/dashboard')}
@@ -1786,6 +1736,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       {/* Main content */}
       <div data-va="content" className="flex flex-1 overflow-hidden">
+        {/* Left sidebar — conversation history */}
+        <ConversationSidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          isDark={isDark}
+          activeTopic={topic ?? null}
+          activeConversationId={currentConversationId}
+          token={authSession?.token ?? ''}
+          onSelectConversation={handleSelectConversation}
+          onNewChat={handleNewChat}
+          onDeleteConversation={handleDeleteConversation}
+          onTopicSelect={handleTopicSelect}
+        />
         {/* Left panel: Audio & Video */}
         <div
           data-va="left"
@@ -2076,6 +2039,46 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               )}
             </div>
             <div className="flex items-center gap-3">
+              {currentConversationId && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowClearConfirm(v => !v)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
+                    title={t('va.conv.clearHistory')}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    {t('va.conv.clearHistory')}
+                  </button>
+                  {showClearConfirm && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowClearConfirm(false)} />
+                      <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 animate-fadeIn">
+                        <p className="text-xs text-gray-700 mb-3">{t('va.conv.clearConfirm')}</p>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setShowClearConfirm(false)}
+                            className="px-3 py-1 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleClearHistory()}
+                            className="px-3 py-1 text-xs rounded-lg bg-red-600 text-white hover:bg-red-700"
+                          >
+                            {t('va.conv.clearConfirmBtn')}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <SiOpenai className="w-4 h-4 text-gray-500" />
                 <SelectDropdown value={model} options={MODELS} onChange={setModel} />
@@ -2093,6 +2096,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             data-va="messages"
             className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
           >
+            {historyLoading && (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="w-4 h-4 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+                  {t('va.history.loading')}
+                </div>
+              </div>
+            )}
             {status === 'disconnected' && messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
@@ -2149,12 +2160,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => {
-                          persistSession();
-                          navigate('/dashboard', {
-                            state: { highlightSessionId: sessionIdRef.current },
-                          });
-                        }}
+                        onClick={() => navigate('/dashboard')}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold text-violet-700 bg-white border border-violet-300 hover:bg-violet-50 transition-colors"
                       >
                         <span>📊</span>
@@ -2268,9 +2274,18 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               const isUser = msg.role === 'user';
               const canReplay = msg.role === 'agent' || Boolean(msg.userAudioUrl);
               const expandable = isUser && !msg.typing;
-              const replay = canReplay
+              const replay = canReplay || (msg.isHistory && msg._serverAudioUrl)
                 ? () => {
-                    void playMessageAudio(msg.id);
+                    if (msg.isHistory && msg._serverAudioUrl && !msg.audioUrl) {
+                      setMessages(prev =>
+                        prev.map(m =>
+                          m.id === msg.id ? { ...m, audioUrl: m._serverAudioUrl } : m
+                        )
+                      );
+                      setTimeout(() => void playMessageAudio(msg.id), 50);
+                    } else {
+                      void playMessageAudio(msg.id);
+                    }
                   }
                 : undefined;
 
@@ -2424,14 +2439,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <p className="text-[10px] text-gray-500 mb-3">{t('va.settings.subtitle')}</p>
             <div className="space-y-1">
               {TOPICS.map(tp => {
-                const tpTitle =
-                  t(`topic.${tp.label}.title`) === `topic.${tp.label}.title`
-                    ? tp.label
-                    : t(`topic.${tp.label}.title`);
-                const tpDesc =
-                  t(`topic.${tp.label}.desc`) === `topic.${tp.label}.desc`
-                    ? tp.desc
-                    : t(`topic.${tp.label}.desc`);
+                const tpTitle = t(`topic.${tp.id}.title`) || tp.label;
+                const tpDesc  = t(`topic.${tp.id}.desc`)  || tp.desc;
                 return (
                   <button
                     key={tp.id}
@@ -2442,7 +2451,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                       setShowSettings(false);
                       try {
                         const url = new URL(window.location.href);
-                        url.searchParams.set('topic', tp.label);
+                        url.searchParams.set('topic', tp.id);
                         window.history.replaceState({}, '', url.toString());
                       } catch {}
                     }}
