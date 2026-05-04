@@ -190,3 +190,18 @@ class AssessmentResponse(BaseModel):
     completeness_score: float | None
     prosody_score: float | None
     words: list[WordResult]
+
+
+class TopicOut(BaseModel):
+    code: str
+    title: str
+    description: str | None
+    difficulty_level: str | None
+    sort_order: int
+
+
+class CategoryWithTopicsOut(BaseModel):
+    code: str
+    title: str
+    sort_order: int
+    topics: list[TopicOut]
