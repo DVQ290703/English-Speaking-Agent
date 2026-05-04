@@ -1,44 +1,147 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { z } from 'zod';
 
-import { registerRequest } from "../api/auth";
-import { saveAuthSession } from "../auth/tokenStorage";
+import { registerRequest } from '../api/auth';
+import { useAuth } from '../auth/AuthContext';
+import Spinner from '../components/ui/Spinner';
+import { useT } from '../i18n/useLanguage';
+
+// ---------------------------------------------------------------------------
+// Zod schema
+// ---------------------------------------------------------------------------
+const registerSchema = z
+  .object({
+    display_name: z
+      .string()
+      .min(1, 'Please enter your display name.')
+      .max(50, 'Display name must be 50 characters or fewer.'),
+    email: z.string().min(1, 'Please enter your email.').email('Email format is invalid.'),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters.')
+      .max(128, 'Password is too long.'),
+    confirmPassword: z.string().min(1, 'Please confirm your password.'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
+// ---------------------------------------------------------------------------
+// Password strength
+// ---------------------------------------------------------------------------
+function getStrength(pw) {
+  if (!pw) return null;
+  if (pw.length < 8) return 'weak';
+  let score = 0;
+  if (/[a-z]/.test(pw)) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^a-zA-Z0-9]/.test(pw)) score++;
+  if (score <= 2) return 'medium';
+  return 'strong';
+}
+
+const STRENGTH_META = {
+  weak: { label: 'Weak', bars: 1, color: 'bg-red-500', text: 'text-red-500' },
+  medium: { label: 'Medium', bars: 2, color: 'bg-amber-400', text: 'text-amber-500' },
+  strong: { label: 'Strong', bars: 3, color: 'bg-emerald-500', text: 'text-emerald-600' },
+};
+
+function PasswordStrengthBar({ password }) {
+  const strength = useMemo(() => getStrength(password), [password]);
+  if (!strength) return null;
+  const meta = STRENGTH_META[strength];
+
+  return (
+    <div className="mt-1.5 space-y-1">
+      <div className="flex gap-1">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+              i < meta.bars ? meta.color : 'bg-gray-200'
+            }`}
+          />
+        ))}
+      </div>
+      <p className={`text-xs font-semibold flex items-center gap-1 ${meta.text}`}>
+        {strength === 'strong' && (
+          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+        )}
+        {meta.label} password
+      </p>
+    </div>
+  );
+}
+
+function EyeIcon({ open }) {
+  return open ? (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
 
 const initialForm = {
-  name: "",
-  email: "",
-  password: "",
-  confirmPassword: "",
+  display_name: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
 };
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const t = useT();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState("");
+  const [apiError, setApiError] = useState('');
 
-  const updateField = (field) => (e) =>
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const updateField = (field) => (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   const validate = () => {
+    const result = registerSchema.safeParse(form);
+    if (result.success) return {};
     const errs = {};
-    if (!form.name.trim()) errs.name = "Please enter your name.";
-    if (!form.email.trim()) {
-      errs.email = "Please enter your email.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      errs.email = "Email format is invalid.";
-    }
-    if (!form.password) {
-      errs.password = "Please enter a password.";
-    } else if (form.password.length < 8) {
-      errs.password = "Password must be at least 8 characters.";
-    }
-    if (!form.confirmPassword) {
-      errs.confirmPassword = "Please confirm your password.";
-    } else if (form.password !== form.confirmPassword) {
-      errs.confirmPassword = "Passwords do not match.";
+    for (const issue of result.error.issues) {
+      const key = issue.path[0];
+      if (key && !errs[key]) errs[key] = issue.message;
     }
     return errs;
   };
@@ -47,28 +150,28 @@ export default function RegisterPage() {
     e.preventDefault();
     const errs = validate();
     setErrors(errs);
-    setApiError("");
+    setApiError('');
     if (Object.keys(errs).length > 0) return;
 
     setIsSubmitting(true);
     try {
       const data = await registerRequest({
-        name: form.name.trim(),
+        display_name: form.display_name.trim(),
         email: form.email.trim(),
         password: form.password,
       });
-
-      saveAuthSession({
+      login({
         token: data.access_token,
         expiresIn: data.expires_in,
         user: data.user,
         remembered: false,
         loggedAt: Date.now(),
       });
-
-      navigate("/dashboard", { replace: true });
+      toast.success(t('toast.accountCreated'));
+      navigate('/dashboard', { replace: true });
     } catch (error) {
-      setApiError(error.message || "Registration failed. Please try again.");
+      const msg = error.message || t('toast.registerFailed');
+      setApiError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -84,15 +187,17 @@ export default function RegisterPage() {
         <section className="brand-panel">
           <p className="eyebrow">VOICE TRAINER</p>
           <h1>
-            Start your<br />
+            Start your
+            <br />
             <em>learning journey.</em>
           </h1>
           <p className="subtitle">
-            Create your free account and begin practising English speaking with real-time AI feedback, pronunciation scoring, and guided conversation drills.
+            Create your free account and begin practising English speaking with real-time AI
+            feedback, pronunciation scoring, and guided conversation drills.
           </p>
           <ul className="feature-list">
             <li>Personalised AI conversation partner</li>
-            <li>Real-time grammar & fluency corrections</li>
+            <li>Real-time grammar &amp; fluency corrections</li>
             <li>Progress tracked across every session</li>
           </ul>
         </section>
@@ -109,79 +214,91 @@ export default function RegisterPage() {
               <input
                 type="text"
                 placeholder="Nguyen Van A"
-                value={form.name}
-                onChange={updateField("name")}
+                value={form.display_name}
+                onChange={updateField('display_name')}
                 autoComplete="name"
               />
-              {errors.name && <small>{errors.name}</small>}
+              {errors.display_name && <small>{errors.display_name}</small>}
             </label>
-
             <label className="field">
               <span>Email</span>
               <input
                 type="email"
                 placeholder="you@example.com"
                 value={form.email}
-                onChange={updateField("email")}
+                onChange={updateField('email')}
                 autoComplete="email"
               />
               {errors.email && <small>{errors.email}</small>}
             </label>
-
+            <div className="field">
+              <label>
+                <span>Password</span>
+                <div className="password-row">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="At least 8 characters"
+                    value={form.password}
+                    onChange={updateField('password')}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    className="toggle-btn"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <EyeIcon open={!showPassword} />
+                  </button>
+                </div>
+              </label>
+              <PasswordStrengthBar password={form.password} />
+              {errors.password && <small>{errors.password}</small>}
+            </div>
             <label className="field">
-              <span>Password</span>
+              <span>Confirm password</span>
               <div className="password-row">
                 <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="At least 8 characters"
-                  value={form.password}
-                  onChange={updateField("password")}
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Re-enter password"
+                  value={form.confirmPassword}
+                  onChange={updateField('confirmPassword')}
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
                   className="toggle-btn"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showPassword ? (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  )}
+                  <EyeIcon open={!showConfirmPassword} />
                 </button>
               </div>
-              {errors.password && <small>{errors.password}</small>}
-            </label>
-
-            <label className="field">
-              <span>Confirm password</span>
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Re-enter password"
-                value={form.confirmPassword}
-                onChange={updateField("confirmPassword")}
-                autoComplete="new-password"
-              />
               {errors.confirmPassword && <small>{errors.confirmPassword}</small>}
             </label>
 
             <button type="submit" className="submit-btn" disabled={isSubmitting}>
-              {isSubmitting ? "Creating account..." : "Create account"}
+              {isSubmitting ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size={14} color="#fff" />
+                  {t('auth.creatingAccount')}
+                </span>
+              ) : (
+                'Create account'
+              )}
             </button>
-
             {apiError && <p className="error-msg">{apiError}</p>}
           </form>
 
           <p className="switch-link">
-            Already have an account?
-            <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }}>
+            Already have an account?{' '}
+            <a
+              href="/login"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/login');
+              }}
+            >
               Sign in
             </a>
           </p>
