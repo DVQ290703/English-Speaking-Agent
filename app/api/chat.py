@@ -16,7 +16,6 @@ from app.api._validators import _enforce_max_length, _validate_uuid
 from app.api.schemas import ChatResponse
 from app.core.ai_services import (
     _synthesize_audio_bytes,
-    normalize_history,
     run_langraph_agent,
     transcribe_audio,
 )
@@ -50,6 +49,32 @@ _GUARDRAIL_HTTP_STATUS: dict[str, int] = {
 }
 
 
+def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
+    """
+    Return the last `limit` visible (post-cleared_at) user+assistant turns
+    for the given conversation, oldest-first, ready for the LLM context.
+    Returns empty list if conv_id is None or no messages found.
+    """
+    if not conv_id:
+        return []
+    cur.execute(
+        """
+        SELECT m.role, m.text_content
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.conversation_id = %s
+          AND m.role IN ('user', 'assistant')
+          AND m.text_content IS NOT NULL
+          AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+        ORDER BY m.created_at DESC
+        LIMIT %s
+        """,
+        (conv_id, limit),
+    )
+    rows = cur.fetchall()
+    return [{"role": row[0], "content": row[1]} for row in reversed(rows)]
+
+
 def _insert_audio_asset(
     cur,
     *,
@@ -72,7 +97,6 @@ def _insert_audio_asset(
 @router.post("/respond", response_model=ChatResponse)
 def chat_respond(
     text: str | None = Form(default=None),
-    history: str | None = Form(default=None),
     topic: str | None = Form(default=None),
     sub_option: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
@@ -84,7 +108,6 @@ def chat_respond(
     logger.info("chat_respond start user_id=%s input_mode=%s conversation_id=%s", user_id, input_mode, conversation_id)
 
     text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
-    history = _enforce_max_length(history, field="history", max_chars=_MAX_HISTORY_CHARS)
     topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
     sub_option = _enforce_max_length(sub_option, field="sub_option", max_chars=_MAX_SUB_OPTION_CHARS)
 
@@ -176,28 +199,61 @@ def chat_respond(
                 conv_id = row[0]
             else:
                 topic_id = None
-                topic_clean = topic.strip() if topic else ""
+                topic_title = None
+                topic_clean = topic.strip().lower() if topic else ""
                 if topic_clean:
                     cur.execute(
-                        "SELECT id::text FROM topics WHERE code = %s LIMIT 1",
-                        (topic_clean.lower(),),
+                        "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
+                        (topic_clean,),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:
-                        topic_id = topic_row[0]
-                title = f"Chat on {topic_clean}" if topic_clean else "New Conversation"
+                        topic_id, topic_title = topic_row[0], topic_row[1]
+
+                if topic_id:
+                    # 5-limit: count active (non-deleted) conversations for this topic
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) FROM conversations
+                        WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+                        """,
+                        (user_id, topic_id),
+                    )
+                    active_count = cur.fetchone()[0]
+                    if active_count >= 5:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Conversation limit reached",
+                        )
+
+                    # Session number = total ever (including deleted) + 1
+                    cur.execute(
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND topic_id = %s",
+                        (user_id, topic_id),
+                    )
+                    total_ever = cur.fetchone()[0]
+                    title = f"{topic_title} - Session {total_ever + 1}"
+                else:
+                    title = "New Conversation"
+
                 cur.execute(
                     "INSERT INTO conversations (user_id, topic_id, title) VALUES (%s, %s, %s) RETURNING id::text",
                     (user_id, topic_id, title),
                 )
                 conv_id = cur.fetchone()[0]
-                logger.info("New conversation created conv_id=%s topic_id=%s", conv_id, topic_id)
+                logger.info(
+                    "New conversation created conv_id=%s topic_id=%s title=%r",
+                    conv_id, topic_id, title,
+                )
 
             cur.execute(
                 "SELECT COALESCE(MAX(turn_number), 0) + 1 FROM turns WHERE conversation_id = %s",
                 (conv_id,),
             )
             turn_number = cur.fetchone()[0]
+
+            # Server-side history — replaces client-owned history field
+            conversation_history = _fetch_visible_history(cur, conv_id)
 
     user_object_key: str | None = None
     user_mime_type = "audio/webm"
@@ -214,15 +270,26 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
-    conversation_history = normalize_history(history_raw=history, topic=topic, sub_option=sub_option)
+    # Convert DB history (list[dict]) to the "Role: text" string format the
+    # pipeline expects, and prepend topic/sub_option context lines so
+    # extract_prompt_context can build the dynamic system prompt.
+    history_lines: list[str] = []
+    if topic:
+        history_lines.append(f"Topic: {topic.strip()}")
+    if sub_option:
+        history_lines.append(f"Sub-option: {sub_option.strip()}")
+    for msg in conversation_history:
+        role_label = "User" if msg["role"] == "user" else "Assistant"
+        history_lines.append(f"{role_label}: {msg['content']}")
+
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),
-        len(conversation_history),
+        len(history_lines),
     )
     response_text, response_audio_bytes = run_langraph_agent(
         user_input=user_input,
-        history=conversation_history,
+        history=history_lines,
         voice_gender=voice_gender,
     )
 
@@ -351,4 +418,5 @@ def chat_respond(
         user_audio_url=user_audio_url,
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
+        user_message_id=user_message_id,
     )

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import uuid as _uuid
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import ValidationError
 
@@ -9,7 +12,7 @@ from app.api._audio import (
     _read_and_close_upload,
     _validate_uploaded_audio,
 )
-from app.api._validators import _enforce_max_length
+from app.api._validators import _enforce_max_length, _validate_uuid
 from app.api.schemas import (
     AssessmentResponse,
     PhonemeResult,
@@ -17,6 +20,7 @@ from app.api.schemas import (
     WordResult,
 )
 from app.core.ai_services import get_assessment_service
+from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import get_current_user_id
 
@@ -45,6 +49,7 @@ def assess_pronunciation(
     audio_file: UploadFile = File(...),
     reference_text: str | None = Form(default=None),
     language: str | None = Form(default=None),
+    message_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
     language = _normalize_language(_enforce_max_length(language, field="language", max_chars=10))
@@ -53,6 +58,8 @@ def assess_pronunciation(
         field="reference_text",
         max_chars=_MAX_REFERENCE_TEXT_CHARS,
     )
+    if message_id:
+        _validate_uuid(message_id, "message_id")
     logger.info(
         "assess_pronunciation start user_id=%s mode=%s language=%s",
         user_id,
@@ -123,28 +130,144 @@ def assess_pronunciation(
             )
             for w in result.get("Words", [])
         ]
-
-        logger.info(
-            "assess_pronunciation done user_id=%s mode=%s pron_score=%s recognized_length=%d",
-            user_id,
-            result.get("mode"),
-            pron.get("PronScore"),
-            len(result.get("display_text", "")),
-        )
-
-        return AssessmentResponse(
-            mode=result.get("mode", "unscripted"),
-            recognized_text=result.get("display_text", ""),
-            pron_score=pron.get("PronScore", 0.0),
-            accuracy_score=pron.get("AccuracyScore", 0.0),
-            fluency_score=pron.get("FluencyScore", 0.0),
-            completeness_score=pron.get("CompletenessScore"),
-            prosody_score=pron.get("ProsodyScore"),
-            words=words,
-        )
     except ValidationError as exc:
         logger.error("AzureAssessment schema validation failed user_id=%s error=%s", user_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Azure returned an unrecognised response format",
         ) from exc
+
+    assessment_id = str(_uuid.uuid4())
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO pronunciation_assessments
+                        (id, message_id, user_id, reference_text, recognized_text,
+                         recognition_status, overall_score, accuracy_score, fluency_score,
+                         completeness_score, prosody_score,
+                         nbest_confidence, snr, offset_ticks, duration_ticks,
+                         raw_result_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        assessment_id,
+                        message_id or None,
+                        user_id,
+                        reference_text,
+                        result.get("display_text", ""),
+                        result.get("recognition_status"),
+                        pron.get("PronScore"),
+                        pron.get("AccuracyScore"),
+                        pron.get("FluencyScore"),
+                        pron.get("CompletenessScore"),
+                        pron.get("ProsodyScore"),
+                        result.get("Confidence"),
+                        result.get("snr"),
+                        result.get("offset_ticks"),
+                        result.get("duration_ticks"),
+                        json.dumps(result),
+                    ),
+                )
+                for idx, w in enumerate(result.get("Words", [])):
+                    w_pron = w.get("PronunciationAssessment", {})
+                    feedback = w_pron.get("Feedback", {}).get("Prosody", {})
+                    break_fb = feedback.get("Break", {})
+                    intonation_fb = feedback.get("Intonation", {})
+                    monotone = intonation_fb.get("Monotone", {})
+                    cur.execute(
+                        """
+                        INSERT INTO pronunciation_word_details
+                            (assessment_id, word_index, word, accuracy_score, error_type,
+                             offset_ticks, duration_ticks,
+                             break_error_types, unexpected_break_confidence,
+                             missing_break_confidence, break_length_ticks,
+                             intonation_error_types, monotone_confidence)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (
+                            assessment_id,
+                            idx,
+                            w.get("Word", ""),
+                            w_pron.get("AccuracyScore"),
+                            w_pron.get("ErrorType", "None"),
+                            w.get("Offset"),
+                            w.get("Duration"),
+                            break_fb.get("ErrorTypes") or [],
+                            (break_fb.get("UnexpectedBreak") or {}).get("Confidence"),
+                            (break_fb.get("MissingBreak") or {}).get("Confidence"),
+                            break_fb.get("BreakLength"),
+                            intonation_fb.get("ErrorTypes") or [],
+                            monotone.get("SyllablePitchDeltaConfidence"),
+                        ),
+                    )
+                    word_detail_id = cur.fetchone()[0]
+
+                    for s_idx, s in enumerate(w.get("Syllables") or []):
+                        s_pron = s.get("PronunciationAssessment", {})
+                        cur.execute(
+                            """
+                            INSERT INTO pronunciation_syllable_details
+                                (word_detail_id, syllable_index, syllable, grapheme,
+                                 accuracy_score, offset_ticks, duration_ticks)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                word_detail_id,
+                                s_idx,
+                                s.get("Syllable", ""),
+                                s.get("Grapheme"),
+                                s_pron.get("AccuracyScore"),
+                                s.get("Offset"),
+                                s.get("Duration"),
+                            ),
+                        )
+
+                    for p_idx, p in enumerate(w.get("Phonemes") or []):
+                        p_pron = p.get("PronunciationAssessment", {})
+                        cur.execute(
+                            """
+                            INSERT INTO pronunciation_phoneme_details
+                                (word_detail_id, phoneme_index, phoneme,
+                                 accuracy_score, offset_ticks, duration_ticks)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                word_detail_id,
+                                p_idx,
+                                p.get("Phoneme", ""),
+                                p_pron.get("AccuracyScore"),
+                                p.get("Offset"),
+                                p.get("Duration"),
+                            ),
+                        )
+        logger.info(
+            "assess_pronunciation persisted assessment_id=%s user_id=%s message_id=%s words=%d",
+            assessment_id, user_id, message_id, len(result.get("Words", [])),
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist assessment assessment_id=%s user_id=%s", assessment_id, user_id
+        )
+
+    logger.info(
+        "assess_pronunciation done user_id=%s mode=%s pron_score=%s recognized_length=%d",
+        user_id,
+        result.get("mode"),
+        pron.get("PronScore"),
+        len(result.get("display_text", "")),
+    )
+
+    return AssessmentResponse(
+        assessment_id=assessment_id,
+        mode=result.get("mode", "unscripted"),
+        recognized_text=result.get("display_text", ""),
+        pron_score=pron.get("PronScore", 0.0),
+        accuracy_score=pron.get("AccuracyScore", 0.0),
+        fluency_score=pron.get("FluencyScore", 0.0),
+        completeness_score=pron.get("CompletenessScore"),
+        prosody_score=pron.get("ProsodyScore"),
+        words=words,
+    )

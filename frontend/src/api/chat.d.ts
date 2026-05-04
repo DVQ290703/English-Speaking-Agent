@@ -16,6 +16,7 @@ export interface ChatRespondResult {
   user_audio_url?: string | null;
   assistant_audio_url?: string | null;
   conversation_id?: string;
+  user_message_id?: string | null;
 }
 
 export function chatRespond(params: ChatRespondParams): Promise<ChatRespondResult>;
@@ -25,6 +26,7 @@ export interface AssessPronunciationParams {
   audioBlob: Blob;
   referenceText?: string | null;
   language?: string | null;
+  messageId?: string | null;
 }
 
 export interface PhonemeResult {

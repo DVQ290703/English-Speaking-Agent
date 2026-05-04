@@ -19,6 +19,27 @@ def _build_lookup(mapping: dict[str, object] | None) -> dict[str, deque[object]]
     return {_normalize_sql(pattern): _coerce_result_queue(value) for pattern, value in mapping.items()}
 
 
+def _build_fetchall_lookup(mapping: dict[str, object] | None) -> dict[str, deque[object]]:
+    """Build a lookup for fetchall results.
+
+    Each value in the mapping is treated as a single complete fetchall result
+    (i.e. a list of rows). Multiple calls with the same pattern will return
+    successive values if a list-of-lists is provided.
+    """
+    if not mapping:
+        return {}
+    result = {}
+    for pattern, value in mapping.items():
+        key = _normalize_sql(pattern)
+        # If value is a list of tuples/rows, treat it as ONE fetchall result.
+        # If value is a list of lists, treat each inner list as a successive result.
+        if isinstance(value, list) and value and isinstance(value[0], list):
+            result[key] = deque(value)
+        else:
+            result[key] = deque([value])
+    return result
+
+
 def _match_sql_result(sql: str | None, lookup: dict[str, deque[object]]):
     if not sql:
         return None, False
@@ -48,7 +69,7 @@ def make_mock_connection(
     cursor = MagicMock()
     fetchone_queue = list(fetchone_side_effect)
     fetchone_lookup = _build_lookup(fetchone_by_sql)
-    fetchall_lookup = _build_lookup(fetchall_by_sql)
+    fetchall_lookup = _build_fetchall_lookup(fetchall_by_sql)
     state = {"last_sql": None}
 
     def execute(sql, params=None):

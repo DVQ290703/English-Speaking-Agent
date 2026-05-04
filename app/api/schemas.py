@@ -60,6 +60,7 @@ class ChatResponse(BaseModel):
     user_audio_url: str | None = None
     assistant_audio_url: str | None = None
     conversation_id: str
+    user_message_id: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -78,15 +79,67 @@ class ConversationOut(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     topic_id: str | None
+    topic_code: str | None = None
+    cleared_at: datetime | None = None
 
 
 class ConversationListResponse(BaseModel):
     conversations: list[ConversationOut]
 
 
+class ForTopicConversationOut(BaseModel):
+    id: str
+    title: str | None
+    status: str
+    session_number: int
+    started_at: datetime
+    updated_at: datetime
+
+
+class ForTopicResponse(BaseModel):
+    topic_code: str
+    topic_title: str
+    conversations: list[ForTopicConversationOut]
+    total: int
+    limit_reached: bool
+
+
 class ConversationMessagesResponse(BaseModel):
     conversation_id: str
     messages: list[MessageOut]
+
+
+class WordDetail(BaseModel):
+    word_index: int
+    word: str
+    accuracy_score: float | None = None
+    error_type: str | None = None
+    start_ms: int | None = None
+    duration_ms: int | None = None
+
+
+class MessageScoreOut(BaseModel):
+    overall_score: float | None = None
+    accuracy_score: float | None = None
+    fluency_score: float | None = None
+    completeness_score: float | None = None
+    prosody_score: float | None = None
+    words: list[WordDetail] = []
+
+
+class MessageWithScoreOut(BaseModel):
+    id: str
+    role: str
+    input_mode: str | None = None
+    text_content: str | None = None
+    created_at: datetime
+    audio_url: str | None = None
+    score: MessageScoreOut | None = None
+
+
+class ConversationWithScoresResponse(BaseModel):
+    conversation_id: str
+    messages: list[MessageWithScoreOut]
 
 
 class SyllableResult(BaseModel):
@@ -128,6 +181,7 @@ class WordResult(BaseModel):
 
 
 class AssessmentResponse(BaseModel):
+    assessment_id: str | None = None
     mode: Literal["scripted", "unscripted"]
     recognized_text: str
     pron_score: float
