@@ -1,6 +1,6 @@
 # Environment
 .env
-
+.git-rewrite/
 # Python
 __pycache__/
 *.py[cod]
