@@ -13,6 +13,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_TOKEN }}
 
       - name: Config Git
         run: |
@@ -20,17 +21,13 @@ jobs:
           git config --global user.email "qdovan03@gmail.com"
 
       - name: Sync to Upstream (GitHub)
-        if: ${{ github.ref_name != 'main' }}
-        env:
-          UPSTREAM_TOKEN: ${{ secrets.UPSTREAM_TOKEN }}
+        if: github.ref_name != 'main'
         run: |
-          git remote add upstream https://x-access-token:${UPSTREAM_TOKEN}@github.com/a20-ai-thuc-chien/A20-App-014.git
+          git remote add upstream https://x-access-token:${{ secrets.UPSTREAM_TOKEN }}@github.com/a20-ai-thuc-chien/A20-App-014.git
           git push upstream HEAD:${{ github.ref_name }} --force
 
       - name: Mirror to GitLab
-        if: ${{ github.ref_name == 'main' }}
-        env:
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        if: github.ref_name == 'main'
         run: |
-          git remote add gitlab https://oauth2:${GITLAB_TOKEN}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
+          git remote add gitlab https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab-vinai.duckdns.org/root/English-Speaking-Agent.git
           git push gitlab HEAD:${{ github.ref_name }} --force

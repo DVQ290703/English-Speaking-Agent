@@ -1050,7 +1050,7 @@ export default function DashboardPage() {
           <div className="mb-10">
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-slate-100">
               {t('dash.greeting', {
-                name: displayName.split(' ').slice(-1)[0],
+                name: displayName,
               })}
             </h1>
             <p className="text-base text-gray-500 dark:text-slate-400 mt-2">{t('dash.subtitle')}</p>
