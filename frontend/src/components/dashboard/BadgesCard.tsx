@@ -28,7 +28,7 @@ export default function BadgesCard({ badges }: Props) {
             key={b.id}
             className={`group relative flex flex-col items-center p-2 rounded-xl border transition-all ${
               b.unlocked
-                ? 'bg-linear-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border-amber-200 dark:border-amber-500/30 shadow-sm'
+                ? 'bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border-amber-200 dark:border-amber-500/30 shadow-sm'
                 : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-50 grayscale'
             }`}
             title={`${t(`badges.${b.id}.name`)} — ${t(`badges.${b.id}.desc`)}`}

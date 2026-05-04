@@ -76,7 +76,9 @@ export default function useSessionPersistence({
     const onHide = () => {
       try {
         persistSessionRef.current?.();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') onHide();
@@ -93,7 +95,9 @@ export default function useSessionPersistence({
     return () => {
       try {
         persistSessionRef.current?.();
-      } catch {}
+      } catch {
+        /* ignore */
+      }
     };
   }, []);
 

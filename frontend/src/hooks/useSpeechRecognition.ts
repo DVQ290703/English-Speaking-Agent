@@ -60,7 +60,9 @@ export default function useSpeechRecognition({
         try {
           setIsRecording(false);
           setChatInput('');
-        } catch {}
+        } catch {
+          /* ignore */
+        }
       }, 0);
       void stopUserAudioCapture();
       return;
@@ -79,7 +81,9 @@ export default function useSpeechRecognition({
       setTimeout(() => {
         try {
           setMicEnabled(false);
-        } catch {}
+        } catch {
+          /* ignore */
+        }
       }, 0);
       return;
     }

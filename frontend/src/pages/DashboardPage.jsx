@@ -19,194 +19,19 @@ import {
 } from 'recharts';
 
 import { fetchMe } from '../api/auth';
-import {
-  getSessions,
-  saveSession,
-  formatDuration,
-  getLatestSessionByTopic,
-} from '../api/sessionHistory';
+import { getSessions, formatDuration, getLatestSessionByTopic } from '../api/sessionHistory';
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
 import BadgesCard from '../components/dashboard/BadgesCard';
 import OnboardingTip from '../components/dashboard/OnboardingTip';
 import CountUp from '../components/ui/CountUp';
 import Skeleton from '../components/ui/Skeleton';
+import { useTopics } from '../hooks/useTopics';
 import { useT } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
 import { computeBadges, computePeriodDelta } from '../lib/gamification';
 import { DASHBOARD_TO_TOPIC_ID } from '../lib/topicMap';
 import ThemeToggle from '../theme/ThemeToggle';
 import { useDarkMode } from '../theme/useDarkMode';
-
-const TOPIC_CATEGORIES = [
-  {
-    name: 'IELTS Speaking',
-    desc: 'Practise official IELTS-style speaking parts.',
-    accent: 'blue',
-    topics: [
-      {
-        key: 'IELTS Part 1',
-        icon: '🎤',
-        title: 'IELTS Part 1 — Intro',
-        desc: 'Personal questions about you and familiar topics.',
-        level: 'All levels',
-      },
-      {
-        key: 'IELTS Part 2',
-        icon: '📋',
-        title: 'IELTS Part 2 — Long turn',
-        desc: 'Speak for 1-2 minutes from a cue card.',
-        level: 'Intermediate+',
-      },
-      {
-        key: 'Academic Discussion',
-        icon: '🎓',
-        title: 'Academic Discussion',
-        desc: 'Part 3 style — opinions, comparisons, abstract topics.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Describe a person',
-        icon: '🧑',
-        title: 'Describe a Person',
-        desc: 'Vocabulary for character, appearance, relationships.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Describe a place',
-        icon: '🏞️',
-        title: 'Describe a Place',
-        desc: 'City, country, landmark, favourite location.',
-        level: 'Intermediate',
-      },
-    ],
-  },
-  {
-    name: 'Business & Career',
-    desc: 'Workplace English and professional speaking.',
-    accent: 'violet',
-    topics: [
-      {
-        key: 'Job Interview',
-        icon: '💼',
-        title: 'Job Interview',
-        desc: 'Common questions and structured answers.',
-        level: 'Intermediate+',
-      },
-      {
-        key: 'Office Meeting',
-        icon: '🗂️',
-        title: 'Office Meeting',
-        desc: 'Discuss projects, share opinions, agree/disagree.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Presentations',
-        icon: '📊',
-        title: 'Presentations',
-        desc: 'Open, structure, and close a short talk.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Negotiation',
-        icon: '🤝',
-        title: 'Negotiation',
-        desc: 'Bargain politely, propose terms, reach agreement.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Email & Phone',
-        icon: '📞',
-        title: 'Phone & Email Talk',
-        desc: 'Professional phone calls and follow-ups.',
-        level: 'Intermediate',
-      },
-    ],
-  },
-  {
-    name: 'Daily Life',
-    desc: 'Everyday situations you face all the time.',
-    accent: 'emerald',
-    topics: [
-      {
-        key: 'Daily Conversation',
-        icon: '💬',
-        title: 'Daily Conversation',
-        desc: 'Hobbies, family, weekend plans, weather.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Shopping',
-        icon: '🛍️',
-        title: 'Shopping',
-        desc: 'Ask prices, compare items, return products.',
-        level: 'Beginner',
-      },
-      {
-        key: 'Healthcare',
-        icon: '🏥',
-        title: 'Healthcare',
-        desc: 'Doctor visits, symptoms, pharmacy talk.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Family & Friends',
-        icon: '👨‍👩‍👧',
-        title: 'Family & Friends',
-        desc: 'Relationships, gatherings, personal stories.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Hobbies',
-        icon: '🎨',
-        title: 'Hobbies & Interests',
-        desc: 'Talk about passions and free time activities.',
-        level: 'Beginner+',
-      },
-    ],
-  },
-  {
-    name: 'Travel & Culture',
-    desc: 'From booking flights to cross-cultural chats.',
-    accent: 'amber',
-    topics: [
-      {
-        key: 'Travel & Tourism',
-        icon: '✈️',
-        title: 'Travel & Tourism',
-        desc: 'Booking, directions, holiday stories.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Food & Restaurant',
-        icon: '🍽️',
-        title: 'Food & Restaurant',
-        desc: 'Order, describe taste, ask about dishes.',
-        level: 'Beginner+',
-      },
-      {
-        key: 'Hotel & Booking',
-        icon: '🏨',
-        title: 'Hotel & Booking',
-        desc: 'Check-in, request services, handle problems.',
-        level: 'Intermediate',
-      },
-      {
-        key: 'Culture & Customs',
-        icon: '🌏',
-        title: 'Culture & Customs',
-        desc: 'Compare traditions and cross-cultural topics.',
-        level: 'Advanced',
-      },
-      {
-        key: 'Airport English',
-        icon: '🛫',
-        title: 'Airport English',
-        desc: 'Check-in, security, customs vocabulary.',
-        level: 'Beginner+',
-      },
-    ],
-  },
-];
 
 const ACCENT_STYLES = {
   blue: {
@@ -262,10 +87,37 @@ const ACCENT_DARK = {
   },
 };
 
+// Icons and accents for API topic codes
+const API_TOPIC_ICON = {
+  daily_conversation: '💬',
+  travel: '✈️',
+  job_interview: '💼',
+  business_meeting: '🗂️',
+  academic: '🎓',
+  ielts_part1: '🎤',
+  ielts_part2: '📋',
+  ielts_part3: '🧠',
+};
+const API_CAT_ACCENT = {
+  ielts: 'blue',
+  business: 'violet',
+  daily: 'emerald',
+};
+// Map API difficulty_level (lowercase) → i18n key suffix
+const DIFFICULTY_TO_LEVEL = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
+};
+
 function TopicCard({ topic, accent, onStart }) {
   const t = useT();
   const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.blue;
   const darkStyles = ACCENT_DARK[accent] || ACCENT_DARK.blue;
+  // API-driven topics have .title / .desc set directly; hardcoded ones use i18n keys
+  const displayTitle = topic.title ?? t(`topic.${topic.key}.title`);
+  const displayDesc = topic.desc ?? t(`topic.${topic.key}.desc`);
+  const levelKey = DIFFICULTY_TO_LEVEL[topic.level] ?? topic.level;
   return (
     <button
       onClick={onStart}
@@ -278,16 +130,18 @@ function TopicCard({ topic, accent, onStart }) {
         </span>
       </div>
       <div className="text-base font-bold text-gray-900 dark:text-slate-100 mb-1.5">
-        {t(`topic.${topic.key}.title`)}
+        {displayTitle}
       </div>
       <div className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed mb-3 line-clamp-2 min-h-10">
-        {t(`topic.${topic.key}.desc`)}
+        {displayDesc}
       </div>
-      <span
-        className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${styles.chip} ${darkStyles.chip}`}
-      >
-        {t(`level.${topic.level}`)}
-      </span>
+      {levelKey && (
+        <span
+          className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-full ${styles.chip} ${darkStyles.chip}`}
+        >
+          {t(`level.${levelKey}`)}
+        </span>
+      )}
     </button>
   );
 }
@@ -296,7 +150,6 @@ function CategoryTabsRow({ categories, onStart }) {
   const t = useT();
   const [activeIdx, setActiveIdx] = useState(0);
   const scrollerRef = useRef(null);
-  const active = categories[activeIdx];
   const scroll = (dir) => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -305,6 +158,8 @@ function CategoryTabsRow({ categories, onStart }) {
   useEffect(() => {
     if (scrollerRef.current) scrollerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
   }, [activeIdx]);
+  if (categories.length === 0) return null;
+  const active = categories[activeIdx];
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3">
@@ -319,7 +174,7 @@ function CategoryTabsRow({ categories, onStart }) {
                   : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
             >
-              {t(`category.${cat.name}.name`)}
+              {cat.displayName ?? t(`category.${cat.name}.name`)}
             </button>
           ))}
         </div>
@@ -341,7 +196,7 @@ function CategoryTabsRow({ categories, onStart }) {
         </div>
       </div>
       <p className="text-sm text-gray-500 dark:text-slate-400 mb-3 px-1">
-        {t(`category.${active.name}.desc`)}
+        {active.displayDesc ?? t(`category.${active.name}.desc`)}
       </p>
       <div
         ref={scrollerRef}
@@ -385,7 +240,7 @@ function BandTooltip({ active, payload, label }) {
   const band = payload[0].value;
   const bc = bandColor(band);
   return (
-    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-32.5">
+    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-[130px]">
       <p className="text-gray-400 dark:text-slate-400 text-xs mb-1">{label}</p>
       <div className="flex items-center gap-2">
         <span
@@ -399,7 +254,7 @@ function BandTooltip({ active, payload, label }) {
         </span>
       </div>
       {payload[0].payload.topic && (
-        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-37.5">
+        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-[150px]">
           {payload[0].payload.topic}
         </p>
       )}
@@ -407,107 +262,7 @@ function BandTooltip({ active, payload, label }) {
   );
 }
 
-// Seed 7 sample sessions with realistic sub-scores so the line + radar
-// charts have something meaningful to render. Triggered by the manual
-// "Load sample data" button shown in the empty state of the chart.
-function seedDemoSessions() {
-  const day = 86400000;
-  const now = Date.now();
-  const samples = [
-    {
-      topic: 'IELTS Part 1',
-      topicKey: 'IELTS Part 1',
-      avgScore: 62,
-      sentenceCount: 12,
-      corrections: 4,
-      durationMs: 480000,
-      scores: { pronunciation: 65, fluency: 58, accuracy: 63 },
-      daysAgo: 6,
-    },
-    {
-      topic: 'IELTS Part 2',
-      topicKey: 'IELTS Part 2',
-      avgScore: 68,
-      sentenceCount: 15,
-      corrections: 3,
-      durationMs: 540000,
-      scores: { pronunciation: 70, fluency: 64, accuracy: 70 },
-      daysAgo: 5,
-    },
-    {
-      topic: 'Job Interview',
-      topicKey: 'Job Interview',
-      avgScore: 71,
-      sentenceCount: 14,
-      corrections: 2,
-      durationMs: 600000,
-      scores: { pronunciation: 73, fluency: 68, accuracy: 72 },
-      daysAgo: 4,
-    },
-    {
-      topic: 'Academic Discussion',
-      topicKey: 'Academic Discussion',
-      avgScore: 75,
-      sentenceCount: 18,
-      corrections: 2,
-      durationMs: 720000,
-      scores: { pronunciation: 76, fluency: 72, accuracy: 77 },
-      daysAgo: 3,
-    },
-    {
-      topic: 'Describe a place',
-      topicKey: 'Describe a place',
-      avgScore: 78,
-      sentenceCount: 20,
-      corrections: 1,
-      durationMs: 660000,
-      scores: { pronunciation: 80, fluency: 74, accuracy: 79 },
-      daysAgo: 2,
-    },
-    {
-      topic: 'IELTS Part 2',
-      topicKey: 'IELTS Part 2',
-      avgScore: 82,
-      sentenceCount: 22,
-      corrections: 1,
-      durationMs: 750000,
-      scores: { pronunciation: 84, fluency: 78, accuracy: 83 },
-      daysAgo: 1,
-    },
-    {
-      topic: 'Academic Discussion',
-      topicKey: 'Academic Discussion',
-      avgScore: 86,
-      sentenceCount: 24,
-      corrections: 0,
-      durationMs: 780000,
-      scores: { pronunciation: 88, fluency: 83, accuracy: 87 },
-      daysAgo: 0,
-    },
-  ];
-  samples.forEach((s, i) => {
-    saveSession({
-      id: `demo_seed_${i}`,
-      date: new Date(now - s.daysAgo * day).toISOString(),
-      topic: s.topic,
-      topicKey: s.topicKey,
-      avgScore: s.avgScore,
-      sentenceCount: s.sentenceCount,
-      corrections: s.corrections,
-      durationMs: s.durationMs,
-      scores: s.scores,
-      topErrors: [],
-      messages: [],
-    });
-  });
-}
-
-const ScoreTrendChart = memo(function ScoreTrendChart({
-  sessions,
-  onStart,
-  onLoadDemo,
-  dark = false,
-}) {
+const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark = false }) {
   const t = useT();
   const [tab, setTab] = useState('line');
   // Theme-aware chart palette so axes/grid stay legible in dark mode.
@@ -590,7 +345,7 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
             ].map((s, i, arr) => (
               <div key={s.n} className="flex items-center flex-1 last:flex-none">
                 <div className="flex flex-col items-center flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
                     {s.emoji}
                   </div>
                   <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-300 leading-tight">
@@ -609,13 +364,6 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors w-full sm:w-auto"
             >
               {t('dash.chart.emptyBtn')}
-            </button>
-            <button
-              onClick={onLoadDemo}
-              className="text-sm font-semibold px-6 py-2.5 rounded-xl border border-dashed border-blue-300 dark:border-blue-500/60 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors w-full sm:w-auto"
-              title={t('dash.chart.loadDemoHint')}
-            >
-              ✨ {t('dash.chart.loadDemo')}
             </button>
           </div>
         </div>
@@ -835,7 +583,7 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-linear-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
+      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-slate-400">
           {t('dash.chart.sessionCount', { n: chartData.length })}
         </p>
@@ -860,6 +608,25 @@ export default function DashboardPage() {
   const [historyTick, setHistoryTick] = useState(0);
   const [dark, toggleDark] = useDarkMode();
   const session = useMemo(() => getAuthSession(), []);
+
+  const { categories: apiCategories, loading: topicsLoading } = useTopics();
+  const displayCategories = useMemo(() => {
+    if (apiCategories.length === 0) return [];
+    return apiCategories.map((cat) => ({
+      name: cat.code,
+      displayName: cat.title,
+      displayDesc: null,
+      accent: API_CAT_ACCENT[cat.code] ?? 'amber',
+      topics: cat.topics.map((tp) => ({
+        key: tp.code,
+        icon: API_TOPIC_ICON[tp.code] ?? '📝',
+        // title and desc come directly from API (no i18n keys needed)
+        title: tp.title,
+        desc: tp.description ?? '',
+        level: tp.difficulty_level ?? '',
+      })),
+    }));
+  }, [apiCategories]);
 
   const allSessions = useMemo(() => {
     return getSessions().map((s, idx) => ({
@@ -927,12 +694,6 @@ export default function DashboardPage() {
   const handleChartStart = useCallback(() => {
     navigate('/VoiceAgent');
   }, [navigate]);
-
-  const handleChartLoadDemo = useCallback(() => {
-    seedDemoSessions();
-    setHistoryTick((n) => n + 1);
-    toast.success(t('toast.demoLoaded'));
-  }, [t]);
 
   const totalSessions = allSessions.length;
   const avgScore = totalSessions
@@ -1155,19 +916,22 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <CategoryTabsRow categories={TOPIC_CATEGORIES} onStart={startSession} />
+            {topicsLoading && apiCategories.length === 0 ? (
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="shrink-0 w-52 h-40 rounded-2xl" />
+                ))}
+              </div>
+            ) : (
+              <CategoryTabsRow categories={displayCategories} onStart={startSession} />
+            )}
           </section>
 
           {/* Badges / achievements */}
           <BadgesCard badges={computeBadges(allSessions)} />
 
           {/* Score trend chart */}
-          <ScoreTrendChart
-            sessions={allSessions}
-            dark={dark}
-            onStart={handleChartStart}
-            onLoadDemo={handleChartLoadDemo}
-          />
+          <ScoreTrendChart sessions={allSessions} dark={dark} onStart={handleChartStart} />
         </main>
 
         {/* First-time tip overlay */}

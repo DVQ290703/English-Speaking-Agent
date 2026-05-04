@@ -1,4 +1,4 @@
-import { LogIn, LogOut, UserPlus } from 'lucide-react';
+import { LogIn, LogOut, Menu, UserPlus } from 'lucide-react';
 import { useT } from '../../i18n/LanguageContext';
 import LanguageToggle from '../../i18n/LanguageToggle';
 import ThemeToggle from '../../theme/ThemeToggle';
@@ -15,6 +15,7 @@ interface VoiceAgentHeaderProps {
   onNavigateDashboard: () => void;
   onNavigateSignIn: () => void;
   onNavigateSignUp: () => void;
+  onToggleSidebar: () => void;
 }
 
 export default function VoiceAgentHeader({
@@ -28,6 +29,7 @@ export default function VoiceAgentHeader({
   onNavigateDashboard,
   onNavigateSignIn,
   onNavigateSignUp,
+  onToggleSidebar,
 }: VoiceAgentHeaderProps) {
   const t = useT();
   return (
@@ -35,17 +37,31 @@ export default function VoiceAgentHeader({
       data-va="header"
       className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]"
     >
-      <button
-        type="button"
-        onClick={onNavigateDashboard}
-        className="flex items-center gap-2 focus:outline-none cursor-pointer"
-        title={t('common.dashboard')}
-      >
-        <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
-          <span className="text-[10px] font-black text-white leading-none">VIN</span>
-        </div>
-        <span className="text-sm font-semibold text-gray-800">{t('brand.name')}</span>
-      </button>
+      <div className="flex items-center gap-2">
+        {/* Hamburger toggle */}
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          title="Toggle history"
+          aria-label="Toggle conversation history"
+          className="p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+        >
+          <Menu className="w-4 h-4" />
+        </button>
+
+        {/* VIN logo + brand */}
+        <button
+          type="button"
+          onClick={onNavigateDashboard}
+          className="flex items-center gap-2 focus:outline-none cursor-pointer"
+          title={t('common.dashboard')}
+        >
+          <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
+            <span className="text-[10px] font-black text-white leading-none">VIN</span>
+          </div>
+          <span className="text-sm font-semibold text-gray-800">{t('brand.name')}</span>
+        </button>
+      </div>
 
       <div className="flex items-center gap-3">
         <LanguageToggle />

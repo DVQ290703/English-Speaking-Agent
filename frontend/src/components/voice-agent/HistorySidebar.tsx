@@ -1,41 +1,64 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { deleteSession, formatDuration, getSessions } from '../../api/sessionHistory';
+import {
+  deleteConversation,
+  fetchConversations,
+  type ConversationSummary,
+} from '../../api/conversations';
 import { useT } from '../../i18n/LanguageContext';
 
-type SessionEntry = {
-  id: string;
-  date: string;
-  topic: string;
-  avgScore: number;
-  sentenceCount: number;
-  durationMs: number;
+const TOPIC_LABELS: Record<string, string> = {
+  ielts_part1: 'IELTS Part 1',
+  ielts_part2: 'IELTS Part 2',
+  ielts_part3: 'IELTS Part 3',
+  daily_conversation: 'Daily Conversation',
+  job_interview: 'Job Interview',
+  academic: 'Academic',
+  travel: 'Travel',
+  business: 'Business',
 };
+
+function topicLabel(c: ConversationSummary): string {
+  if (c.topic_code) return TOPIC_LABELS[c.topic_code] ?? c.topic_code;
+  if (c.title) return c.title;
+  return 'Conversation';
+}
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onSelectSession: (id: string) => void;
+  token?: string | null;
   refreshKey?: number;
 };
 
-export default function HistorySidebar({ open, onClose, onSelectSession, refreshKey = 0 }: Props) {
+export default function HistorySidebar({
+  open,
+  onClose,
+  onSelectSession,
+  token,
+  refreshKey = 0,
+}: Props) {
   const t = useT();
-  const [tick, setTick] = useState(0);
-  const sessions: SessionEntry[] = useMemo(
-    () =>
-      (getSessions() as SessionEntry[]).map((s) => ({
-        id: s.id,
-        date: s.date,
-        topic: s.topic ?? 'Conversation',
-        avgScore: s.avgScore ?? 0,
-        sentenceCount: s.sentenceCount ?? 0,
-        durationMs: s.durationMs ?? 0,
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tick, refreshKey, open],
-  );
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open || !token) return;
+    fetchedRef.current = false;
+  }, [open, token, refreshKey]);
+
+  useEffect(() => {
+    if (!open || !token || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setLoading(true);
+    fetchConversations(token)
+      .then((data) => setConversations(data))
+      .catch(() => toast.error('Could not load history'))
+      .finally(() => setLoading(false));
+  }, [open, token, refreshKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,10 +70,14 @@ export default function HistorySidebar({ open, onClose, onSelectSession, refresh
   }, [open, onClose]);
 
   const handleDelete = (id: string) => {
+    if (!token) return;
     if (typeof window !== 'undefined' && !window.confirm(t('va.history.confirmDelete'))) return;
-    deleteSession(id);
-    setTick((n) => n + 1);
-    toast.success(t('va.history.deleted'));
+    deleteConversation(token, id)
+      .then(() => {
+        setConversations((prev) => prev.filter((c) => c.id !== id));
+        toast.success(t('va.history.deleted'));
+      })
+      .catch(() => toast.error('Could not delete conversation'));
   };
 
   return (
@@ -75,7 +102,7 @@ export default function HistorySidebar({ open, onClose, onSelectSession, refresh
               {t('va.history.title')}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {t('va.history.count', { n: sessions.length })}
+              {t('va.history.count', { n: conversations.length })}
             </p>
           </div>
           <button
@@ -98,52 +125,57 @@ export default function HistorySidebar({ open, onClose, onSelectSession, refresh
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
-          {sessions.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <span className="text-sm text-slate-400 dark:text-slate-500">Loading…</span>
+            </div>
+          ) : conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center px-4 py-12">
               <div className="text-4xl mb-3">💬</div>
               <p className="text-sm text-slate-500 dark:text-slate-400">{t('va.history.empty')}</p>
             </div>
           ) : (
             <ul className="space-y-2">
-              {sessions.map((s) => {
+              {conversations.map((c) => {
                 const date = (() => {
                   try {
-                    return new Date(s.date).toLocaleString();
+                    return new Date(c.started_at).toLocaleString();
                   } catch {
-                    return s.date;
+                    return c.started_at;
                   }
                 })();
-                const band = (s.avgScore / 11.11).toFixed(1);
                 return (
                   <li
-                    key={s.id}
+                    key={c.id}
                     className="group rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-500/60 bg-white dark:bg-slate-800/50 hover:bg-blue-50/50 dark:hover:bg-slate-800 transition-colors p-3"
                   >
                     <button
                       onClick={() => {
-                        onSelectSession(s.id);
+                        onSelectSession(c.id);
                         onClose();
                       }}
                       className="text-left w-full"
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                          {s.topic}
+                          {topicLabel(c)}
                         </p>
-                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
-                          {band}
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                            c.status === 'active'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                          }`}
+                        >
+                          {c.status}
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">{date}</p>
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-                        <span>💬 {t('va.history.sentences', { n: s.sentenceCount })}</span>
-                        <span>⏱ {formatDuration(s.durationMs)}</span>
-                      </div>
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(s.id);
+                        handleDelete(c.id);
                       }}
                       aria-label={t('va.history.delete')}
                       className="mt-2 text-[11px] font-semibold text-red-500 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 rounded"

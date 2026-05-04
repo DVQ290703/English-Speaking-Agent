@@ -64,7 +64,9 @@ export default function useAgentAudio({
       const oldest = localAudioUrlsRef.current.shift();
       try {
         if (oldest) URL.revokeObjectURL(oldest);
-      } catch {}
+      } catch {
+        // noop
+      }
     }
   }, []);
 
@@ -85,21 +87,29 @@ export default function useAgentAudio({
     if (!p) return;
     try {
       p.audio.pause();
-    } catch {}
+    } catch {
+      // noop
+    }
     try {
       p.audio.removeAttribute('src');
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions
       p.audio.load && p.audio.load();
-    } catch {}
+    } catch {
+      // noop
+    }
     if (p.timeoutId) {
       try {
         clearTimeout(p.timeoutId);
-      } catch {}
+      } catch {
+        // noop
+      }
     }
     if (p.createdUrl) {
       try {
         URL.revokeObjectURL(p.url);
-      } catch {}
+      } catch {
+        // noop
+      }
       const idx = localAudioUrlsRef.current.indexOf(p.url);
       if (idx !== -1) localAudioUrlsRef.current.splice(idx, 1);
     }
@@ -112,7 +122,9 @@ export default function useAgentAudio({
       Object.keys(players).forEach((k) => {
         try {
           stopAndCleanupAudio(Number(k));
-        } catch {}
+        } catch {
+          // noop
+        }
       });
     };
   }, [stopAndCleanupAudio]);

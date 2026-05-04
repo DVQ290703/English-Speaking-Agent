@@ -75,8 +75,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.chart.emptyBody':
       'Complete a speaking session to see your IELTS band score trend over time.',
     'dash.chart.emptyBtn': 'Start speaking →',
-    'dash.chart.loadDemo': 'Load sample data',
-    'dash.chart.loadDemoHint': 'Just want to preview the charts? Load fake data.',
     'dash.chart.radar.pronunciation': 'Pronunciation',
     'dash.chart.radar.fluency': 'Fluency',
     'dash.chart.radar.accuracy': 'Accuracy',
@@ -104,7 +102,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
 
     // Toasts
     'toast.signedOut': 'Signed out successfully.',
-    'toast.demoLoaded': 'Demo sessions loaded.',
     'toast.resumingTopic': 'Resuming your last conversation on this topic.',
     'toast.welcomeBack': 'Welcome back, {name}!',
     'toast.loginFailed': 'Login failed',
@@ -179,6 +176,20 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.sentences': '{n} sentences',
     'va.history.count': '{n} session(s)',
 
+    // Voice agent — conversation sidebar (left)
+    'va.sidebar.newChat': 'New Chat',
+    'va.sidebar.today': 'Today',
+    'va.sidebar.yesterday': 'Yesterday',
+    'va.sidebar.thisWeek': 'This Week',
+    'va.sidebar.older': 'Older',
+    'va.sidebar.empty': 'No conversations yet.',
+    'va.sidebar.delete': 'Delete',
+    'va.sidebar.confirmDelete': 'Delete this conversation?',
+    'va.sidebar.deleted': 'Deleted.',
+    'va.sidebar.limitReached':
+      'This topic has reached the 5-session limit. Delete an old session to start a new one.',
+    'va.sidebar.limitBadge': '5/5',
+
     // Onboarding tip (first time)
     'onboarding.title': 'Welcome to Voice Trainer 👋',
     'onboarding.body':
@@ -216,6 +227,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.Negotiation.desc': 'Bargain politely, propose terms, reach agreement.',
     'topic.Email & Phone.title': 'Phone & Email Talk',
     'topic.Email & Phone.desc': 'Professional phone calls and follow-ups.',
+    'topic.Travel English.title': 'Travel English',
+    'topic.Travel English.desc': 'Booking, directions, airports, holiday stories.',
+    'topic.Business Meeting.title': 'Business Meeting',
+    'topic.Business Meeting.desc': 'Meetings, negotiations, presentations.',
     'topic.Daily Conversation.title': 'Daily Conversation',
     'topic.Daily Conversation.desc': 'Hobbies, family, weekend plans, weather.',
     'topic.Shopping.title': 'Shopping',
@@ -405,8 +420,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.chart.emptyTitle': 'Chưa có dữ liệu',
     'dash.chart.emptyBody':
       'Hoàn thành một phiên nói để xem xu hướng band IELTS của bạn theo thời gian.',
-    'dash.chart.loadDemo': 'Tạo dữ liệu mẫu',
-    'dash.chart.loadDemoHint': 'Chỉ muốn xem trước biểu đồ? Tạo dữ liệu mẫu.',
     'dash.chart.emptyBtn': 'Bắt đầu nói →',
     'dash.chart.radar.pronunciation': 'Phát âm',
     'dash.chart.radar.fluency': 'Lưu loát',
@@ -435,7 +448,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
 
     // Toasts
     'toast.signedOut': 'Đã đăng xuất.',
-    'toast.demoLoaded': 'Đã nạp dữ liệu demo.',
     'toast.resumingTopic': 'Đang tiếp tục cuộc trò chuyện gần nhất của chủ đề này.',
     'toast.welcomeBack': 'Chào bạn trở lại, {name}!',
     'toast.loginFailed': 'Đăng nhập thất bại',
@@ -510,6 +522,19 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.sentences': '{n} câu',
     'va.history.count': '{n} phiên',
 
+    // Voice agent — conversation sidebar (left)
+    'va.sidebar.newChat': 'Chat mới',
+    'va.sidebar.today': 'Hôm nay',
+    'va.sidebar.yesterday': 'Hôm qua',
+    'va.sidebar.thisWeek': '7 ngày qua',
+    'va.sidebar.older': 'Cũ hơn',
+    'va.sidebar.empty': 'Chưa có cuộc hội thoại nào.',
+    'va.sidebar.delete': 'Xóa',
+    'va.sidebar.confirmDelete': 'Xóa cuộc hội thoại này?',
+    'va.sidebar.deleted': 'Đã xóa.',
+    'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
+    'va.sidebar.limitBadge': '5/5',
+
     // Onboarding tip (first time)
     'onboarding.title': 'Chào mừng đến Voice Trainer 👋',
     'onboarding.body':
@@ -547,6 +572,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.Negotiation.desc': 'Mặc cả lịch sự, đề xuất điều khoản, đạt thỏa thuận.',
     'topic.Email & Phone.title': 'Điện thoại & Email',
     'topic.Email & Phone.desc': 'Cuộc gọi và phản hồi chuyên nghiệp.',
+    'topic.Travel English.title': 'Tiếng Anh Du lịch',
+    'topic.Travel English.desc': 'Đặt chỗ, hỏi đường, sân bay, kể chuyện đi chơi.',
+    'topic.Business Meeting.title': 'Họp kinh doanh',
+    'topic.Business Meeting.desc': 'Cuộc họp, đàm phán, thuyết trình.',
     'topic.Daily Conversation.title': 'Giao tiếp hàng ngày',
     'topic.Daily Conversation.desc': 'Sở thích, gia đình, kế hoạch cuối tuần, thời tiết.',
     'topic.Shopping.title': 'Mua sắm',

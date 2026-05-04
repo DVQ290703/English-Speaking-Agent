@@ -203,8 +203,8 @@ def chat_respond(
                 topic_clean = topic.strip().lower() if topic else ""
                 if topic_clean:
                     cur.execute(
-                        "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
-                        (topic_clean,),
+                        "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",
+                        (topic_clean, topic_clean),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:

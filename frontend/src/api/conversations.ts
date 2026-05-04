@@ -1,5 +1,5 @@
 // frontend/src/api/conversations.ts
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export interface ConversationSummary {
   id: string;
@@ -8,7 +8,7 @@ export interface ConversationSummary {
   started_at: string;
   ended_at: string | null;
   topic_id: string | null;
-  topic_code: string | null;   // DB topic code e.g. "ielts_part1"
+  topic_code: string | null; // DB topic code e.g. "ielts_part1"
   cleared_at: string | null;
 }
 
@@ -85,29 +85,29 @@ async function apiFetch<T>(path: string, token: string, options?: RequestInit): 
 export async function fetchConversations(token: string): Promise<ConversationSummary[]> {
   const data = await apiFetch<{ conversations: ConversationSummary[] }>(
     '/api/conversations',
-    token
+    token,
   );
   return data.conversations;
 }
 
 export async function fetchConversationMessages(
   token: string,
-  conversationId: string
+  conversationId: string,
 ): Promise<MessageSummary[]> {
   const data = await apiFetch<{ conversation_id: string; messages: MessageSummary[] }>(
     `/api/conversations/${conversationId}/messages`,
-    token
+    token,
   );
   return data.messages;
 }
 
 export async function fetchMessagesWithScores(
   token: string,
-  conversationId: string
+  conversationId: string,
 ): Promise<MessageWithScoreOut[]> {
   const data = await apiFetch<{ conversation_id: string; messages: MessageWithScoreOut[] }>(
     `/api/conversations/${conversationId}/messages-with-scores`,
-    token
+    token,
   );
   return data.messages;
 }
@@ -121,7 +121,7 @@ export async function clearConversation(token: string, conversationId: string): 
 export async function fetchForTopic(token: string, topicCode: string): Promise<ForTopicResponse> {
   return apiFetch<ForTopicResponse>(
     `/api/conversations/for-topic?topic_code=${encodeURIComponent(topicCode)}`,
-    token
+    token,
   );
 }
 
