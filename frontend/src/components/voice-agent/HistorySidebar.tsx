@@ -6,7 +6,7 @@ import {
   fetchConversations,
   type ConversationSummary,
 } from '../../api/conversations';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 const TOPIC_LABELS: Record<string, string> = {
   ielts_part1: 'IELTS Part 1',

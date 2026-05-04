@@ -1,6 +1,6 @@
 import { Mic, MicOff, SendHorizontal } from 'lucide-react';
 import { type KeyboardEvent, type RefObject } from 'react';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 interface ChatInputBarProps {
   inputRef: RefObject<HTMLTextAreaElement | null>;

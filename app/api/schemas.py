@@ -109,6 +109,27 @@ class ConversationMessagesResponse(BaseModel):
     messages: list[MessageOut]
 
 
+class ConversationScoresOut(BaseModel):
+    pronunciation: float | None = None
+    fluency: float | None = None
+    accuracy: float | None = None
+
+
+class ConversationStatOut(BaseModel):
+    id: str
+    topic: str
+    topic_code: str | None = None
+    started_at: datetime
+    duration_ms: float | None = None
+    avg_score: float | None = None
+    user_message_count: int = 0
+    scores: ConversationScoresOut | None = None
+
+
+class ConversationStatsResponse(BaseModel):
+    sessions: list[ConversationStatOut]
+
+
 class WordDetail(BaseModel):
     word_index: int
     word: str

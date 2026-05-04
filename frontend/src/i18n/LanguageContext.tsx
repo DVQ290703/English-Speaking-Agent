@@ -1,7 +1,6 @@
 import {
   createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -11,14 +10,14 @@ import { translate, type Lang } from './translations';
 
 const STORAGE_KEY = 'va-ui-lang';
 
-type LanguageContextValue = {
+export type LanguageContextValue = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   toggleLang: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
-const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
+export const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 function readInitialLang(): Lang {
   if (typeof window === 'undefined') return 'vi';
@@ -73,16 +72,4 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
-}
-
-export function useLanguage(): LanguageContextValue {
-  const ctx = useContext(LanguageContext);
-  if (!ctx) {
-    throw new Error('useLanguage must be used inside <LanguageProvider>');
-  }
-  return ctx;
-}
-
-export function useT(): LanguageContextValue['t'] {
-  return useLanguage().t;
 }

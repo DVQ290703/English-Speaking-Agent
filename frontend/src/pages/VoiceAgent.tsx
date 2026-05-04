@@ -32,18 +32,16 @@ import type { Message, SessionSummary } from '../components/voice-agent';
 import {
   LANGUAGES,
   MODELS,
-  TOPIC_ID_TO_DB_CODES,
-  TOPICS,
   type AuthUser,
   type ConnectionStatus,
   type FeedbackItem,
   type Gender,
   type Language,
   type Model,
-  type TopicId,
 } from '../components/voice-agent/constants';
+import { useTopics } from '../hooks/useTopics';
 import { getInitialSessionState } from '../components/voice-agent/sessionRestore';
-import { useLanguage } from '../i18n/LanguageContext';
+import { useLanguage } from '../i18n/useLanguage';
 import useAgentAudio from '../hooks/useAgentAudio';
 import useAudioCapture from '../hooks/useAudioCapture';
 import useMicDevices from '../hooks/useMicDevices';
@@ -91,7 +89,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [gender, setGender] = useState<Gender>('Male');
   const [language, setLanguage] = useState<Language>(lang === 'vi' ? 'Vietnamese' : 'English');
 
-  const [topic, setTopic] = useState<TopicId | null>(initialState.topic);
+  const { categories: topicCategories } = useTopics();
+
+  // Flat list of all DB topics — derived from loaded categories
+  const allDbTopics = useMemo(
+    () => topicCategories.flatMap((c) => c.topics),
+    [topicCategories],
+  );
+
+  const [topic, setTopic] = useState<string | null>(initialState.topic);
   const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(
     initialState.customTopicLabel,
   );
@@ -211,6 +217,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // and the unmount cleanup fire in rapid succession (e.g. tab close on
   // mobile). Reset to false at the start of every new session.
   const hasSavedCurrentSessionRef = useRef(false);
+  // Prevents the "auto-load latest conversation" effect from re-firing after the
+  // initial load (e.g. after New Chat or after the first navigation has happened).
+  const hasAutoLoadedRef = useRef(false);
+  // Set to true inside handleConnect when the session is brand-new (no prior
+  // conversations for the topic) so the post-connect effect sends a greeting.
+  const shouldGreetRef = useRef(false);
   const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
@@ -231,7 +243,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // cause persistSession to save stale data.
   const messagesRef = useRef<Message[]>(initialState.messages);
   const sessionSummaryRef = useRef<SessionSummary | null>(null);
-  const topicRef = useRef<TopicId | null>(initialState.topic);
+  const topicRef = useRef<string | null>(initialState.topic);
   const customTopicLabelRef = useRef<string | null>(initialState.customTopicLabel);
   /* eslint-disable react-hooks/immutability */
   useLayoutEffect(() => {
@@ -354,7 +366,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return () => window.removeEventListener('unhandledrejection', handler);
   }, []);
 
-  const sendChatMessage = useSendChatMessage({
+  const { sendChatMessage, sendGreeting } = useSendChatMessage({
     messages,
     topic,
     subOption,
@@ -425,16 +437,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   }, []);
 
   const { persistSession } = useSessionPersistence({
-    messagesRef,
-    sessionSummaryRef,
-    topicRef,
-    customTopicLabelRef,
-    sessionIdRef,
-    sessionStartRef,
     hasSavedCurrentSessionRef,
   });
 
-  const startNewSession = useCallback(() => {
+  const startNewSession = useCallback((opts: { stayDisconnected?: boolean } = {}) => {
     window.speechSynthesis?.cancel();
     ttsActiveRef.current = false;
     // Allow the new session to be persisted when the time comes.
@@ -451,6 +457,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     sessionStartRef.current = Date.now();
     sessionIdRef.current = null;
     conversationIdRef.current = null;
+
+    if (opts.stayDisconnected) {
+      setStatusSync('disconnected');
+      return;
+    }
+
     setStatusSync('connecting');
 
     const t0 = setTimeout(() => {
@@ -487,17 +499,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }
     if (currentStatus === 'disconnected') {
       // Topic limit check — only for brand-new sessions (no existing conversation)
-      if (!conversationIdRef.current && topic) {
-        const dbCodes = TOPIC_ID_TO_DB_CODES[topic] ?? [];
-        if (dbCodes.length > 0) {
-          const count = conversations.filter(
-            (c) => c.topic_code && dbCodes.includes(c.topic_code),
-          ).length;
-          if (count >= 5) {
-            toast.error(t('va.sidebar.limitReached'));
-            return;
-          }
+      const isNewSession = !conversationIdRef.current;
+      if (isNewSession && topic) {
+        const count = conversations.filter((c) => c.topic_code === topic).length;
+        if (count >= 5) {
+          toast.error(t('va.sidebar.limitReached'));
+          return;
         }
+        // Brand-new topic session → queue a greeting once connected
+        shouldGreetRef.current = true;
       }
       setSummaryDismissed(true);
       clearTimers();
@@ -520,6 +530,37 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }
   }, [clearTimers, conversations, persistSession, setStatusSync, t, topic, ttsActiveRef]);
 
+  // When we transition to "connected" and a greeting was queued (brand-new
+  // topic session with no prior conversations), send the AI opening message.
+  useEffect(() => {
+    if (status !== 'connected') return;
+    if (!shouldGreetRef.current) return;
+    shouldGreetRef.current = false;
+    void sendGreeting();
+  }, [status, sendGreeting]);
+
+  // Validate the initial topic code against the loaded DB topics. If the code
+  // from the URL/sessionStorage doesn't match any active topic, clear it so
+  // the user is not stuck with a ghost topic selection.
+  useEffect(() => {
+    if (!topic || allDbTopics.length === 0) return;
+    const found = allDbTopics.some((tp) => tp.code === topic);
+    if (!found) {
+      setTopic(null);
+      setCustomTopicLabel(null);
+      setSubOption(null);
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('topic');
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        /* ignore */
+      }
+    }
+    // Only run when DB topics finish loading — don't run on every topic change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allDbTopics]);
+
   // Fetch all conversations from DB for the sidebar; re-runs whenever
   // convsRefreshKey is bumped (e.g. after delete or new-session events).
   useEffect(() => {
@@ -531,6 +572,29 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       .catch(() => {})
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey]);
+
+  // When the page loads with a ?topic= but no ?session= (e.g. navigating from
+  // the dashboard), automatically open the most recent DB conversation for that
+  // topic so the user lands directly in context. Fires only once per mount.
+  useEffect(() => {
+    if (hasAutoLoadedRef.current) return;
+    if (conversationIdRef.current) return; // already in a DB session
+    if (!topic) return;
+    if (conversations.length === 0) return; // wait for conversations to load
+
+    hasAutoLoadedRef.current = true;
+
+    const latest = conversations
+      .filter((c) => c.topic_code === topic)
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+
+    if (latest) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', latest.id);
+      url.searchParams.set('topic', topic);
+      window.location.assign(url.toString());
+    }
+  }, [conversations, topic]);
 
   // If a DB conversation_id was supplied via ?session=<uuid>, load its messages
   // from the backend on mount. The conversation is set to read-only view
@@ -591,22 +655,85 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting';
 
-  const handleTopicSelect = useCallback((id: TopicId) => {
-    setTopic(id);
+  // Load a DB conversation in-place (no full page reload): reset all local
+  // state, restore conversationIdRef, update the URL, then fetch messages.
+  const loadConversationInPlace = useCallback((convId: string, topicCode: string | null) => {
+    const authSession = getAuthSession();
+    if (!authSession?.token) return;
+
+    hasAutoLoadedRef.current = true;
+    startNewSession({ stayDisconnected: true });
+    // startNewSession clears conversationIdRef — restore it immediately.
+    conversationIdRef.current = convId;
+    if (topicCode) setTopic(topicCode);
+
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', convId);
+      if (topicCode) {
+        url.searchParams.set('topic', topicCode);
+      } else {
+        url.searchParams.delete('topic');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch { /* ignore */ }
+
+    fetchMessagesWithScores(authSession.token, convId)
+      .then((dbMessages) => {
+        const loaded = dbMessages.map((m, idx): Message => ({
+          id: idx + 1,
+          role: m.role === 'assistant' ? 'agent' : 'user',
+          text: m.text_content ?? '',
+          timestamp: new Date(m.created_at),
+          assessmentStatus: m.score ? 'available' : 'unavailable',
+          scoreDetails: m.score
+            ? {
+                overall: Math.round(m.score.overall_score ?? 0),
+                pronunciation: Math.round(m.score.accuracy_score ?? 0),
+                fluency: Math.round(m.score.fluency_score ?? 0),
+                accuracy: Math.round(m.score.accuracy_score ?? 0),
+                completeness:
+                  m.score.completeness_score != null
+                    ? Math.round(m.score.completeness_score)
+                    : undefined,
+              }
+            : undefined,
+        }));
+        if (loaded.length > 0) {
+          msgCounterRef.current = loaded.length + 101;
+          setMessages(loaded);
+        }
+      })
+      .catch(() => { /* silently ignore — user can still start fresh */ });
+  }, [startNewSession, setTopic, setMessages]);
+
+  const handleTopicSelect = useCallback((code: string) => {
     setCustomTopicLabel(null);
     setSubOption(null);
     setShowSettings(false);
-    try {
-      const tp = TOPICS.find((item) => item.id === id);
-      if (tp) {
+
+    // Find the most recently created conversation for this topic
+    const latest = conversations
+      .filter((c) => c.topic_code === code)
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+
+    if (latest) {
+      loadConversationInPlace(latest.id, code);
+    } else {
+      // No existing conversation — show blank new chat for this topic
+      hasAutoLoadedRef.current = false;
+      startNewSession({ stayDisconnected: true });
+      setTopic(code);
+      try {
         const url = new URL(window.location.href);
-        url.searchParams.set('topic', tp.label);
+        url.searchParams.set('topic', code);
+        url.searchParams.delete('session');
         window.history.replaceState({}, '', url.toString());
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
     }
-  }, []);
+  }, [conversations, loadConversationInPlace, startNewSession, setTopic]);
 
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
@@ -652,8 +779,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           <span className="text-gray-400">·</span>
           <span className="text-gray-700">
             {customTopicLabel ??
-              TOPICS.find((tp) => tp.id === topic)?.label ??
-              'Daily Conversation'}
+              (topic
+                ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic)
+                : 'Daily Conversation')}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -715,13 +843,25 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         conversations={conversations}
         loading={convsLoading}
         activeConversationId={conversationIdRef.current}
-        currentTopicId={topic}
-        onSelectConversation={(id) => {
-          window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
+        currentTopicCode={topic}
+        currentTopicTitle={topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : null}
+        onSelectConversation={(id, topicCode) => {
+          if (isConnected) persistSession();
+          setShowSidebar(false);
+          loadConversationInPlace(id, topicCode ?? null);
         }}
         onNewChat={() => {
           if (isConnected) persistSession();
-          startNewSession();
+          // Prevent the auto-load effect from re-firing and redirecting back
+          // to the previous conversation after clearing the session param.
+          hasAutoLoadedRef.current = true;
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('session');
+            window.history.replaceState({}, '', url.toString());
+          } catch { /* ignore */ }
+          // Stay disconnected so the user presses Connect to start fresh.
+          startNewSession({ stayDisconnected: true });
           setConvsRefreshKey((k) => k + 1);
         }}
         onConversationDeleted={(id) => {
@@ -734,14 +874,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         {/* Left panel: Audio & Video — drawer on mobile, persistent on md+ */}
         {showLeftPanelMobile && (
           <div
-            className="md:hidden fixed inset-0 z-7000 bg-black/40"
+            className="md:hidden fixed inset-0 z-[7000] bg-black/40"
             onClick={() => setShowLeftPanelMobile(false)}
           />
         )}
         <div
           data-va="left"
           className={`${
-            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-[7001] w-72 shadow-2xl' : 'hidden'
           } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
         >
           <LeftAudioPanel
@@ -905,7 +1045,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onClose={() => setShowHistory(false)}
           token={getAuthSession()?.token ?? null}
           onSelectSession={(id) => {
-            window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
+            const url = new URL(window.location.href);
+            url.searchParams.set('session', id);
+            url.searchParams.delete('topic');
+            window.location.assign(url.toString());
           }}
         />
       )}

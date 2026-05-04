@@ -189,6 +189,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.limitReached':
       'This topic has reached the 5-session limit. Delete an old session to start a new one.',
     'va.sidebar.limitBadge': '5/5',
+    'va.sidebar.noTopicSelected': 'Select a topic first to see conversation history.',
+    'va.sidebar.emptyTopic': 'No conversations for this topic yet.',
+    'va.sidebar.topicCount': '{count}/5 sessions',
+    'va.sidebar.uncategorized': 'No topic assigned',
 
     // Onboarding tip (first time)
     'onboarding.title': 'Welcome to Voice Trainer 👋',
@@ -199,10 +203,16 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',
     'category.IELTS Speaking.desc': 'Practise official IELTS-style speaking parts.',
+    'category.ielts.name': 'IELTS Speaking',
+    'category.ielts.desc': 'Practise official IELTS-style speaking parts.',
     'category.Business & Career.name': 'Business & Career',
     'category.Business & Career.desc': 'Workplace English and professional speaking.',
+    'category.business.name': 'Business & Career',
+    'category.business.desc': 'Workplace English and professional speaking.',
     'category.Daily Life.name': 'Daily Life',
     'category.Daily Life.desc': 'Everyday situations you face all the time.',
+    'category.daily.name': 'Daily Life',
+    'category.daily.desc': 'Everyday situations you face all the time.',
     'category.Travel & Culture.name': 'Travel & Culture',
     'category.Travel & Culture.desc': 'From booking flights to cross-cultural chats.',
 
@@ -534,6 +544,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.deleted': 'Đã xóa.',
     'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
     'va.sidebar.limitBadge': '5/5',
+    'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
+    'va.sidebar.emptyTopic': 'Chưa có hội thoại nào cho topic này.',
+    'va.sidebar.topicCount': '{count}/5 phiên',
+    'va.sidebar.uncategorized': 'Chưa có topic',
 
     // Onboarding tip (first time)
     'onboarding.title': 'Chào mừng đến Voice Trainer 👋',
@@ -544,10 +558,16 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',
     'category.IELTS Speaking.desc': 'Luyện các dạng nói chính thức theo phong cách IELTS.',
+    'category.ielts.name': 'IELTS Speaking',
+    'category.ielts.desc': 'Luyện các dạng nói chính thức theo phong cách IELTS.',
     'category.Business & Career.name': 'Công việc & Sự nghiệp',
     'category.Business & Career.desc': 'Tiếng Anh nơi làm việc và giao tiếp chuyên nghiệp.',
+    'category.business.name': 'Công việc & Sự nghiệp',
+    'category.business.desc': 'Tiếng Anh nơi làm việc và giao tiếp chuyên nghiệp.',
     'category.Daily Life.name': 'Đời sống hàng ngày',
     'category.Daily Life.desc': 'Các tình huống quen thuộc bạn gặp mỗi ngày.',
+    'category.daily.name': 'Đời sống hàng ngày',
+    'category.daily.desc': 'Các tình huống quen thuộc bạn gặp mỗi ngày.',
     'category.Travel & Culture.name': 'Du lịch & Văn hóa',
     'category.Travel & Culture.desc': 'Từ đặt vé máy bay đến trò chuyện liên văn hóa.',
 

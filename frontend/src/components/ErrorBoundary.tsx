@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
-import { useT } from '../i18n/LanguageContext';
+import { useT } from '../i18n/useLanguage';
 
 interface Props {
   children: ReactNode;

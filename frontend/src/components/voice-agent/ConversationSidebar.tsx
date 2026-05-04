@@ -3,23 +3,11 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { deleteConversation, type ConversationSummary } from '../../api/conversations';
-import { useT } from '../../i18n/LanguageContext';
-import { TOPIC_ID_TO_DB_CODES, type TopicId } from './constants';
-
-const DB_TOPIC_LABELS: Record<string, string> = {
-  daily_conversation: 'Daily Conversation',
-  ielts_part1: 'IELTS Part 1',
-  ielts_part2: 'IELTS Part 2',
-  ielts_part3: 'IELTS Part 3',
-  academic: 'Academic Discussion',
-  travel: 'Travel & Tourism',
-  job_interview: 'Job Interview',
-  business_meeting: 'Business Meeting',
-};
+import { useT } from '../../i18n/useLanguage';
 
 function topicLabel(c: ConversationSummary): string {
-  if (c.topic_code) return DB_TOPIC_LABELS[c.topic_code] ?? c.topic_code;
   if (c.title) return c.title;
+  if (c.topic_code) return c.topic_code;
   return 'Conversation';
 }
 
@@ -47,6 +35,52 @@ function getGroup(dateStr: string): Group {
   return 'older';
 }
 
+const MAX_PER_TOPIC = 5;
+
+function ConvRow({
+  c,
+  isActive,
+  isDeleting,
+  onSelect,
+  onDelete,
+  deleteLabel,
+}: {
+  c: ConversationSummary;
+  isActive: boolean;
+  isDeleting: boolean;
+  onSelect: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+  deleteLabel: string;
+}) {
+  return (
+    <div
+      className={`group relative flex items-center mx-2 rounded-lg cursor-pointer transition-colors px-2 py-2 ${
+        isActive
+          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+          : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300'
+      }`}
+      onClick={() => {
+        if (!isDeleting) onSelect();
+      }}
+    >
+      <div className="flex-1 min-w-0 pr-1">
+        <p className="text-xs font-medium truncate leading-tight">{topicLabel(c)}</p>
+        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
+          {relativeTime(c.started_at)}
+        </p>
+      </div>
+      <button
+        onClick={onDelete}
+        disabled={isDeleting}
+        aria-label={deleteLabel}
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-opacity shrink-0"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -54,8 +88,9 @@ type Props = {
   conversations: ConversationSummary[];
   loading: boolean;
   activeConversationId: string | null;
-  currentTopicId: TopicId | null;
-  onSelectConversation: (id: string) => void;
+  currentTopicCode: string | null;
+  currentTopicTitle: string | null;
+  onSelectConversation: (id: string, topicCode: string | null) => void;
   onNewChat: () => void;
   onConversationDeleted: (id: string) => void;
 };
@@ -67,7 +102,8 @@ export default function ConversationSidebar({
   conversations,
   loading,
   activeConversationId,
-  currentTopicId,
+  currentTopicCode,
+  currentTopicTitle,
   onSelectConversation,
   onNewChat,
   onConversationDeleted,
@@ -75,11 +111,19 @@ export default function ConversationSidebar({
   const t = useT();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const topicDbCodes = currentTopicId ? (TOPIC_ID_TO_DB_CODES[currentTopicId] ?? []) : [];
-  const topicCount = topicDbCodes.length
-    ? conversations.filter((c) => c.topic_code && topicDbCodes.includes(c.topic_code)).length
-    : 0;
-  const isTopicLimitReached = topicDbCodes.length > 0 && topicCount >= 5;
+  // Conversations that match the current topic by DB code
+  const topicConversations = currentTopicCode
+    ? conversations.filter((c) => c.topic_code === currentTopicCode)
+    : [];
+
+  // Conversations with no topic assigned — always shown at the bottom
+  const uncategorizedConversations = conversations.filter((c) => !c.topic_code);
+
+  const topicCount = topicConversations.length;
+  const isTopicLimitReached = currentTopicCode !== null && topicCount >= MAX_PER_TOPIC;
+
+  // Use DB-provided title from parent; fall back to raw code if title unavailable
+  const currentTopicLabel = currentTopicTitle ?? currentTopicCode ?? null;
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -103,7 +147,7 @@ export default function ConversationSidebar({
     { key: 'week', label: t('va.sidebar.thisWeek'), items: [] },
     { key: 'older', label: t('va.sidebar.older'), items: [] },
   ];
-  for (const c of conversations) {
+  for (const c of topicConversations) {
     const g = getGroup(c.started_at);
     groups.find((x) => x.key === g)!.items.push(c);
   }
@@ -128,10 +172,10 @@ export default function ConversationSidebar({
               onNewChat();
               onClose();
             }}
-            disabled={isTopicLimitReached}
+            disabled={isTopicLimitReached || !currentTopicCode}
             title={t('va.sidebar.newChat')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              isTopicLimitReached
+              isTopicLimitReached || !currentTopicCode
                 ? 'opacity-40 cursor-not-allowed text-gray-400 dark:text-slate-500'
                 : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-200 dark:border-slate-600'
             }`}
@@ -149,8 +193,28 @@ export default function ConversationSidebar({
           </button>
         </div>
 
+        {/* Topic header — shows current topic + session count */}
+        {currentTopicCode && (
+          <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100 dark:border-slate-800 shrink-0">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-200 truncate">
+                {currentTopicLabel}
+              </p>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ml-1 ${
+                  isTopicLimitReached
+                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                }`}
+              >
+                {t('va.sidebar.topicCount', { count: topicCount })}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Topic limit warning */}
-        {isTopicLimitReached && (
+        {isTopicLimitReached && currentTopicCode && (
           <div className="mx-3 mt-2 px-2 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
             {t('va.sidebar.limitReached')}
           </div>
@@ -162,58 +226,79 @@ export default function ConversationSidebar({
             <div className="flex items-center justify-center py-10">
               <span className="text-xs text-gray-400 dark:text-slate-500">Loading…</span>
             </div>
-          ) : conversations.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <MessageSquare className="w-7 h-7 text-gray-200 dark:text-slate-600 mx-auto mb-2" />
-              <p className="text-xs text-gray-400 dark:text-slate-500">{t('va.sidebar.empty')}</p>
-            </div>
           ) : (
-            groups
-              .filter((g) => g.items.length > 0)
-              .map((g) => (
-                <div key={g.key} className="mb-1">
-                  <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
-                    {g.label}
+            <>
+              {/* Topic-filtered conversations */}
+              {currentTopicCode &&
+                topicConversations.length === 0 &&
+                uncategorizedConversations.length === 0 && (
+                  <div className="px-4 py-8 text-center">
+                    <MessageSquare className="w-7 h-7 text-gray-200 dark:text-slate-600 mx-auto mb-2" />
+                    <p className="text-xs text-gray-400 dark:text-slate-500">
+                      {t('va.sidebar.emptyTopic')}
+                    </p>
+                  </div>
+                )}
+
+              {!currentTopicCode && uncategorizedConversations.length === 0 && (
+                <div className="px-4 py-8 text-center">
+                  <MessageSquare className="w-7 h-7 text-gray-200 dark:text-slate-600 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400 dark:text-slate-500">
+                    {t('va.sidebar.noTopicSelected')}
                   </p>
-                  {g.items.map((c) => {
-                    const isActive = c.id === activeConversationId;
-                    const isDeleting = deletingId === c.id;
-                    return (
-                      <div
-                        key={c.id}
-                        className={`group relative flex items-center mx-2 rounded-lg cursor-pointer transition-colors px-2 py-2 ${
-                          isActive
-                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                            : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300'
-                        }`}
-                        onClick={() => {
-                          if (!isDeleting) {
-                            onSelectConversation(c.id);
-                            onClose();
-                          }
-                        }}
-                      >
-                        <div className="flex-1 min-w-0 pr-1">
-                          <p className="text-xs font-medium truncate leading-tight">
-                            {topicLabel(c)}
-                          </p>
-                          <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
-                            {relativeTime(c.started_at)}
-                          </p>
-                        </div>
-                        <button
-                          onClick={(e) => void handleDelete(e, c.id)}
-                          disabled={isDeleting}
-                          aria-label={t('va.sidebar.delete')}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-opacity shrink-0"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
                 </div>
-              ))
+              )}
+
+              {groups
+                .filter((g) => g.items.length > 0)
+                .map((g) => (
+                  <div key={g.key} className="mb-1">
+                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
+                      {g.label}
+                    </p>
+                    {g.items.map((c) => (
+                      <ConvRow
+                        key={c.id}
+                        c={c}
+                        isActive={c.id === activeConversationId}
+                        isDeleting={deletingId === c.id}
+                        onSelect={() => {
+                          onSelectConversation(c.id, c.topic_code ?? null);
+                          onClose();
+                        }}
+                        onDelete={(e) => void handleDelete(e, c.id)}
+                        deleteLabel={t('va.sidebar.delete')}
+                      />
+                    ))}
+                  </div>
+                ))}
+
+              {/* Uncategorized conversations — no topic_code */}
+              {uncategorizedConversations.length > 0 && (
+                <div className="mb-1">
+                  {currentTopicCode && (
+                    <div className="mx-3 mt-2 mb-1 border-t border-dashed border-gray-200 dark:border-slate-700" />
+                  )}
+                  <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
+                    {t('va.sidebar.uncategorized')}
+                  </p>
+                  {uncategorizedConversations.map((c) => (
+                    <ConvRow
+                      key={c.id}
+                      c={c}
+                      isActive={c.id === activeConversationId}
+                      isDeleting={deletingId === c.id}
+                      onSelect={() => {
+                        onSelectConversation(c.id, c.topic_code ?? null);
+                        onClose();
+                      }}
+                      onDelete={(e) => void handleDelete(e, c.id)}
+                      deleteLabel={t('va.sidebar.delete')}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </aside>

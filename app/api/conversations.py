@@ -9,6 +9,9 @@ from app.api.schemas import (
     ConversationListResponse,
     ConversationMessagesResponse,
     ConversationOut,
+    ConversationScoresOut,
+    ConversationStatOut,
+    ConversationStatsResponse,
     ConversationWithScoresResponse,
     ForTopicConversationOut,
     ForTopicResponse,
@@ -146,6 +149,78 @@ def get_conversations_for_topic(
         total=total,
         limit_reached=total >= 5,
     )
+
+
+@router.get("/stats", response_model=ConversationStatsResponse)
+def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
+    """Return per-conversation aggregated stats for the dashboard (score, duration, message count)."""
+    logger.debug("get_conversation_stats user_id=%s", user_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.id::text,
+                    COALESCE(c.title, t.title, t.code, 'General') AS topic,
+                    t.code AS topic_code,
+                    c.started_at,
+                    CASE
+                        WHEN c.ended_at IS NOT NULL
+                        THEN EXTRACT(EPOCH FROM (c.ended_at - c.started_at)) * 1000
+                        ELSE NULL
+                    END AS duration_ms,
+                    AVG(pa.overall_score)
+                        FILTER (WHERE m.role = 'user' AND pa.overall_score IS NOT NULL)
+                        AS avg_score,
+                    AVG(pa.accuracy_score)
+                        FILTER (WHERE m.role = 'user' AND pa.accuracy_score IS NOT NULL)
+                        AS avg_accuracy,
+                    AVG(pa.fluency_score)
+                        FILTER (WHERE m.role = 'user' AND pa.fluency_score IS NOT NULL)
+                        AS avg_fluency,
+                    AVG(pa.prosody_score)
+                        FILTER (WHERE m.role = 'user' AND pa.prosody_score IS NOT NULL)
+                        AS avg_prosody,
+                    COUNT(m.id) FILTER (WHERE m.role = 'user') AS user_message_count
+                FROM conversations c
+                LEFT JOIN topics t ON t.id = c.topic_id
+                LEFT JOIN messages m ON m.conversation_id = c.id
+                LEFT JOIN pronunciation_assessments pa ON pa.message_id = m.id
+                WHERE c.user_id = %s
+                GROUP BY c.id, t.title, t.code, c.started_at, c.ended_at
+                ORDER BY c.started_at DESC
+                LIMIT 200
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    sessions: list[ConversationStatOut] = []
+    for (conv_id, topic, topic_code, started_at, duration_ms,
+         avg_score, avg_accuracy, avg_fluency, avg_prosody,
+         user_message_count) in rows:
+
+        scores: ConversationScoresOut | None = None
+        if avg_score is not None or avg_accuracy is not None or avg_fluency is not None:
+            scores = ConversationScoresOut(
+                pronunciation=round(avg_prosody, 1) if avg_prosody is not None else None,
+                fluency=round(avg_fluency, 1) if avg_fluency is not None else None,
+                accuracy=round(avg_accuracy, 1) if avg_accuracy is not None else None,
+            )
+
+        sessions.append(ConversationStatOut(
+            id=conv_id,
+            topic=topic,
+            topic_code=topic_code,
+            started_at=started_at,
+            duration_ms=duration_ms,
+            avg_score=round(avg_score, 1) if avg_score is not None else None,
+            user_message_count=int(user_message_count or 0),
+            scores=scores,
+        ))
+
+    logger.info("get_conversation_stats user_id=%s returned=%d", user_id, len(sessions))
+    return ConversationStatsResponse(sessions=sessions)
 
 
 @router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)

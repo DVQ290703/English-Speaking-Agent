@@ -1,5 +1,5 @@
 import { RefreshCw, Sparkles, Trophy, X } from 'lucide-react';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 export interface SessionSummary {
   sentenceCount: number;

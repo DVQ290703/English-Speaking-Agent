@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 const STORAGE_KEY = 'vt_onboarding_seen_v1';
 

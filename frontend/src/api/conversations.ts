@@ -130,3 +130,28 @@ export async function deleteConversation(token: string, conversationId: string):
     method: 'DELETE',
   });
 }
+
+export interface ConversationScores {
+  pronunciation: number | null;
+  fluency: number | null;
+  accuracy: number | null;
+}
+
+export interface ConversationStat {
+  id: string;
+  topic: string;
+  topic_code: string | null;
+  started_at: string;
+  duration_ms: number | null;
+  avg_score: number | null;
+  user_message_count: number;
+  scores: ConversationScores | null;
+}
+
+export async function fetchConversationStats(token: string): Promise<ConversationStat[]> {
+  const data = await apiFetch<{ sessions: ConversationStat[] }>(
+    '/api/conversations/stats',
+    token,
+  );
+  return data.sessions;
+}

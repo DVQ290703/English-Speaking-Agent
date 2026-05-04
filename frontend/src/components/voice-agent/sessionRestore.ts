@@ -1,12 +1,10 @@
-import { getSession as getSessionHistory } from '../../api/sessionHistory';
-import { DASHBOARD_TO_SUB_OPTION, DASHBOARD_TO_TOPIC_ID, type TopicId } from './constants';
-import type { Message } from './MessageBubble';
+import { DASHBOARD_TO_SUB_OPTION, DASHBOARD_TO_TOPIC_ID } from './constants';
 
 export interface InitialSessionState {
-  messages: Message[];
+  messages: never[];
   sessionId: string | null;
   conversationId: string | null;
-  topic: TopicId | null;
+  topic: string | null;
   customTopicLabel: string | null;
   subOption: string | null;
   nextMsgId: number;
@@ -18,12 +16,11 @@ function isDbUuid(id: string): boolean {
 }
 
 /**
- * One-shot restore that pulls the active session out of localStorage (when
- * `?session=` is present in the URL) and falls back to topic-driven new
- * sessions seeded from `?topic=` or `sessionStorage.va_selected_topic`.
+ * One-shot restore that seeds VoiceAgent's initial state from URL params.
  *
- * Persisted `blob:` user-audio URLs are dropped because they are invalid
- * after a page reload; in-memory `Blob`s also can't survive a reload.
+ * - `?session=<UUID>` → load an existing DB conversation (messages fetched async)
+ * - `?topic=<code>` / `sessionStorage.va_selected_topic` → start a new session
+ *   for the given topic
  */
 export function getInitialSessionState(): InitialSessionState {
   const fallback: InitialSessionState = {
@@ -36,108 +33,43 @@ export function getInitialSessionState(): InitialSessionState {
     nextMsgId: 101,
   };
 
-  let messages: Message[] = [];
-  let sessionId: string | null = null;
-  let conversationId: string | null = null;
-  let restoredTopic: TopicId | null = null;
-
   try {
     const params = new URLSearchParams(window.location.search);
     const sid = params.get('session');
-    if (sid) {
-      // If the session param is a DB UUID, skip localStorage and load async later.
-      if (isDbUuid(sid)) {
-        conversationId = sid;
-      } else {
-        const saved = getSessionHistory(sid);
-        if (saved) {
-          messages = ((saved.messages as Message[]) ?? []).map((m) => {
-            const ts =
-              m.timestamp instanceof Date
-                ? m.timestamp
-                : new Date(m.timestamp as unknown as string | number);
-            const userAudioUrl =
-              typeof m.userAudioUrl === 'string' && m.userAudioUrl.startsWith('blob:')
-                ? undefined
-                : m.userAudioUrl;
-            return {
-              ...m,
-              timestamp: ts,
-              audioUrl: undefined,
-              userAudioUrl,
-              audioBlob: undefined,
-            };
-          });
-          sessionId = sid;
-          restoredTopic = (saved.topicKey as TopicId | null) ?? null;
-        }
-      }
-    }
-  } catch {
-    /* ignore */
-  }
 
-  // Compute the next message id counter. Math.max(...spread) returns
-  // -Infinity on an empty array and silently ignores non-numeric IDs
-  // mapped to 0; reduce keeps things explicit and skips non-finite IDs.
-  const maxId = messages.reduce((max, m) => {
-    const id = typeof m.id === 'number' ? m.id : Number(m.id);
-    return Number.isFinite(id) && id > 0 ? Math.max(max, id) : max;
-  }, 100);
-  const nextMsgId = maxId + 1;
-
-  let topic: TopicId | null = null;
-  let customTopicLabel: string | null = null;
-  let subOption: string | null = null;
-
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (conversationId) {
-      // DB conversation — messages will be loaded async in VoiceAgent.
+    if (sid && isDbUuid(sid)) {
+      const topicParam = params.get('topic');
       return {
         messages: [],
         sessionId: null,
-        conversationId,
-        topic: null,
+        conversationId: sid,
+        topic: topicParam && !topicParam.includes(' ') ? topicParam : null,
         customTopicLabel: null,
         subOption: null,
         nextMsgId: 101,
       };
     }
-    if (params.get('session') && restoredTopic) {
-      return {
-        messages,
-        sessionId,
-        conversationId: null,
-        topic: restoredTopic,
-        customTopicLabel: null,
-        subOption: null,
-        nextMsgId,
-      };
-    }
+
     const raw = params.get('topic') || sessionStorage.getItem('va_selected_topic');
     if (raw) {
       sessionStorage.removeItem('va_selected_topic');
-      const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
-      if (mappedId) {
-        topic = mappedId;
-        subOption = DASHBOARD_TO_SUB_OPTION[raw] ?? null;
+      let topic: string | null = null;
+      let subOption: string | null = null;
+      if (raw.includes(' ')) {
+        const mappedId = DASHBOARD_TO_TOPIC_ID[raw];
+        if (mappedId) {
+          topic = mappedId;
+          subOption = DASHBOARD_TO_SUB_OPTION[raw] ?? null;
+        }
       } else {
-        customTopicLabel = raw;
-        subOption = raw;
+        topic = raw;
+        subOption = DASHBOARD_TO_SUB_OPTION[raw] ?? null;
       }
+      return { messages: [], sessionId: null, conversationId: null, topic, customTopicLabel: null, subOption, nextMsgId: 101 };
     }
   } catch {
-    return { ...fallback, messages, sessionId, nextMsgId };
+    /* ignore */
   }
 
-  return {
-    messages,
-    sessionId,
-    conversationId: null,
-    topic,
-    customTopicLabel,
-    subOption,
-    nextMsgId,
-  };
+  return fallback;
 }

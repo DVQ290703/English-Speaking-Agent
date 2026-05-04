@@ -1,6 +1,6 @@
 import { CheckCircle2, Volume2 } from 'lucide-react';
 import { useState } from 'react';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 import { FEEDBACK_ICON, type FeedbackType } from './constants';
 import { type Message, type Mistake } from './MessageBubble';
 import PronunciationDetailModal from './PronunciationDetailModal';
