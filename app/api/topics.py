@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.schemas import CategoryWithTopicsOut, TopicOut
-import app.core.database as _db
+from app.core.database import get_connection
 from app.core.logger import logger
 
 router = APIRouter(prefix="/topics", tags=["topics"])
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/topics", tags=["topics"])
 @router.get("/categories", response_model=list[CategoryWithTopicsOut])
 def list_categories():
     """Return all active categories with their active topics, ordered by sort_order."""
-    with _db.get_connection() as conn:
+    with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
