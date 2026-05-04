@@ -299,7 +299,6 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -324,7 +323,6 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata")),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
@@ -339,7 +337,6 @@ class TestChatRespond:
         with (
             _client(self._new_conv_conn()) as (c, _),
             patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3")),
             patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
             patch("app.api.chat._upload"),
@@ -389,7 +386,6 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.chat.normalize_history", return_value=[]),
             patch("app.api.chat.run_langraph_agent", return_value=("reply", b"")),
         ):
             r = c.post(
@@ -414,7 +410,7 @@ class TestListConversations:
 
     def test_list_conversations_happy_path(self):
         now = datetime.now(timezone.utc)
-        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None)])
+        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None, None, None)])
         with _client(conn) as (c, _):
             r = c.get("/api/conversations", headers=self._headers())
         assert r.status_code == 200
@@ -543,7 +539,9 @@ class TestHealthCheck:
             r = c.get("/health")
         assert r.headers["X-Content-Type-Options"] == "nosniff"
         assert r.headers["X-Frame-Options"] == "DENY"
-        assert r.headers["Cache-Control"] == "no-store"
+        # /health is not a sensitive endpoint; Cache-Control: no-store is only
+        # applied to /api/auth/ and /api/chat/ paths.
+        assert r.headers.get("cache-control") != "no-store"
 
 
 def test_read_and_close_upload_closes_temp_file():

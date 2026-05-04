@@ -12,3 +12,4 @@ export type { SessionSummary } from './SessionSummaryModal';
 export { default as SettingsPanel } from './SettingsPanel';
 export { default as VoiceAgentHeader } from './VoiceAgentHeader';
 export { AgentWaveform, MicWaveform } from './Waveforms';
+export { default as ConversationSidebar } from './ConversationSidebar';

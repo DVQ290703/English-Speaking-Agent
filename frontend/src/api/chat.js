@@ -4,10 +4,10 @@ export async function chatRespond({
   token,
   text,
   audioBlob,
-  history = [],
   topic = '',
   subOption = '',
   voiceGender = '',
+  conversationId = null,
 }) {
   const formData = new FormData();
 
@@ -15,12 +15,12 @@ export async function chatRespond({
     formData.append('text', text.trim());
   }
 
-  if (Array.isArray(history) && history.length > 0) {
-    formData.append('history', JSON.stringify(history));
-  }
-
   if (topic && topic.trim()) {
     formData.append('topic', topic.trim());
+  }
+
+  if (conversationId) {
+    formData.append('conversation_id', conversationId);
   }
 
   if (subOption && subOption.trim()) {
@@ -96,6 +96,7 @@ export async function assessPronunciation({
   audioBlob,
   referenceText = null,
   language = null,
+  messageId = null,
 }) {
   const wavBlob = await toWav(audioBlob);
   const formData = new FormData();
@@ -107,6 +108,10 @@ export async function assessPronunciation({
 
   if (language && language.trim()) {
     formData.append('language', language.trim());
+  }
+
+  if (messageId) {
+    formData.append('message_id', messageId);
   }
 
   const response = await fetch(`${API_BASE_URL}/api/assess`, {
