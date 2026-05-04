@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { registerRequest } from '../api/auth';
 import { saveAuthSession } from '../auth/tokenStorage';
+import Spinner from '../components/ui/Spinner';
 import { useT } from '../i18n/LanguageContext';
 
 // ---------------------------------------------------------------------------
@@ -292,7 +293,14 @@ export default function RegisterPage() {
             </label>
 
             <button type="submit" className="submit-btn" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating account…' : 'Create account'}
+              {isSubmitting ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size={14} color="#fff" />
+                  {t('auth.creatingAccount')}
+                </span>
+              ) : (
+                'Create account'
+              )}
             </button>
 
             {apiError && <p className="error-msg">{apiError}</p>}

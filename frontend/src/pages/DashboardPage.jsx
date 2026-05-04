@@ -26,10 +26,13 @@ import {
   getLatestSessionByTopic,
 } from '../api/sessionHistory';
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
+import BadgesCard from '../components/dashboard/BadgesCard';
+import OnboardingTip from '../components/dashboard/OnboardingTip';
 import CountUp from '../components/ui/CountUp';
 import Skeleton from '../components/ui/Skeleton';
 import { useT } from '../i18n/LanguageContext';
 import LanguageToggle from '../i18n/LanguageToggle';
+import { computeBadges, computePeriodDelta } from '../lib/gamification';
 import { DASHBOARD_TO_TOPIC_ID } from '../lib/topicMap';
 import ThemeToggle from '../theme/ThemeToggle';
 import { useDarkMode } from '../theme/useDarkMode';
@@ -382,7 +385,7 @@ function BandTooltip({ active, payload, label }) {
   const band = payload[0].value;
   const bc = bandColor(band);
   return (
-    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-32.5">
+    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-[130px]">
       <p className="text-gray-400 dark:text-slate-400 text-xs mb-1">{label}</p>
       <div className="flex items-center gap-2">
         <span
@@ -396,7 +399,7 @@ function BandTooltip({ active, payload, label }) {
         </span>
       </div>
       {payload[0].payload.topic && (
-        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-37.5">
+        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-[150px]">
           {payload[0].payload.topic}
         </p>
       )}
@@ -569,32 +572,53 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm dark:shadow-black/30 p-10 text-center">
-        <div className="text-5xl mb-4">📈</div>
-        <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 mb-2">
-          {t('dash.chart.emptyTitle')}
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-slate-400 mb-6 max-w-xs mx-auto">
-          {t('dash.chart.emptyBody')}
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <button
-            onClick={onStart}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors"
-          >
-            {t('dash.chart.emptyBtn')}
-          </button>
-          <button
-            onClick={onLoadDemo}
-            className="text-sm font-semibold px-6 py-2.5 rounded-xl border border-dashed border-blue-300 dark:border-blue-500/60 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-            title={t('dash.chart.loadDemoHint')}
-          >
-            ✨ {t('dash.chart.loadDemo')}
-          </button>
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-sm dark:shadow-black/30 p-8 sm:p-10">
+        <div className="max-w-md mx-auto text-center">
+          <div className="text-5xl mb-3">📈</div>
+          <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 mb-2">
+            {t('dash.chart.emptyTitle')}
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">
+            {t('dash.chart.emptyBody')}
+          </p>
+          {/* 3-step visual */}
+          <div className="flex items-center justify-between max-w-sm mx-auto mb-6 px-2">
+            {[
+              { n: '1', emoji: '🎯', key: 'dash.empty.step1' },
+              { n: '2', emoji: '🎙️', key: 'dash.empty.step2' },
+              { n: '3', emoji: '📊', key: 'dash.empty.step3' },
+            ].map((s, i, arr) => (
+              <div key={s.n} className="flex items-center flex-1 last:flex-none">
+                <div className="flex flex-col items-center flex-1 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
+                    {s.emoji}
+                  </div>
+                  <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-300 leading-tight">
+                    {t(s.key)}
+                  </p>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="text-slate-300 dark:text-slate-600 -mt-5 px-1">→</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={onStart}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors w-full sm:w-auto"
+            >
+              {t('dash.chart.emptyBtn')}
+            </button>
+            <button
+              onClick={onLoadDemo}
+              className="text-sm font-semibold px-6 py-2.5 rounded-xl border border-dashed border-blue-300 dark:border-blue-500/60 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors w-full sm:w-auto"
+              title={t('dash.chart.loadDemoHint')}
+            >
+              ✨ {t('dash.chart.loadDemo')}
+            </button>
+          </div>
         </div>
-        <p className="text-xs text-gray-400 dark:text-slate-500 mt-4">
-          {t('dash.chart.loadDemoHint')}
-        </p>
       </div>
     );
   }
@@ -655,6 +679,41 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
           </div>
         </div>
       </div>
+
+      {/* Compare mode banner */}
+      {tab === 'line' &&
+        (() => {
+          const periodSize = Math.max(2, Math.min(7, Math.floor(sessions.length / 2)));
+          const cmp = computePeriodDelta(sessions, periodSize);
+          if (!cmp) return null;
+          const deltaRounded = +cmp.delta.toFixed(1);
+          let label;
+          let tone;
+          if (deltaRounded > 0) {
+            label = t('dash.chart.delta.up', { n: deltaRounded.toFixed(1) });
+            tone =
+              'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30';
+          } else if (deltaRounded < 0) {
+            label = t('dash.chart.delta.down', { n: deltaRounded.toFixed(1) });
+            tone =
+              'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30';
+          } else {
+            label = t('dash.chart.delta.same');
+            tone =
+              'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+          }
+          return (
+            <div className="px-6 pt-4 pb-1 flex items-center gap-2 flex-wrap">
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${tone}`}>
+                {deltaRounded > 0 ? '▲' : deltaRounded < 0 ? '▼' : '●'} {label}
+              </span>
+              <span className="text-xs text-gray-400 dark:text-slate-500">
+                {t('dash.chart.thisPeriod')} {cmp.current.toFixed(1)} · {t('dash.chart.lastPeriod')}{' '}
+                {cmp.previous.toFixed(1)}
+              </span>
+            </div>
+          );
+        })()}
 
       {/* Charts */}
       <div className="px-4 pt-6 pb-2">
@@ -776,7 +835,7 @@ const ScoreTrendChart = memo(function ScoreTrendChart({
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-linear-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
+      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-slate-400">
           {t('dash.chart.sessionCount', { n: chartData.length })}
         </p>
@@ -1050,7 +1109,7 @@ export default function DashboardPage() {
           <div className="mb-10">
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-slate-100">
               {t('dash.greeting', {
-                name: displayName,
+                name: displayName.split(' ').slice(-1)[0],
               })}
             </h1>
             <p className="text-base text-gray-500 dark:text-slate-400 mt-2">{t('dash.subtitle')}</p>
@@ -1099,6 +1158,9 @@ export default function DashboardPage() {
             <CategoryTabsRow categories={TOPIC_CATEGORIES} onStart={startSession} />
           </section>
 
+          {/* Badges / achievements */}
+          <BadgesCard badges={computeBadges(allSessions)} />
+
           {/* Score trend chart */}
           <ScoreTrendChart
             sessions={allSessions}
@@ -1107,6 +1169,9 @@ export default function DashboardPage() {
             onLoadDemo={handleChartLoadDemo}
           />
         </main>
+
+        {/* First-time tip overlay */}
+        <OnboardingTip />
 
         {showLogoutConfirm && (
           <div

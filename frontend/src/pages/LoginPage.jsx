@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { loginRequest } from '../api/auth';
 import { saveAuthSession } from '../auth/tokenStorage';
+import Spinner from '../components/ui/Spinner';
 import { useT } from '../i18n/LanguageContext';
 
 const initialForm = {
@@ -180,7 +181,14 @@ export default function LoginPage() {
             </div>
 
             <button type="submit" className="submit-btn" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
+              {isSubmitting ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size={14} color="#fff" />
+                  {t('auth.signingIn')}
+                </span>
+              ) : (
+                'Sign in'
+              )}
             </button>
 
             {apiError ? <p className="error-msg">{apiError}</p> : null}

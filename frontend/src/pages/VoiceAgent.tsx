@@ -8,13 +8,14 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Circle } from 'lucide-react';
+import { Clock, Settings, Circle } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
 
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
 import {
   AiFeedbackPanel,
   ChatInputBar,
+  HistorySidebar,
   LeftAudioPanel,
   LogoutConfirmModal,
   MessageBubble,
@@ -181,6 +182,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [, setFeedbacks] = useState<FeedbackItem[]>([]);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -515,7 +518,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         url.searchParams.set('topic', tp.label);
         window.history.replaceState({}, '', url.toString());
       }
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -567,6 +572,37 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
         <div className="flex items-center gap-2">
           <button
+            data-testid="button-history"
+            onClick={() => setShowHistory(true)}
+            title={t('va.history.open')}
+            aria-label={t('va.history.open')}
+            className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
+          >
+            <Clock className="w-3.5 h-3.5" />
+          </button>
+          <button
+            data-testid="button-mobile-panel"
+            onClick={() => setShowLeftPanelMobile((v) => !v)}
+            title={t('va.left.aiFeedback')}
+            aria-label={t('va.left.aiFeedback')}
+            className="md:hidden p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <button
             data-testid="button-settings"
             onClick={() => setShowSettings((v) => !v)}
             className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
@@ -595,11 +631,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       </div>
 
       {/* Main content */}
-      <div data-va="content" className="flex flex-1 overflow-hidden">
-        {/* Left panel: Audio & Video */}
+      <div data-va="content" className="flex flex-1 overflow-hidden relative">
+        {/* Left panel: Audio & Video — drawer on mobile, persistent on md+ */}
+        {showLeftPanelMobile && (
+          <div
+            className="md:hidden fixed inset-0 z-7000 bg-black/40"
+            onClick={() => setShowLeftPanelMobile(false)}
+          />
+        )}
         <div
           data-va="left"
-          className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col bg-white overflow-visible"
+          className={`${
+            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+          } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
         >
           <LeftAudioPanel
             gender={gender}
@@ -755,6 +799,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           />
         </div>
       </div>
+
+      <HistorySidebar
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        onSelectSession={(id) => {
+          window.location.assign(`/VoiceAgent?session=${encodeURIComponent(id)}`);
+        }}
+      />
 
       {showSettings && (
         <SettingsPanel
