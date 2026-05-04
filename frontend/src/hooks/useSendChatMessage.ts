@@ -3,17 +3,15 @@ import { assessPronunciation, chatRespond } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
 import {
   LANGUAGE_CODES,
-  TOPICS,
   type FeedbackItem,
   type Gender,
   type Language,
-  type TopicId,
 } from '../components/voice-agent/constants';
 import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
 
 export interface UseSendChatMessageParams {
   messages: Message[];
-  topic: TopicId | null;
+  topic: string | null;
   subOption: string | null;
   gender: Gender;
   language: Language;
@@ -44,6 +42,9 @@ export interface UseSendChatMessageParams {
  *   4. Run pronunciation assessment in the background
  *   5. Map Azure assessment words into per-message `mistakes` + `scoreDetails`
  *
+ * Also exposes `sendGreeting` — a fire-and-forget call that makes the AI open
+ * the conversation with a topic-appropriate greeting (no user bubble shown).
+ *
  * All inputs come in as refs/setters so the caller (VoiceAgent) keeps the
  * canonical state and the hook stays pure with respect to React lifecycle.
  */
@@ -71,7 +72,8 @@ export default function useSendChatMessage({
   setAgentSpeaking,
   setMicEnabled,
 }: UseSendChatMessageParams) {
-  return useCallback(
+  // topic is already the DB code (e.g. "academic", "daily_conversation")
+  const sendChatMessage = useCallback(
     async (text: string, audioBlob?: Blob) => {
       const trimmed = text.trim();
       if (!trimmed || agentTyping) return;
@@ -130,10 +132,7 @@ export default function useSendChatMessage({
             text: trimmed,
             audioBlob,
             history: historyPayload,
-            topic:
-              TOPICS.find((item) => item.id === (topic as TopicId | undefined))?.label ??
-              topic ??
-              undefined,
+            topic: topic ?? undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
             conversationId: conversationIdRef.current ?? undefined,
@@ -367,4 +366,71 @@ export default function useSendChatMessage({
       setMicEnabled,
     ],
   );
+
+  /**
+   * Sends a silent "Hello" to trigger the AI to open the conversation with
+   * a topic-appropriate greeting. No user bubble is shown — only the agent
+   * response appears, creating the conversation in the DB immediately.
+   */
+  const sendGreeting = useCallback(async () => {
+    const session = getAuthSession();
+    if (!session?.token) return;
+
+    const typingId = msgCounterRef.current++;
+    setMessages((prev) => [
+      ...prev,
+      { id: typingId, role: 'agent' as const, text: '', timestamp: new Date(), typing: true },
+    ]);
+    setAgentTyping(true);
+
+    try {
+      const data = await chatRespond({
+        token: session.token,
+        text: 'Hello',
+        history: [],
+        topic: topic ?? undefined,
+        subOption: subOption ?? undefined,
+        voiceGender: gender,
+        conversationId: conversationIdRef.current ?? undefined,
+      });
+
+      if (data.conversation_id) {
+        conversationIdRef.current = data.conversation_id;
+      }
+
+      const responseText = String(data.response_text || '').trim();
+      let audioUrl: string | undefined;
+      if (data.audio_base64) {
+        audioUrl = `data:audio/mpeg;base64,${data.audio_base64}`;
+      } else if (data.assistant_audio_url) {
+        audioUrl = data.assistant_audio_url;
+      }
+
+      const playedUrl = playAgentAudio(responseText, audioUrl);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === typingId
+            ? { ...m, text: responseText, typing: false, audioUrl: playedUrl }
+            : m,
+        ),
+      );
+    } catch {
+      // On failure silently remove the typing bubble — user can still chat normally
+      setMessages((prev) => prev.filter((m) => m.id !== typingId));
+    } finally {
+      setAgentTyping(false);
+    }
+  }, [
+    topic,
+    subOption,
+    gender,
+    conversationIdRef,
+    msgCounterRef,
+    playAgentAudio,
+    setMessages,
+    setAgentTyping,
+  ]);
+
+  return { sendChatMessage, sendGreeting };
 }

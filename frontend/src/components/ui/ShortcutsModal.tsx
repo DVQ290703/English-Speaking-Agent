@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 export function useShortcutsToggle() {
   const [open, setOpen] = useState(false);

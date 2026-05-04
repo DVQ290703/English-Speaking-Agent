@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { loginRequest } from '../api/auth';
 import { saveAuthSession } from '../auth/tokenStorage';
 import Spinner from '../components/ui/Spinner';
-import { useT } from '../i18n/LanguageContext';
+import { useT } from '../i18n/useLanguage';
 
 const initialForm = {
   email: '',

@@ -1,6 +1,6 @@
 import { User } from 'lucide-react';
 import { SiOpenai } from 'react-icons/si';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 import DeviceSelect from './DeviceSelect';
 import SelectDropdown from './SelectDropdown';
 import { AgentWaveform, MicWaveform } from './Waveforms';

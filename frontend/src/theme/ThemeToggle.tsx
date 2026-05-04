@@ -1,6 +1,6 @@
 import { Moon, Sun } from 'lucide-react';
 
-import { useLanguage } from '../i18n/LanguageContext';
+import { useLanguage } from '../i18n/useLanguage';
 
 interface ThemeToggleProps {
   dark: boolean;

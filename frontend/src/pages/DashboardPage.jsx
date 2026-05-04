@@ -19,19 +19,26 @@ import {
 } from 'recharts';
 
 import { fetchMe } from '../api/auth';
-import { getSessions, formatDuration, getLatestSessionByTopic } from '../api/sessionHistory';
+import { fetchConversationStats } from '../api/conversations';
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
 import BadgesCard from '../components/dashboard/BadgesCard';
 import OnboardingTip from '../components/dashboard/OnboardingTip';
 import CountUp from '../components/ui/CountUp';
 import Skeleton from '../components/ui/Skeleton';
 import { useTopics } from '../hooks/useTopics';
-import { useT } from '../i18n/LanguageContext';
+import { useT } from '../i18n/useLanguage';
 import LanguageToggle from '../i18n/LanguageToggle';
 import { computeBadges, computePeriodDelta } from '../lib/gamification';
-import { DASHBOARD_TO_TOPIC_ID } from '../lib/topicMap';
 import ThemeToggle from '../theme/ThemeToggle';
 import { useDarkMode } from '../theme/useDarkMode';
+
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '0m';
+  const totalSec = Math.round(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m > 0 ? (s > 0 ? `${m}m ${s}s` : `${m}m`) : `${s}s`;
+}
 
 const ACCENT_STYLES = {
   blue: {
@@ -605,7 +612,8 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [historyTick, setHistoryTick] = useState(0);
+  const [apiSessions, setApiSessions] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [dark, toggleDark] = useDarkMode();
   const session = useMemo(() => getAuthSession(), []);
 
@@ -628,26 +636,43 @@ export default function DashboardPage() {
     }));
   }, [apiCategories]);
 
-  const allSessions = useMemo(() => {
-    return getSessions().map((s, idx) => ({
-      id: s.id ?? `real_${idx}`,
-      topic: s.topic,
-      date: s.date,
-      duration: formatDuration(s.durationMs ?? 0),
-      durationMs: s.durationMs ?? 0,
-      messages: s.sentenceCount ?? 0,
-      avgScore: s.avgScore ?? 0,
-      corrections: s.corrections ?? 0,
-      scores: s.scores ?? null,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyTick]);
+  const loadStats = useCallback(async () => {
+    if (!session?.token) return;
+    try {
+      const data = await fetchConversationStats(session.token);
+      setApiSessions(data);
+    } catch {
+      // keep existing data on failure
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [session]);
 
   useEffect(() => {
-    const onFocus = () => setHistoryTick((n) => n + 1);
+    loadStats();
+  }, [loadStats]);
+
+  useEffect(() => {
+    const onFocus = () => { void loadStats(); };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, []);
+  }, [loadStats]);
+
+  const allSessions = useMemo(() => {
+    return apiSessions.map((s) => ({
+      id: s.id,
+      topic: s.topic,
+      date: s.started_at,
+      duration: formatDuration(s.duration_ms ?? 0),
+      durationMs: s.duration_ms ?? 0,
+      messages: s.user_message_count ?? 0,
+      avgScore: Math.round(s.avg_score ?? 0),
+      corrections: 0,
+      scores: s.scores && (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
+        ? s.scores
+        : null,
+    }));
+  }, [apiSessions]);
 
   useEffect(() => {
     if (!session?.token) {
@@ -675,19 +700,8 @@ export default function DashboardPage() {
   };
 
   const startSession = (topicKey) => {
-    // VoiceAgent persists `topicKey` as the canonical `TopicId` (e.g. 'ielts1'),
-    // but the demo seed and dashboard cards use the human label (e.g. 'IELTS Part 1').
-    // Try both keys so we can resume regardless of which form was stored.
-    const mappedId = DASHBOARD_TO_TOPIC_ID[topicKey];
-    const prior =
-      getLatestSessionByTopic(topicKey) || (mappedId ? getLatestSessionByTopic(mappedId) : null);
-    if (prior?.id && Array.isArray(prior.messages) && prior.messages.length > 0) {
-      toast.success(t('toast.resumingTopic'));
-      navigate(
-        `/VoiceAgent?topic=${encodeURIComponent(topicKey)}&session=${encodeURIComponent(prior.id)}`,
-      );
-      return;
-    }
+    // Navigate to VoiceAgent with the topic code. VoiceAgent will automatically
+    // load the most recent DB conversation for this topic (if any exists).
     navigate(`/VoiceAgent?topic=${encodeURIComponent(topicKey)}`);
   };
 
@@ -878,30 +892,41 @@ export default function DashboardPage() {
 
           {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
-            <StatCard
-              icon="🎙️"
-              label={t('dash.stats.totalSessions')}
-              value={totalSessions}
-              sub={t('dash.stats.totalSessions.sub')}
-            />
-            <StatCard
-              icon="⭐"
-              label={t('dash.stats.avgScore')}
-              value={avgScore}
-              sub={t('dash.stats.avgScore.sub')}
-            />
-            <StatCard
-              icon="⏱"
-              label={t('dash.stats.practice')}
-              value={t('dash.stats.minutes', { n: totalMins })}
-              sub={t('dash.stats.practice.sub')}
-            />
-            <StatCard
-              icon="🔥"
-              label={t('dash.stats.streak')}
-              value={t('dash.stats.streak.value', { n: streak })}
-              sub={t('dash.stats.streak.sub')}
-            />
+            {statsLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 px-6 py-5 shadow-sm">
+                  <Skeleton className="h-8 w-16 mb-2" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))
+            ) : (
+              <>
+                <StatCard
+                  icon="🎙️"
+                  label={t('dash.stats.totalSessions')}
+                  value={totalSessions}
+                  sub={t('dash.stats.totalSessions.sub')}
+                />
+                <StatCard
+                  icon="⭐"
+                  label={t('dash.stats.avgScore')}
+                  value={avgScore}
+                  sub={t('dash.stats.avgScore.sub')}
+                />
+                <StatCard
+                  icon="⏱"
+                  label={t('dash.stats.practice')}
+                  value={t('dash.stats.minutes', { n: totalMins })}
+                  sub={t('dash.stats.practice.sub')}
+                />
+                <StatCard
+                  icon="🔥"
+                  label={t('dash.stats.streak')}
+                  value={t('dash.stats.streak.value', { n: streak })}
+                  sub={t('dash.stats.streak.sub')}
+                />
+              </>
+            )}
           </div>
 
           {/* Choose a topic */}

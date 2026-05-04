@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { getAuthSession } from './auth/tokenStorage';
 import Skeleton from './components/ui/Skeleton';
 import ShortcutsModal, { useShortcutsToggle } from './components/ui/ShortcutsModal';
-import { useT } from './i18n/LanguageContext';
+import { useT } from './i18n/useLanguage';
 import LoginPage from './pages/LoginPage';
 import { useDarkMode } from './theme/useDarkMode';
 

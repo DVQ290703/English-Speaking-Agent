@@ -1,5 +1,5 @@
 import { LogIn, LogOut, Menu, UserPlus } from 'lucide-react';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 import LanguageToggle from '../../i18n/LanguageToggle';
 import ThemeToggle from '../../theme/ThemeToggle';
 import type { AuthUser } from './constants';
