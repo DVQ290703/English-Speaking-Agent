@@ -125,7 +125,16 @@ class AzureAssessmentService:
                 raise RuntimeError("Azure returned an empty NBest list")
             display_text = data.get("DisplayText", "")
             logger.info("AzureAssessment done mode=%s display_text_length=%d", mode, len(display_text))
-            return {"mode": mode, "display_text": display_text, **nbest[0]}
+            return {
+                "mode": mode,
+                "display_text": display_text,
+                # Top-level metadata (not in NBest)
+                "recognition_status": data.get("RecognitionStatus"),
+                "offset_ticks": data.get("Offset"),
+                "duration_ticks": data.get("Duration"),
+                "snr": data.get("SNR"),
+                **nbest[0],
+            }
 
         if result.reason == speechsdk.ResultReason.NoMatch:
             logger.warning("AzureAssessment NoMatch locale=%s", locale)

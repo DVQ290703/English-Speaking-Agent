@@ -1,6 +1,6 @@
 # Environment
 .env
-
+.git-rewrite/
 # Python
 __pycache__/
 *.py[cod]
@@ -44,3 +44,4 @@ data/
 uv.lock
 IMAGES
 logs/
+.worktrees/
