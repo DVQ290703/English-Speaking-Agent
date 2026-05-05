@@ -1,0 +1,528 @@
+from __future__ import annotations
+
+import base64
+import json as _json
+import time as _time
+import uuid as _uuid
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
+from app.api._audio import (
+    _CHAT_AUDIO_CONTENT_TYPES,
+    _MAX_AUDIO_BYTES,
+    _read_and_close_upload,
+    _validate_uploaded_audio,
+)
+from app.api._validators import _enforce_max_length, _validate_uuid
+from app.api.schemas import ChatResponse, GrammarDetailResponse, GrammarErrorDetail, GrammarSummary, GrammarSpan, ToolCallStep
+from app.services.grammar_parser import parse_annotated_grammar
+from app.core.ai_services import (
+    _synthesize_audio_bytes,
+    run_langraph_agent,
+    transcribe_audio,
+)
+from app.core.database import get_connection
+from app.core.logger import logger
+from app.core.security import get_current_user_id
+from app.core.storage import _upload, build_object_key, store_user_audio
+from app.guardrails.audit.logger import AuditLogger
+from app.core.telemetry import update_session_id, set_msg_id
+from app.guardrails.exceptions import GuardrailException
+from app.guardrails.input import InputGuardrails
+from app.guardrails.output import OutputGuardrails
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+_MAX_TEXT_CHARS = 4_000
+_MAX_HISTORY_CHARS = 50_000
+_MAX_CATEGORY_CHARS = 80
+_MAX_TOPIC_CHARS = 120
+_INLINE_AUDIO_LIMIT_BYTES = 512 * 1024
+
+_input_guardrails = InputGuardrails()
+_output_guardrails = OutputGuardrails()
+_audit_logger = AuditLogger()
+
+_GUARDRAIL_HTTP_STATUS: dict[str, int] = {
+    "INPUT_INVALID": status.HTTP_400_BAD_REQUEST,
+    "INPUT_TOO_LONG": status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+    "RATE_LIMITED": status.HTTP_429_TOO_MANY_REQUESTS,
+    "INJECTION_DETECTED": status.HTTP_400_BAD_REQUEST,
+    "TOPIC_BLOCKED": status.HTTP_400_BAD_REQUEST,
+}
+
+
+def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
+    """
+    Return the last `limit` visible (post-cleared_at) user+assistant turns
+    for the given conversation, oldest-first, ready for the LLM context.
+    Returns empty list if conv_id is None or no messages found.
+    """
+    if not conv_id:
+        return []
+    cur.execute(
+        """
+        SELECT m.role, m.text_content, m.raw_content
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.conversation_id = %s
+          AND m.role IN ('user', 'assistant')
+          AND m.text_content IS NOT NULL
+          AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+        ORDER BY m.created_at DESC, m.role ASC
+        LIMIT %s
+        """,
+        (conv_id, limit),
+    )
+    rows = cur.fetchall()
+    return [{"role": row[0], "content": row[1], "raw_content": row[2]} for row in reversed(rows)]
+
+
+def _insert_audio_asset(
+    cur,
+    *,
+    message_id: str,
+    audio_type: str,
+    object_key: str,
+    mime_type: str,
+    size_bytes: int,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO audio_assets
+            (message_id, audio_type, storage_provider, storage_key, mime_type, size_bytes)
+        VALUES (%s, %s, 'minio', %s, %s, %s)
+        """,
+        (message_id, audio_type, object_key, mime_type, size_bytes),
+    )
+
+
+@router.post("/transcribe")
+def transcribe_audio_only(
+    audio_file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Lightweight STT-only endpoint: transcribes audio via Groq Whisper.
+    No LLM, no TTS, no database writes — optimised for low-latency transcription."""
+    audio_bytes = _read_and_close_upload(audio_file)
+    if not audio_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Audio file is empty")
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Audio file exceeds 25 MB limit",
+        )
+    _validate_uploaded_audio(
+        audio_file=audio_file,
+        audio_bytes=audio_bytes,
+        allowed_content_types=_CHAT_AUDIO_CONTENT_TYPES,
+        endpoint_label="Transcribe",
+    )
+    text = transcribe_audio(audio_bytes, filename=audio_file.filename or "recording.wav")
+    logger.info("transcribe_audio_only done user_id=%s length=%d", user_id, len(text))
+    return {"text": text}
+
+
+@router.post("/respond", response_model=ChatResponse)
+def chat_respond(
+    text: str | None = Form(default=None),
+    category: str | None = Form(default=None),
+    topic: str | None = Form(default=None),
+    voice_gender: str | None = Form(default=None),
+    voice_accent: str | None = Form(default=None),
+    audio_file: UploadFile | None = File(default=None),
+    conversation_id: str | None = Form(default=None),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Send a message (text or audio) and get an AI coach reply with TTS audio.
+
+    Audio input is transcribed via STT when no text is provided. Input and output
+    pass through guardrails. A new conversation is created if conversation_id is
+    omitted; category is matched to a topics row to enforce the 5-session limit.
+    Returns the reply text, inline or URL-referenced MP3, and a grammar summary.
+    """
+    input_mode = "audio" if audio_file else "text"
+    logger.info("chat_respond start user_id=%s input_mode=%s conversation_id=%s", user_id, input_mode, conversation_id)
+
+    text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
+    category = _enforce_max_length(category, field="category", max_chars=_MAX_CATEGORY_CHARS)
+    topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
+
+    user_input = (text or "").strip()
+    audio_bytes_received = b""
+
+    if audio_file is not None:
+        audio_bytes_received = _read_and_close_upload(audio_file)
+        logger.info(
+            "Audio received filename=%r content_type=%r size=%d bytes",
+            audio_file.filename,
+            audio_file.content_type,
+            len(audio_bytes_received),
+        )
+        if len(audio_bytes_received) > _MAX_AUDIO_BYTES:
+            logger.warning("Audio upload rejected size=%d exceeds limit", len(audio_bytes_received))
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Audio file exceeds 25 MB limit",
+            )
+
+        _validate_uploaded_audio(
+            audio_file=audio_file,
+            audio_bytes=audio_bytes_received,
+            allowed_content_types=_CHAT_AUDIO_CONTENT_TYPES,
+            endpoint_label="Chat",
+        )
+
+        if not user_input:
+            logger.info("No text provided - transcribing audio via STT")
+            transcript = transcribe_audio(
+                audio_bytes_received,
+                filename=audio_file.filename or "recording.webm",
+            )
+            user_input = transcript.strip() if transcript else "I sent an audio message."
+            logger.info("STT completed transcript_length=%d", len(user_input))
+
+    if not user_input:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No input provided")
+
+    # ── Guardrails: Input ──────────────────────────────────────────────────
+    _guardrail_start = _time.time()
+    _guardrail_decisions: dict = {}
+    _all_flags: list[str] = []
+
+    try:
+        user_input = _input_guardrails.check(user_input, user_id)
+        _guardrail_decisions.update({
+            "input_valid": True,
+            "rate_limited": False,
+            "injection_detected": False,
+            "topic_blocked": False,
+        })
+    except GuardrailException as exc:
+        logger.warning(
+            "input_guardrail_block code=%s reason=%s user_id=%s",
+            exc.code,
+            exc.reason,
+            user_id,
+        )
+        http_status = _GUARDRAIL_HTTP_STATUS.get(exc.code, status.HTTP_400_BAD_REQUEST)
+        extra_headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after else None
+        raise HTTPException(
+            status_code=http_status,
+            detail=exc.reason,
+            headers=extra_headers,
+        )
+    # ── End Input Guardrails ───────────────────────────────────────────────
+
+    if conversation_id:
+        _validate_uuid(conversation_id, "conversation_id")
+
+    turn_id = str(_uuid.uuid4())
+    user_message_id = str(_uuid.uuid4())
+    assistant_message_id = str(_uuid.uuid4())
+
+    logger.debug("Resolving conversation and turn number")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if conversation_id:
+                cur.execute(
+                    "SELECT id::text FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
+                    (conversation_id, user_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    logger.warning("Conversation not found conversation_id=%s user_id=%s", conversation_id, user_id)
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+                conv_id = row[0]
+            else:
+                topic_id = None
+                topic_title = None
+                category_clean = (topic or category or "").strip().lower()
+                if category_clean:
+                    cur.execute(
+                        "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",
+                        (category_clean, category_clean),
+                    )
+                    topic_row = cur.fetchone()
+                    if topic_row:
+                        topic_id, topic_title = topic_row[0], topic_row[1]
+
+                if topic_id:
+                    # 5-limit: count active (non-deleted) conversations for this topic
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) FROM conversations
+                        WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+                        """,
+                        (user_id, topic_id),
+                    )
+                    active_count = cur.fetchone()[0]
+                    if active_count >= 5:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Conversation limit reached",
+                        )
+
+                    # Session number = total ever (including deleted) + 1
+                    cur.execute(
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND topic_id = %s",
+                        (user_id, topic_id),
+                    )
+                    total_ever = cur.fetchone()[0]
+                    title = f"{topic_title} - Session {total_ever + 1}"
+                else:
+                    title = "New Conversation"
+
+                cur.execute(
+                    "INSERT INTO conversations (user_id, topic_id, title) VALUES (%s, %s, %s) RETURNING id::text",
+                    (user_id, topic_id, title),
+                )
+                conv_id = cur.fetchone()[0]
+                logger.info(
+                    "New conversation created conv_id=%s topic_id=%s title=%r",
+                    conv_id, topic_id, title,
+                )
+
+            cur.execute(
+                "SELECT COALESCE(MAX(turn_number), 0) + 1 FROM turns WHERE conversation_id = %s",
+                (conv_id,),
+            )
+            turn_number = cur.fetchone()[0]
+
+            # Server-side history — replaces client-owned history field
+            conversation_history = _fetch_visible_history(cur, conv_id)
+
+    # Enrich trace context with the resolved conversation ID as session_id
+    update_session_id(conv_id)
+
+    user_object_key: str | None = None
+    user_mime_type = "audio/webm"
+    if audio_bytes_received:
+        logger.info("Uploading user audio size=%d bytes", len(audio_bytes_received))
+        try:
+            user_object_key, user_mime_type = store_user_audio(
+                conversation_id=conv_id,
+                message_id=user_message_id,
+                audio_bytes=audio_bytes_received,
+                filename=audio_file.filename if audio_file else None,
+                content_type=audio_file.content_type if audio_file else None,
+            )
+        except Exception:
+            logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
+
+    # Convert DB history (list[dict]) to the "Role: text" string format the pipeline expects.
+    # For assistant turns, prefer raw_content (full XML) over text_content so the model sees
+    # its prior format and continues to use XML tags — avoids few-shot format contamination.
+    # category and topic are passed directly to run_langraph_agent() for typed prompt routing.
+    history_lines: list[str] = []
+    for msg in conversation_history:
+        role_label = "User" if msg["role"] == "user" else "Assistant"
+        content = msg.get("raw_content") or msg["content"]
+        history_lines.append(f"{role_label}: {content}")
+
+    set_msg_id(assistant_message_id)
+    logger.info(
+        "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
+        len(user_input),
+        len(history_lines),
+    )
+    response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions, raw_output = run_langraph_agent(
+        user_input=user_input,
+        history=history_lines,
+        voice_gender=voice_gender,
+        voice_accent=voice_accent,
+        category=category,
+        topic=topic,
+        user_id=user_id,
+    )
+    grammar_data = parse_annotated_grammar(grammar_raw, user_input)
+
+    # ── Guardrails: Output ─────────────────────────────────────────────────
+    output_result = _output_guardrails.check(response_text)
+    if output_result.text != response_text:
+        response_audio_bytes = _synthesize_audio_bytes(output_result.text, voice_gender=voice_gender, voice_accent=voice_accent)
+    response_text = output_result.text
+    _all_flags.extend(output_result.flags)
+
+    redacted_suggestions: list[str] = []
+    for suggestion in suggestions:
+        suggestion_result = _output_guardrails.check(suggestion)
+        redacted_text = suggestion_result.text
+        if suggestion.endswith((".", "!", "?")) and not redacted_text.endswith(suggestion[-1]):
+            redacted_text = f"{redacted_text}{suggestion[-1]}"
+        redacted_suggestions.append(redacted_text)
+        _all_flags.extend(suggestion_result.flags)
+    suggestions = redacted_suggestions
+
+    _guardrail_decisions["output_pii_redacted"] = "contains_pii" in _all_flags
+    # ── End Output Guardrails ──────────────────────────────────────────────
+
+    logger.info(
+        "Pipeline complete response_text_length=%d audio_bytes=%d",
+        len(response_text),
+        len(response_audio_bytes),
+    )
+
+    assistant_object_key: str | None = None
+    if response_audio_bytes:
+        real_key = build_object_key(
+            conversation_id=conv_id,
+            message_id=assistant_message_id,
+            audio_type="assistant_tts",
+            extension="mp3",
+        )
+        logger.info("Uploading assistant audio key=%s size=%d bytes", real_key, len(response_audio_bytes))
+        try:
+            _upload(object_key=real_key, content=response_audio_bytes, content_type="audio/mpeg")
+            assistant_object_key = real_key
+        except Exception:
+            logger.exception("MinIO upload failed for assistant audio conversation_id=%s", conv_id)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO turns (id, conversation_id, turn_number) VALUES (%s, %s, %s)",
+                (turn_id, conv_id, turn_number),
+            )
+            cur.execute(
+                """
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content)
+                VALUES (%s, %s, %s, 'user', %s, %s)
+                """,
+                (user_message_id, conv_id, turn_id, input_mode, user_input),
+            )
+            cur.execute(
+                """
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content, raw_content, suggestions)
+                VALUES (%s, %s, %s, 'assistant', 'text', %s, %s, %s::jsonb)
+                """,
+                (assistant_message_id, conv_id, turn_id, response_text, raw_output, _json.dumps(suggestions)),
+            )
+            cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
+
+            if user_object_key:
+                _insert_audio_asset(
+                    cur,
+                    message_id=user_message_id,
+                    audio_type="user_input",
+                    object_key=user_object_key,
+                    mime_type=user_mime_type,
+                    size_bytes=len(audio_bytes_received),
+                )
+
+            if assistant_object_key:
+                _insert_audio_asset(
+                    cur,
+                    message_id=assistant_message_id,
+                    audio_type="assistant_tts",
+                    object_key=assistant_object_key,
+                    mime_type="audio/mpeg",
+                    size_bytes=len(response_audio_bytes),
+                )
+
+            # Save grammar feedback (only when LLM returned valid grammar output)
+            if grammar_raw is not None:
+                cur.execute(
+                    """
+                    INSERT INTO grammar_feedback
+                        (message_id, user_input, errors, corrected_sentence, overall_score)
+                    VALUES (%s, %s, %s::jsonb, %s, %s)
+                    """,
+                    (
+                        user_message_id,
+                        user_input,
+                        _json.dumps([e.__dict__ for e in grammar_data.errors]),
+                        grammar_data.corrected_sentence,
+                        grammar_data.overall_score,
+                    ),
+                )
+
+    # ── Audit Logging ──────────────────────────────────────────────────────
+    _audit_logger.log(
+        user_id=user_id,
+        conversation_id=conv_id,
+        user_input=user_input,
+        response_text=response_text,
+        guardrail_decisions=_guardrail_decisions,
+        flags=_all_flags,
+        start_time=_guardrail_start,
+    )
+    # ── End Guardrails ─────────────────────────────────────────────────────
+
+    user_audio_url: str | None = None
+    if user_object_key:
+        user_audio_url = f"/api/audio/{user_object_key}"
+
+    assistant_audio_url: str | None = None
+    if assistant_object_key:
+        assistant_audio_url = f"/api/audio/{assistant_object_key}"
+
+    inline_audio = ""
+    if response_audio_bytes and len(response_audio_bytes) <= _INLINE_AUDIO_LIMIT_BYTES:
+        inline_audio = base64.b64encode(response_audio_bytes).decode("utf-8")
+    elif response_audio_bytes:
+        logger.info(
+            "Assistant audio omitted from inline response size=%d exceeds limit=%d",
+            len(response_audio_bytes),
+            _INLINE_AUDIO_LIMIT_BYTES,
+        )
+
+    logger.info(
+        "chat_respond done conv_id=%s user_msg=%s assistant_msg=%s user_audio_url=%s assistant_audio_url=%s",
+        conv_id,
+        user_message_id,
+        assistant_message_id,
+        "yes" if user_audio_url else "no",
+        "yes" if assistant_audio_url else "no",
+    )
+
+    grammar_summary = GrammarSummary(
+        error_count=len(grammar_data.errors),
+        has_errors=len(grammar_data.errors) > 0,
+        flagged_spans=[
+            GrammarSpan(
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+            )
+            for e in grammar_data.errors
+        ],
+    )
+
+    grammar_detail = GrammarDetailResponse(
+        message_id=user_message_id,
+        user_input=user_input,
+        errors=[
+            GrammarErrorDetail(
+                id=i + 1,
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+                category=e.category,
+                severity=e.severity,
+                explanation=e.explanation,
+                rule=e.rule or None,
+                example=e.example or None,
+            )
+            for i, e in enumerate(grammar_data.errors)
+        ],
+        corrected_sentence=grammar_data.corrected_sentence,
+        overall_score=grammar_data.overall_score,
+    ) if grammar_raw is not None else None
+
+    return ChatResponse(
+        user_input=user_input,
+        response_text=response_text,
+        audio_base64=inline_audio,
+        audio_mime="audio/mpeg",
+        user_audio_url=user_audio_url,
+        assistant_audio_url=assistant_audio_url,
+        conversation_id=conv_id,
+        user_message_id=user_message_id if grammar_raw is not None else None,
+        grammar_summary=grammar_summary,
+        grammar_detail=grammar_detail,
+        tool_steps=tool_steps,
+        suggestions=suggestions,
+    )
