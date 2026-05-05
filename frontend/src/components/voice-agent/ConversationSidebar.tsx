@@ -197,18 +197,7 @@ export default function ConversationSidebar({
               </div>
             );
           })}
-          {uncategorizedConversations.length > 0 && (
-            <div className="mb-1">
-              <p className="px-3 pt-3 pb-1 text-[10px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider select-none">
-                {t('va.sidebar.uncategorized')}
-              </p>
-              {uncategorizedConversations.map((c) => (
-                <ConvRow key={c.id} c={c} isActive={c.id === activeConversationId} isDeleting={deletingId === c.id}
-                  onSelect={() => { onSelectConversation(c.id, c.topic_code ?? null); onClose(); }}
-                  onDelete={(e) => void handleDelete(e, c.id)} deleteLabel={t('va.sidebar.delete')} />
-              ))}
-            </div>
-          )}
+
         </>
       )}
     </div>

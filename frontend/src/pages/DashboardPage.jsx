@@ -247,7 +247,7 @@ function BandTooltip({ active, payload, label }) {
   const band = payload[0].value;
   const bc = bandColor(band);
   return (
-    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-[130px]">
+    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg dark:shadow-black/40 px-3 py-2.5 text-sm min-w-32.5">
       <p className="text-gray-400 dark:text-slate-400 text-xs mb-1">{label}</p>
       <div className="flex items-center gap-2">
         <span
@@ -261,7 +261,7 @@ function BandTooltip({ active, payload, label }) {
         </span>
       </div>
       {payload[0].payload.topic && (
-        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-[150px]">
+        <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 truncate max-w-37.5">
           {payload[0].payload.topic}
         </p>
       )}
@@ -352,7 +352,7 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
             ].map((s, i, arr) => (
               <div key={s.n} className="flex items-center flex-1 last:flex-none">
                 <div className="flex flex-col items-center flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
+                  <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
                     {s.emoji}
                   </div>
                   <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-300 leading-tight">
@@ -590,7 +590,7 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
       </div>
 
       {/* Footer */}
-      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
+      <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-linear-to-r from-blue-50 to-violet-50 dark:from-blue-950/40 dark:to-violet-950/40 flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-slate-400">
           {t('dash.chart.sessionCount', { n: chartData.length })}
         </p>
