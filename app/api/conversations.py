@@ -26,42 +26,11 @@ from app.core.logger import logger
 from app.core.security import get_current_user_id
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-
-@router.get("/for-topic", response_model=ForTopicResponse)
-def get_conversations_for_topic(
-    topic_code: str,
-    user_id: str = Depends(get_current_user_id),
-):
-    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers and limit flag."""
-    logger.debug("get_conversations_for_topic user_id=%s topic_code=%s", user_id, topic_code)
+@router.get("", response_model=ConversationListResponse)
+def list_conversations(user_id: str = Depends(get_current_user_id)):
+    logger.debug("list_conversations user_id=%s", user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
-                (topic_code.strip().lower(),),
-            )
-            topic_row = cur.fetchone()
-            if not topic_row:
-                logger.warning("get_conversations_for_topic unknown topic_code=%s user_id=%s", topic_code, user_id)
-                return ForTopicResponse(
-                    topic_code=topic_code.strip().lower(),
-                    topic_title=topic_code,
-                    conversations=[],
-                    total=0,
-                    limit_reached=False,
-                )
-            topic_id, topic_title = topic_row
-
-            cur.execute(
-                """
-                SELECT COUNT(*)
-                FROM conversations
-                WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
-                """,
-                (user_id, topic_id),
-            )
-            total = cur.fetchone()[0]
-
             cur.execute(
                 """
                 SELECT
@@ -69,46 +38,115 @@ def get_conversations_for_topic(
                     c.title,
                     c.status,
                     c.started_at,
-                    c.updated_at,
-                    (
-                        SELECT COUNT(*) FROM conversations c2
-                        WHERE c2.topic_id = c.topic_id
-                          AND c2.user_id = c.user_id
-                          AND c2.started_at <= c.started_at
-                    ) AS session_number
+                    c.ended_at,
+                    c.topic_id::text,
+                    c.cleared_at,
+                    t.code AS topic_code
                 FROM conversations c
+                LEFT JOIN topics t ON t.id = c.topic_id
                 WHERE c.user_id = %s
-                  AND c.topic_id = %s
                   AND c.deleted_at IS NULL
                 ORDER BY c.started_at DESC
-                LIMIT 5
+                LIMIT 100
                 """,
-                (user_id, topic_id),
+                (user_id,),
             )
             rows = cur.fetchall()
 
+    logger.info("list_conversations user_id=%s returned=%d", user_id, len(rows))
     conversations = [
-        ForTopicConversationOut(
-            id=row[0],
-            title=row[1],
-            status=row[2],
-            started_at=row[3],
-            updated_at=row[4],
-            session_number=row[5],
+        ConversationOut(
+            id=row[0], title=row[1], status=row[2],
+            started_at=row[3], ended_at=row[4], topic_id=row[5],
+            cleared_at=row[6], topic_code=row[7],
         )
         for row in rows
     ]
-    logger.info(
-        "get_conversations_for_topic user_id=%s topic_code=%s returned=%d",
-        user_id, topic_code, len(conversations),
-    )
-    return ForTopicResponse(
-        topic_code=topic_code.strip().lower(),
-        topic_title=topic_title,
-        conversations=conversations,
-        total=total,
-        limit_reached=total >= 5,
-    )
+    return ConversationListResponse(conversations=conversations)
+
+
+# @router.get("/for-topic", response_model=ForTopicResponse)
+# def get_conversations_for_topic(
+#     topic_code: str,
+#     user_id: str = Depends(get_current_user_id),
+# ):
+#     """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers and limit flag."""
+#     logger.debug("get_conversations_for_topic user_id=%s topic_code=%s", user_id, topic_code)
+#     with get_connection() as conn:
+#         with conn.cursor() as cur:
+#             cur.execute(
+#                 "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
+#                 (topic_code.strip().lower(),),
+#             )
+#             topic_row = cur.fetchone()
+#             if not topic_row:
+#                 logger.warning("get_conversations_for_topic unknown topic_code=%s user_id=%s", topic_code, user_id)
+#                 return ForTopicResponse(
+#                     topic_code=topic_code.strip().lower(),
+#                     topic_title=topic_code,
+#                     conversations=[],
+#                     total=0,
+#                     limit_reached=False,
+#                 )
+#             topic_id, topic_title = topic_row
+
+#             cur.execute(
+#                 """
+#                 SELECT COUNT(*)
+#                 FROM conversations
+#                 WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+#                 """,
+#                 (user_id, topic_id),
+#             )
+#             total = cur.fetchone()[0]
+
+#             cur.execute(
+#                 """
+#                 SELECT
+#                     c.id::text,
+#                     c.title,
+#                     c.status,
+#                     c.started_at,
+#                     c.updated_at,
+#                     (
+#                         SELECT COUNT(*) FROM conversations c2
+#                         WHERE c2.topic_id = c.topic_id
+#                           AND c2.user_id = c.user_id
+#                           AND c2.started_at <= c.started_at
+#                     ) AS session_number
+#                 FROM conversations c
+#                 WHERE c.user_id = %s
+#                   AND c.topic_id = %s
+#                   AND c.deleted_at IS NULL
+#                 ORDER BY c.started_at DESC
+#                 LIMIT 5
+#                 """,
+#                 (user_id, topic_id),
+#             )
+#             rows = cur.fetchall()
+
+#     conversations = [
+#         ForTopicConversationOut(
+#             id=row[0],
+#             title=row[1],
+#             status=row[2],
+#             started_at=row[3],
+#             updated_at=row[4],
+#             session_number=row[5],
+#         )
+#         for row in rows
+#     ]
+#     logger.info(
+#         "get_conversations_for_topic user_id=%s topic_code=%s returned=%d",
+#         user_id, topic_code, len(conversations),
+#     )
+#     return ForTopicResponse(
+#         topic_code=topic_code.strip().lower(),
+#         topic_title=topic_title,
+#         conversations=conversations,
+#         total=total,
+#         limit_reached=total >= 5,
+#     )
 
 
 @router.get("/stats", response_model=ConversationStatsResponse)
@@ -183,63 +221,63 @@ def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
     return ConversationStatsResponse(sessions=sessions)
 
 
-@router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
-def get_conversation_messages(
-    conversation_id: str,
-    user_id: str = Depends(get_current_user_id),
-):
-    """Return visible messages for a conversation (post-cleared_at only), oldest-first, with audio URLs."""
-    logger.info("get_conversation_messages conversation_id=%s user_id=%s", conversation_id, user_id)
-    _validate_uuid(conversation_id, "conversation_id")
+# @router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+# def get_conversation_messages(
+#     conversation_id: str,
+#     user_id: str = Depends(get_current_user_id),
+# ):
+#     """Return visible messages for a conversation (post-cleared_at only), oldest-first, with audio URLs."""
+#     logger.info("get_conversation_messages conversation_id=%s user_id=%s", conversation_id, user_id)
+#     _validate_uuid(conversation_id, "conversation_id")
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
-                (conversation_id, user_id),
-            )
-            if not cur.fetchone():
-                logger.warning("Conversation not found conversation_id=%s user_id=%s", conversation_id, user_id)
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+#     with get_connection() as conn:
+#         with conn.cursor() as cur:
+#             cur.execute(
+#                 "SELECT id FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
+#                 (conversation_id, user_id),
+#             )
+#             if not cur.fetchone():
+#                 logger.warning("Conversation not found conversation_id=%s user_id=%s", conversation_id, user_id)
+#                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-            cur.execute(
-                """
-                SELECT
-                    m.id::text,
-                    m.role,
-                    m.input_mode,
-                    m.text_content,
-                    m.created_at,
-                    aa.storage_key
-                FROM messages m
-                JOIN conversations c ON c.id = m.conversation_id
-                LEFT JOIN audio_assets aa ON aa.message_id = m.id
-                WHERE m.conversation_id = %s
-                  AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
-                ORDER BY m.created_at ASC
-                """,
-                (conversation_id,),
-            )
-            rows = cur.fetchall()
+#             cur.execute(
+#                 """
+#                 SELECT
+#                     m.id::text,
+#                     m.role,
+#                     m.input_mode,
+#                     m.text_content,
+#                     m.created_at,
+#                     aa.storage_key
+#                 FROM messages m
+#                 JOIN conversations c ON c.id = m.conversation_id
+#                 LEFT JOIN audio_assets aa ON aa.message_id = m.id
+#                 WHERE m.conversation_id = %s
+#                   AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+#                 ORDER BY m.created_at ASC
+#                 """,
+#                 (conversation_id,),
+#             )
+#             rows = cur.fetchall()
 
-    messages: list[MessageOut] = []
-    for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
-        audio_url: str | None = None
-        if storage_key:
-            audio_url = f"/api/audio/{storage_key}"
+#     messages: list[MessageOut] = []
+#     for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
+#         audio_url: str | None = None
+#         if storage_key:
+#             audio_url = f"/api/audio/{storage_key}"
 
-        messages.append(
-            MessageOut(
-                id=msg_id,
-                role=role,
-                input_mode=input_mode,
-                text_content=text_content,
-                created_at=created_at,
-                audio_url=audio_url,
-            )
-        )
+#         messages.append(
+#             MessageOut(
+#                 id=msg_id,
+#                 role=role,
+#                 input_mode=input_mode,
+#                 text_content=text_content,
+#                 created_at=created_at,
+#                 audio_url=audio_url,
+#             )
+#         )
 
-    return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
+#     return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
 
 
 @router.post("/{conversation_id}/clear", status_code=status.HTTP_204_NO_CONTENT)
