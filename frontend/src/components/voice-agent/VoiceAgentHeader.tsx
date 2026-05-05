@@ -38,15 +38,14 @@ export default function VoiceAgentHeader({
       className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-[#f5f7fa]"
     >
       <div className="flex items-center gap-2">
-        {/* Hamburger toggle */}
+        {/* Mobile hamburger — opens ConversationSidebar */}
         <button
           type="button"
           onClick={onToggleSidebar}
-          title="Toggle history"
-          aria-label="Toggle conversation history"
-          className="p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+          aria-label="Open sidebar"
+          className="md:hidden p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors"
         >
-          <Menu className="w-4 h-4" />
+          <Menu className="w-5 h-5" />
         </button>
 
         {/* VIN logo + brand */}

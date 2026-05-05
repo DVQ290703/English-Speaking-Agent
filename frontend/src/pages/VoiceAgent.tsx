@@ -8,7 +8,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, Circle } from 'lucide-react';
+import { Circle } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
@@ -25,7 +25,6 @@ import {
   MessageBubble,
   SelectDropdown,
   SessionSummaryModal,
-  SettingsPanel,
   VoiceAgentHeader,
 } from '../components/voice-agent';
 import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
@@ -89,7 +88,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [gender, setGender] = useState<Gender>('Male');
   const [language, setLanguage] = useState<Language>(lang === 'vi' ? 'Vietnamese' : 'English');
 
-  const { categories: topicCategories } = useTopics();
+  const { categories: topicCategories, loading: topicsLoading } = useTopics();
 
   // Flat list of all DB topics — derived from loaded categories
   const allDbTopics = useMemo(() => topicCategories.flatMap((c) => c.topics), [topicCategories]);
@@ -107,7 +106,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     useMicDevices();
 
   const [agentSpeaking, setAgentSpeaking] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialState.messages);
   const sessionIdRef = useRef<string | null>(initialState.sessionId);
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
@@ -192,7 +190,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [isRecording, setIsRecording] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [convsLoading, setConvsLoading] = useState(false);
   const [convsRefreshKey, setConvsRefreshKey] = useState(0);
@@ -298,11 +296,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           setShowLogoutConfirm(false);
           return;
         }
-        if (showSettings) {
-          e.preventDefault();
-          setShowSettings(false);
-          return;
-        }
         if (showUserMenu) {
           e.preventDefault();
           setShowUserMenu(false);
@@ -337,7 +330,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [showLogoutConfirm, showSettings, showUserMenu, toggleMic]);
+  }, [showLogoutConfirm, showUserMenu, toggleMic]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -818,7 +811,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     (code: string) => {
       setCustomTopicLabel(null);
       setSubOption(null);
-      setShowSettings(false);
 
       // Find the most recently created conversation for this topic
       const latest = conversations
@@ -918,13 +910,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             </svg>
           </button>
           <button
-            data-testid="button-settings"
-            onClick={() => setShowSettings((v) => !v)}
-            className="p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
-          >
-            <Settings className="w-3.5 h-3.5" />
-          </button>
-          <button
             data-testid="button-connect"
             onClick={handleConnect}
             disabled={isConnecting}
@@ -945,42 +930,44 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
       </div>
 
-      {/* Conversation history drawer — fixed overlay, toggled from header hamburger */}
+      {/* Body row: persistent sidebar + main content */}
+      <div className="flex flex-1 overflow-hidden relative">
+
+      {/* ChatGPT-style persistent sidebar */}
       <ConversationSidebar
         open={showSidebar}
         onClose={() => setShowSidebar(false)}
         token={getAuthSession()?.token ?? null}
+        topicCategories={topicCategories}
         conversations={conversations}
-        loading={convsLoading}
+        loading={convsLoading || topicsLoading}
         activeConversationId={conversationIdRef.current}
         currentTopicCode={topic}
-        currentTopicTitle={
-          topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : null
-        }
+        onSelectTopic={handleTopicSelect}
         onSelectConversation={(id, topicCode) => {
           if (isConnected) persistSession();
           setShowSidebar(false);
           loadConversationInPlace(id, topicCode ?? null);
         }}
-        onNewChat={() => {
+        onNewChat={(topicCode) => {
           if (isConnected) persistSession();
-          // Prevent the auto-load effect from re-firing and redirecting back
-          // to the previous conversation after clearing the session param.
           hasAutoLoadedRef.current = true;
+          setTopic(topicCode);
           try {
             const url = new URL(window.location.href);
+            url.searchParams.set('topic', topicCode);
             url.searchParams.delete('session');
             window.history.replaceState({}, '', url.toString());
           } catch {
             /* ignore */
           }
-          // Stay disconnected so the user presses Connect to start fresh.
           startNewSession({ stayDisconnected: true });
           setConvsRefreshKey((k) => k + 1);
         }}
         onConversationDeleted={(id) => {
           setConversations((prev) => prev.filter((c) => c.id !== id));
         }}
+        onToggleSidebar={() => setShowSidebar((v) => !v)}
       />
 
       {/* Main content */}
@@ -1153,6 +1140,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
       </div>
 
+      </div>{/* end body row */}
+
       {showHistory && (
         <HistorySidebar
           open={showHistory}
@@ -1164,14 +1153,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             url.searchParams.delete('topic');
             window.location.assign(url.toString());
           }}
-        />
-      )}
-
-      {showSettings && (
-        <SettingsPanel
-          topic={topic}
-          onSelectTopic={handleTopicSelect}
-          onClose={() => setShowSettings(false)}
         />
       )}
 

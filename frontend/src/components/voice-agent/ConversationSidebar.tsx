@@ -1,15 +1,11 @@
-import { MessageSquare, SquarePen, X } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ChevronDown, ChevronRight, MessageSquare, PanelLeft, PanelLeftClose, Plus, X } from 'lucide-react';
+
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { deleteConversation, type ConversationSummary } from '../../api/conversations';
+import type { ApiCategory } from '../../api/topics';
 import { useT } from '../../i18n/useLanguage';
-
-function topicLabel(c: ConversationSummary): string {
-  if (c.title) return c.title;
-  if (c.topic_code) return c.topic_code;
-  return 'Conversation';
-}
 
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -22,17 +18,6 @@ function relativeTime(dateStr: string): string {
   if (d === 1) return 'yesterday';
   if (d < 7) return `${d}d ago`;
   return new Date(dateStr).toLocaleDateString();
-}
-
-type Group = 'today' | 'yesterday' | 'week' | 'older';
-
-function getGroup(dateStr: string): Group {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days <= 7) return 'week';
-  return 'older';
 }
 
 const MAX_PER_TOPIC = 5;
@@ -52,28 +37,26 @@ function ConvRow({
   onDelete: (e: React.MouseEvent) => void;
   deleteLabel: string;
 }) {
+  const label = c.title || relativeTime(c.started_at);
   return (
     <div
-      className={`group relative flex items-center mx-2 rounded-lg cursor-pointer transition-colors px-2 py-2 ${
+      className={`group relative flex items-center rounded-lg cursor-pointer transition-colors pl-8 pr-2 py-1.5 mx-1 ${
         isActive
-          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-          : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300'
+          ? 'bg-gray-200 dark:bg-slate-700/60 text-gray-900 dark:text-slate-100'
+          : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-slate-300'
       }`}
       onClick={() => {
         if (!isDeleting) onSelect();
       }}
     >
       <div className="flex-1 min-w-0 pr-1">
-        <p className="text-xs font-medium truncate leading-tight">{topicLabel(c)}</p>
-        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">
-          {relativeTime(c.started_at)}
-        </p>
+        <p className="text-xs truncate leading-tight">{label}</p>
       </div>
       <button
         onClick={onDelete}
         disabled={isDeleting}
         aria-label={deleteLabel}
-        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-opacity shrink-0"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-400 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 transition-opacity shrink-0"
       >
         <X className="w-3 h-3" />
       </button>
@@ -85,45 +68,61 @@ type Props = {
   open: boolean;
   onClose: () => void;
   token: string | null;
+  topicCategories: ApiCategory[];
   conversations: ConversationSummary[];
   loading: boolean;
   activeConversationId: string | null;
   currentTopicCode: string | null;
-  currentTopicTitle: string | null;
+  onSelectTopic: (code: string) => void;
   onSelectConversation: (id: string, topicCode: string | null) => void;
-  onNewChat: () => void;
+  onNewChat: (topicCode: string) => void;
   onConversationDeleted: (id: string) => void;
+  onToggleSidebar: () => void;
 };
 
 export default function ConversationSidebar({
   open,
   onClose,
   token,
+  topicCategories,
   conversations,
   loading,
   activeConversationId,
   currentTopicCode,
-  currentTopicTitle,
+  onSelectTopic,
   onSelectConversation,
   onNewChat,
   onConversationDeleted,
+  onToggleSidebar,
 }: Props) {
   const t = useT();
+  const [isOpen, setIsOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [activeTopicView, setActiveTopicView] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    () => new Set(topicCategories.map((c) => c.code)),
+  );
 
-  // Conversations that match the current topic by DB code
-  const topicConversations = currentTopicCode
-    ? conversations.filter((c) => c.topic_code === currentTopicCode)
-    : [];
+  const toggleCategory = (code: string) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
 
-  // Conversations with no topic assigned — always shown at the bottom
-  const uncategorizedConversations = conversations.filter((c) => !c.topic_code);
+  // When the active topic changes externally, drill into it automatically
+  useEffect(() => {
+    if (currentTopicCode) {
+      setActiveTopicView(currentTopicCode);
+    }
+  }, [currentTopicCode]);
 
-  const topicCount = topicConversations.length;
-  const isTopicLimitReached = currentTopicCode !== null && topicCount >= MAX_PER_TOPIC;
-
-  // Use DB-provided title from parent; fall back to raw code if title unavailable
-  const currentTopicLabel = currentTopicTitle ?? currentTopicCode ?? null;
+  const handleTopicClick = (code: string) => {
+    onSelectTopic(code);
+    setActiveTopicView(code);
+  };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -141,165 +140,191 @@ export default function ConversationSidebar({
     }
   };
 
-  const groups: { key: Group; label: string; items: ConversationSummary[] }[] = [
-    { key: 'today', label: t('va.sidebar.today'), items: [] },
-    { key: 'yesterday', label: t('va.sidebar.yesterday'), items: [] },
-    { key: 'week', label: t('va.sidebar.thisWeek'), items: [] },
-    { key: 'older', label: t('va.sidebar.older'), items: [] },
-  ];
-  for (const c of topicConversations) {
-    const g = getGroup(c.started_at);
-    groups.find((x) => x.key === g)!.items.push(c);
-  }
+  const uncategorizedConversations = conversations.filter((c) => !c.topic_code);
 
-  return (
-    <>
-      {/* Backdrop */}
-      {open && (
-        <div className="fixed inset-0 z-[8000] bg-black/20 backdrop-blur-[1px]" onClick={onClose} />
+  /* ── View 1: Main menu — categories & topics ── */
+  const renderMainMenu = () => (
+    <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <span className="text-xs text-gray-400 dark:text-slate-400">Loading…</span>
+        </div>
+      ) : (
+        <>
+          {topicCategories.map((cat) => {
+            const isCategoryExpanded = expandedCategories.has(cat.code);
+            return (
+              <div key={cat.code} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(cat.code)}
+                  className="w-full flex items-center gap-1 px-3 pt-3 pb-1 text-left group"
+                >
+                  <span className="flex-1 text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider select-none">
+                    {cat.title}
+                  </span>
+                  {isCategoryExpanded
+                    ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />
+                    : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />}
+                </button>
+                <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isCategoryExpanded ? 'max-h-250 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  {cat.topics.map((tp) => {
+                    const count = conversations.filter((c) => c.topic_code === tp.code).length;
+                    const isActive = currentTopicCode === tp.code;
+                    const limitReached = count >= MAX_PER_TOPIC;
+                    return (
+                      <button
+                        key={tp.code}
+                        type="button"
+                        onClick={() => handleTopicClick(tp.code)}
+                        className={`w-full group flex items-center gap-2 px-3 py-2 transition-colors text-left ${
+                          isActive
+                            ? 'bg-gray-200 dark:bg-slate-700/60 text-gray-900 dark:text-slate-100'
+                            : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <MessageSquare className="w-4 h-4 shrink-0 text-gray-400 dark:text-slate-500 group-hover:dark:text-slate-400" />
+                        <span className="flex-1 min-w-0 text-xs font-medium truncate">{tp.title}</span>
+                        {count > 0 && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${limitReached ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}>
+                            {count}/{MAX_PER_TOPIC}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {uncategorizedConversations.length > 0 && (
+            <div className="mb-1">
+              <p className="px-3 pt-3 pb-1 text-[10px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider select-none">
+                {t('va.sidebar.uncategorized')}
+              </p>
+              {uncategorizedConversations.map((c) => (
+                <ConvRow key={c.id} c={c} isActive={c.id === activeConversationId} isDeleting={deletingId === c.id}
+                  onSelect={() => { onSelectConversation(c.id, c.topic_code ?? null); onClose(); }}
+                  onDelete={(e) => void handleDelete(e, c.id)} deleteLabel={t('va.sidebar.delete')} />
+              ))}
+            </div>
+          )}
+        </>
       )}
+    </div>
+  );
 
-      {/* Drawer */}
-      <aside
-        className={`fixed top-0 left-0 bottom-0 z-[8001] flex flex-col w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 shadow-2xl transition-transform duration-250 ease-in-out ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Drawer header */}
-        <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100 dark:border-slate-700 shrink-0">
+  /* ── View 2: Topic drill-down — conversations for a specific topic ── */
+  const renderTopicView = (topicCode: string) => {
+    const topic = topicCategories.flatMap((c) => c.topics).find((tp) => tp.code === topicCode);
+    const topicConvs = conversations
+      .filter((c) => c.topic_code === topicCode)
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
+    const limitReached = topicConvs.length >= MAX_PER_TOPIC;
+
+    return (
+      <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Back + topic title */}
+        <div className="flex items-center gap-2 px-2 py-2 shrink-0 border-b border-gray-200 dark:border-slate-800">
           <button
-            onClick={() => {
-              onNewChat();
-              onClose();
-            }}
-            disabled={isTopicLimitReached || !currentTopicCode}
-            title={t('va.sidebar.newChat')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              isTopicLimitReached || !currentTopicCode
-                ? 'opacity-40 cursor-not-allowed text-gray-400 dark:text-slate-500'
-                : 'text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 border border-gray-200 dark:border-slate-600'
+            type="button"
+            onClick={() => setActiveTopicView(null)}
+            aria-label="Back to topics"
+            className="p-1 rounded-md text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs font-semibold text-gray-800 dark:text-slate-200 truncate">
+            {topic?.title ?? topicCode}
+          </span>
+        </div>
+
+        {/* New Chat button */}
+        <div className="px-3 py-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => { if (!limitReached) onNewChat(topicCode); }}
+            disabled={limitReached}
+            title={limitReached ? t('va.sidebar.limitReached') : t('va.sidebar.newChat')}
+            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              limitReached
+                ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
           >
-            <SquarePen className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" />
             {t('va.sidebar.newChat')}
-          </button>
-
-          <button
-            onClick={onClose}
-            title="Close"
-            className="p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:text-slate-500 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Topic header — shows current topic + session count */}
-        {currentTopicCode && (
-          <div className="px-3 pt-2.5 pb-1.5 border-b border-gray-100 dark:border-slate-800 shrink-0">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-200 truncate">
-                {currentTopicLabel}
-              </p>
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ml-1 ${
-                  isTopicLimitReached
-                    ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                    : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                }`}
-              >
-                {t('va.sidebar.topicCount', { count: topicCount })}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Topic limit warning */}
-        {isTopicLimitReached && currentTopicCode && (
-          <div className="mx-3 mt-2 px-2 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
-            {t('va.sidebar.limitReached')}
-          </div>
-        )}
-
         {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <span className="text-xs text-gray-400 dark:text-slate-500">Loading…</span>
-            </div>
+        <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
+          {topicConvs.length === 0 ? (
+            <p className="px-4 py-3 text-[11px] text-gray-400 dark:text-slate-500 italic">
+              {t('va.sidebar.emptyTopic')}
+            </p>
           ) : (
-            <>
-              {/* Topic-filtered conversations */}
-              {currentTopicCode &&
-                topicConversations.length === 0 &&
-                uncategorizedConversations.length === 0 && (
-                  <div className="px-4 py-8 text-center">
-                    <MessageSquare className="w-7 h-7 text-gray-200 dark:text-slate-600 mx-auto mb-2" />
-                    <p className="text-xs text-gray-400 dark:text-slate-500">
-                      {t('va.sidebar.emptyTopic')}
-                    </p>
-                  </div>
-                )}
-
-              {!currentTopicCode && uncategorizedConversations.length === 0 && (
-                <div className="px-4 py-8 text-center">
-                  <MessageSquare className="w-7 h-7 text-gray-200 dark:text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs text-gray-400 dark:text-slate-500">
-                    {t('va.sidebar.noTopicSelected')}
-                  </p>
-                </div>
-              )}
-
-              {groups
-                .filter((g) => g.items.length > 0)
-                .map((g) => (
-                  <div key={g.key} className="mb-1">
-                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
-                      {g.label}
-                    </p>
-                    {g.items.map((c) => (
-                      <ConvRow
-                        key={c.id}
-                        c={c}
-                        isActive={c.id === activeConversationId}
-                        isDeleting={deletingId === c.id}
-                        onSelect={() => {
-                          onSelectConversation(c.id, c.topic_code ?? null);
-                          onClose();
-                        }}
-                        onDelete={(e) => void handleDelete(e, c.id)}
-                        deleteLabel={t('va.sidebar.delete')}
-                      />
-                    ))}
-                  </div>
-                ))}
-
-              {/* Uncategorized conversations — no topic_code */}
-              {uncategorizedConversations.length > 0 && (
-                <div className="mb-1">
-                  {currentTopicCode && (
-                    <div className="mx-3 mt-2 mb-1 border-t border-dashed border-gray-200 dark:border-slate-700" />
-                  )}
-                  <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
-                    {t('va.sidebar.uncategorized')}
-                  </p>
-                  {uncategorizedConversations.map((c) => (
-                    <ConvRow
-                      key={c.id}
-                      c={c}
-                      isActive={c.id === activeConversationId}
-                      isDeleting={deletingId === c.id}
-                      onSelect={() => {
-                        onSelectConversation(c.id, c.topic_code ?? null);
-                        onClose();
-                      }}
-                      onDelete={(e) => void handleDelete(e, c.id)}
-                      deleteLabel={t('va.sidebar.delete')}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
+            topicConvs.map((c) => (
+              <ConvRow key={c.id} c={c} isActive={c.id === activeConversationId} isDeleting={deletingId === c.id}
+                onSelect={() => { onSelectConversation(c.id, c.topic_code ?? null); onClose(); }}
+                onDelete={(e) => void handleDelete(e, c.id)} deleteLabel={t('va.sidebar.delete')} />
+            ))
           )}
+        </div>
+      </div>
+    );
+  };
+
+  const bg = 'bg-[#f9f9f9] dark:bg-[#0b1426]';
+  const border = 'border-gray-200 dark:border-slate-800';
+  const btnCls = 'p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors';
+
+  return (
+    <>
+      {/* ── Mobile backdrop ── */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-9998 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      )}
+
+      {/* ── Mobile: full sliding aside ── */}
+      <aside className={`
+        md:hidden fixed inset-y-0 left-0 z-9999 w-64 shadow-2xl
+        flex flex-col ${bg} border-r ${border}
+        transition-transform duration-200 ease-in-out
+        ${open ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="flex items-center justify-between px-3 py-3 shrink-0">
+          <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 select-none">{t('brand.name')}</span>
+          <button type="button" onClick={onToggleSidebar} title="Close sidebar" aria-label="Close sidebar" className={btnCls}>
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        </div>
+        {activeTopicView ? renderTopicView(activeTopicView) : renderMainMenu()}
+      </aside>
+
+      {/* ── Desktop: single collapsible sidebar ── */}
+      <aside className={`
+        hidden md:flex flex-col shrink-0 overflow-hidden
+        ${bg} border-r ${border}
+        transition-all duration-300 ease-in-out
+        ${isOpen ? 'w-64' : 'w-12'}
+      `}>
+        <div className={`flex items-center shrink-0 h-12 transition-all duration-300 ${isOpen ? 'justify-between px-3 py-3' : 'justify-center py-3'}`}>
+          <span className={`text-sm font-semibold text-gray-800 dark:text-slate-200 select-none whitespace-nowrap overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0'}`}>
+            {t('brand.name')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsOpen((p) => !p)}
+            title={isOpen ? 'Close sidebar' : 'Open sidebar'}
+            aria-label={isOpen ? 'Close sidebar' : 'Open sidebar'}
+            className={btnCls}
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+        </div>
+        <div className={`flex flex-col flex-1 overflow-hidden ${isOpen ? '' : 'hidden'}`}>
+          {activeTopicView ? renderTopicView(activeTopicView) : renderMainMenu()}
         </div>
       </aside>
     </>

@@ -186,6 +186,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.delete': 'Delete',
     'va.sidebar.confirmDelete': 'Delete this conversation?',
     'va.sidebar.deleted': 'Deleted.',
+    'va.sidebar.close': 'Close sidebar',
     'va.sidebar.limitReached':
       'This topic has reached the 5-session limit. Delete an old session to start a new one.',
     'va.sidebar.limitBadge': '5/5',
@@ -542,6 +543,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.delete': 'Xóa',
     'va.sidebar.confirmDelete': 'Xóa cuộc hội thoại này?',
     'va.sidebar.deleted': 'Đã xóa.',
+    'va.sidebar.close': 'Đóng thanh bên',
     'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
     'va.sidebar.limitBadge': '5/5',
     'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
