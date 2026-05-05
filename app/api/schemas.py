@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -52,6 +52,19 @@ class LoginResponse(BaseModel):
     user: UserOut
 
 
+class GrammarSpan(BaseModel):
+    original: str
+    corrected: str
+    start_char: int
+    end_char: int
+
+
+class GrammarSummary(BaseModel):
+    error_count: int
+    has_errors: bool
+    flagged_spans: list[GrammarSpan]
+
+
 class ChatResponse(BaseModel):
     user_input: str
     response_text: str
@@ -61,6 +74,9 @@ class ChatResponse(BaseModel):
     assistant_audio_url: str | None = None
     conversation_id: str
     user_message_id: str | None = None
+    grammar_summary: GrammarSummary = Field(
+        default_factory=lambda: GrammarSummary(error_count=0, has_errors=False, flagged_spans=[])
+    )
 
 
 class MessageOut(BaseModel):
@@ -205,3 +221,24 @@ class CategoryWithTopicsOut(BaseModel):
     title: str
     sort_order: int
     topics: list[TopicOut]
+
+
+class GrammarErrorDetail(BaseModel):
+    id: int
+    original: str
+    corrected: str
+    start_char: int
+    end_char: int
+    category: str
+    severity: str
+    explanation: str
+    rule: str
+    example: str
+
+
+class GrammarDetailResponse(BaseModel):
+    message_id: str
+    user_input: str
+    errors: list[GrammarErrorDetail]
+    corrected_sentence: str | None
+    overall_score: int
