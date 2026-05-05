@@ -3,6 +3,17 @@ import { useCallback, useSyncExternalStore } from 'react';
 const STORAGE_KEY = 'vt_theme';
 const LEGACY_KEY = 'va-theme';
 
+// Hàm helper để áp dụng class 'dark' lên thẻ <html>
+function applyThemeToDocument(isDark: boolean) {
+  if (typeof document !== 'undefined') {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }
+}
+
 function readInitial(): boolean {
   try {
     let stored = localStorage.getItem(STORAGE_KEY);
@@ -17,13 +28,22 @@ function readInitial(): boolean {
         }
       }
     }
-    if (stored === 'dark') return true;
-    if (stored === 'light') return false;
-    return (
-      typeof window !== 'undefined' &&
-      !!window.matchMedia &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    );
+    
+    let isDark = false;
+    if (stored === 'dark') isDark = true;
+    else if (stored === 'light') isDark = false;
+    else {
+      isDark = (
+        typeof window !== 'undefined' &&
+        !!window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches
+      );
+    }
+    
+    // Áp dụng luôn theme ngay khi đọc lần đầu
+    applyThemeToDocument(isDark);
+    return isDark;
+    
   } catch {
     return false;
   }
@@ -38,6 +58,8 @@ function setShared(next: boolean) {
   current = next;
   try {
     localStorage.setItem(STORAGE_KEY, next ? 'dark' : 'light');
+    // Quan trọng: Cập nhật class 'dark' lên DOM mỗi khi toggle
+    applyThemeToDocument(next);
   } catch {
     /* ignore */
   }
