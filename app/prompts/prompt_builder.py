@@ -132,53 +132,53 @@ def _load_topics() -> dict[str, Any]:
 
 
 def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
-    """Extract topic and scenario metadata from normalized history lines."""
+    """Extract category and topic metadata from normalized history lines."""
+    category_line = next((ln for ln in history if ln.startswith("Category:")), None)
     topic_line = next((ln for ln in history if ln.startswith("Topic:")), None)
-    sub_option_line = next((ln for ln in history if ln.startswith("Sub-option:")), None)
+    category = category_line[9:].strip() if category_line else None
     topic = topic_line[6:].strip() if topic_line else None
-    sub_option = sub_option_line[11:].strip() if sub_option_line else None
-    return topic or None, sub_option or None
+    return category or None, topic or None
 
 
 def build_system_prompt(
+    category: str | None = None,
     topic: str | None = None,
-    sub_option: str | None = None,
     include_grammar: bool = False,
 ) -> str:
-    """Compose a system prompt: base -> topic layer -> sub-option layer -> grammar instruction."""
+    """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
     prompt_parts = [_load_base_prompt()]
 
-    if topic:
+    if category:
         topics = _load_topics()
-        topic_key = _normalize_key(topic)
-        topic_data = topics.get(topic_key)
+        category_key = _normalize_key(category)
+        category_data = topics.get(category_key)
 
-        if topic_data:
-            topic_prompt = topic_data.get("topic_prompt", "").strip()
-            if topic_prompt:
-                prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{topic_prompt}")
+        if category_data:
+            category_prompt = category_data.get("topic_prompt", "").strip()
+            if category_prompt:
+                prompt_parts.append(f"---\n\n## Category: {category_key}\n{category_prompt}")
 
-            if sub_option:
-                sub_key = _normalize_key(sub_option)
-                option_prompt = topic_data.get("options", {}).get(sub_key, "").strip()
+            if topic:
+                topic_key = _normalize_key(topic)
+                option_prompt = category_data.get("options", {}).get(topic_key, "").strip()
                 if option_prompt:
-                    prompt_parts.append(f"---\n\n## Scenario: {sub_key}\n{option_prompt}")
+                    prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{option_prompt}")
                 else:
                     prompt_parts.append(
-                        f"---\n\n## Scenario: {sub_option.strip()}\n"
-                        "The learner selected this scenario. "
+                        f"---\n\n## Topic: {topic.strip()}\n"
+                        "The learner selected this topic. "
                         "Adapt the conversation to it while keeping the same coaching style."
                     )
         else:
             prompt_parts.append(
-                f"---\n\n## Topic: {topic.strip()}\n"
-                "The learner selected this topic. "
+                f"---\n\n## Category: {category.strip()}\n"
+                "The learner selected this category. "
                 "Create a realistic speaking-practice conversation around it."
             )
-            if sub_option:
+            if topic:
                 prompt_parts.append(
-                    f"---\n\n## Scenario: {sub_option.strip()}\n"
-                    "The learner selected this scenario. "
+                    f"---\n\n## Topic: {topic.strip()}\n"
+                    "The learner selected this topic. "
                     "Adapt the conversation to it while keeping the same coaching style."
                 )
 

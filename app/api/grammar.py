@@ -16,11 +16,7 @@ def get_grammar_detail(
     message_id: str,
     user_id: str = Depends(get_current_user_id),
 ) -> GrammarDetailResponse:
-    """Return full grammar feedback for a user message.
-
-    Ownership is enforced via the conversations table — users can only
-    retrieve feedback for their own messages.
-    """
+    """Return grammar errors, corrections, and overall score for a user message. Raises 404 if not found or not owned."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
