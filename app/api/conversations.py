@@ -27,51 +27,12 @@ from app.core.security import get_current_user_id
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
-@router.get("", response_model=ConversationListResponse)
-def list_conversations(user_id: str = Depends(get_current_user_id)):
-    logger.debug("list_conversations user_id=%s", user_id)
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    c.id::text,
-                    c.title,
-                    c.status,
-                    c.started_at,
-                    c.ended_at,
-                    c.topic_id::text,
-                    c.cleared_at,
-                    t.code AS topic_code
-                FROM conversations c
-                LEFT JOIN topics t ON t.id = c.topic_id
-                WHERE c.user_id = %s
-                  AND c.deleted_at IS NULL
-                ORDER BY c.started_at DESC
-                LIMIT 100
-                """,
-                (user_id,),
-            )
-            rows = cur.fetchall()
-
-    logger.info("list_conversations user_id=%s returned=%d", user_id, len(rows))
-    conversations = [
-        ConversationOut(
-            id=row[0], title=row[1], status=row[2],
-            started_at=row[3], ended_at=row[4], topic_id=row[5],
-            cleared_at=row[6], topic_code=row[7],
-        )
-        for row in rows
-    ]
-    return ConversationListResponse(conversations=conversations)
-
-
 @router.get("/for-topic", response_model=ForTopicResponse)
 def get_conversations_for_topic(
     topic_code: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers."""
+    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers and limit flag."""
     logger.debug("get_conversations_for_topic user_id=%s topic_code=%s", user_id, topic_code)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -152,7 +113,7 @@ def get_conversations_for_topic(
 
 @router.get("/stats", response_model=ConversationStatsResponse)
 def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
-    """Return per-conversation aggregated stats for the dashboard (score, duration, message count)."""
+    """Return per-conversation stats (scores, duration, message count) for the dashboard, latest 200."""
     logger.debug("get_conversation_stats user_id=%s", user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -227,6 +188,7 @@ def get_conversation_messages(
     conversation_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
+    """Return visible messages for a conversation (post-cleared_at only), oldest-first, with audio URLs."""
     logger.info("get_conversation_messages conversation_id=%s user_id=%s", conversation_id, user_id)
     _validate_uuid(conversation_id, "conversation_id")
 
@@ -285,7 +247,7 @@ def clear_conversation_history(
     conversation_id: uuid.UUID,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Set cleared_at = NOW() — hides prior messages from user but retains data in DB."""
+    """Hide all prior messages by setting cleared_at = NOW(). Data is retained; returns 204."""
     conv_id_str = str(conversation_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -311,7 +273,7 @@ def delete_conversation(
     conversation_id: uuid.UUID,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Soft-delete a conversation: sets deleted_at = NOW(). Data is retained in DB."""
+    """Soft-delete a conversation (sets deleted_at). Frees up the per-topic session slot; data is retained."""
     conv_id_str = str(conversation_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -337,7 +299,7 @@ def get_conversation_messages_with_scores(
     conversation_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return messages with embedded pronunciation scores and word-level details."""
+    """Return visible messages with embedded pronunciation scores and word/phoneme breakdowns."""
     _validate_uuid(conversation_id, "conversation_id")
 
     with get_connection() as conn:

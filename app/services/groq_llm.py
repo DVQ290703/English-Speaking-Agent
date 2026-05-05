@@ -52,13 +52,13 @@ class GroqLLMService:
             len(user_input),
         )
 
-        topic, sub_option = extract_prompt_context(history)
-        dynamic_prompt = build_system_prompt(topic=topic, sub_option=sub_option)
+        category, topic = extract_prompt_context(history)
+        dynamic_prompt = build_system_prompt(category=category, topic=topic)
         messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
         if history:
-            if topic:
-                logger.debug("GroqLLM resolved dynamic prompt topic=%s sub_option_present=%s", topic, bool(sub_option))
+            if category:
+                logger.debug("GroqLLM resolved dynamic prompt category=%s topic_present=%s", category, bool(topic))
 
             for line in history[-8:]:
                 if line.startswith("User:"):
@@ -94,8 +94,8 @@ class GroqLLMService:
             len(user_input),
         )
 
-        topic, sub_option = extract_prompt_context(history)
-        dynamic_prompt = build_system_prompt(topic=topic, sub_option=sub_option, include_grammar=True)
+        category, topic = extract_prompt_context(history)
+        dynamic_prompt = build_system_prompt(category=category, topic=topic, include_grammar=True)
         messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
         for line in history[-8:]:

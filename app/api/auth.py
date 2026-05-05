@@ -37,6 +37,7 @@ def _validate_password_strength(password: str) -> None:
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
+    """Authenticate with email/password; return a JWT and user profile. Raises 401 on bad credentials."""
     email = payload.email.lower().strip()
     logger.info("Login attempt for email=%s", email)
 
@@ -71,6 +72,7 @@ def login(payload: LoginRequest):
 
 @router.get("/me", response_model=UserOut)
 def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Return the profile of the currently authenticated user. Raises 401 if token is invalid or user is inactive."""
     claims = decode_token(credentials.credentials)
     user_id = claims.get("sub")
     logger.debug("GET /auth/me user_id=%s", user_id)
@@ -98,6 +100,7 @@ def me(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest):
+    """Register a new account and return a JWT. Raises 400 if the email is taken or the password fails policy."""
     email = payload.email.lower().strip()
     logger.info("Register attempt email=%s", email)
 
