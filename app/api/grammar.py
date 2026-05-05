@@ -11,7 +11,7 @@ from app.core.logger import logger
 router = APIRouter(prefix="/grammar", tags=["grammar"])
 
 
-@router.get("/{message_id}", response_model=GrammarDetailResponse)
+@router.get("/detail_grammar_fb/{message_id}", response_model=GrammarDetailResponse)
 def get_grammar_detail(
     message_id: str,
     user_id: str = Depends(get_current_user_id),
