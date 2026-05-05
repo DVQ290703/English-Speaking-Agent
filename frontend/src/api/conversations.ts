@@ -21,6 +21,11 @@ export interface MessageSummary {
   audio_url: string | null;
 }
 
+export interface PhonemeDetailOut {
+  phoneme: string;
+  accuracy_score: number | null;
+}
+
 export interface WordDetailOut {
   word_index: number;
   word: string;
@@ -28,6 +33,7 @@ export interface WordDetailOut {
   error_type: string | null;
   start_ms: number | null;
   duration_ms: number | null;
+  phonemes: PhonemeDetailOut[];
 }
 
 export interface MessageScoreOut {
@@ -46,6 +52,7 @@ export interface MessageWithScoreOut {
   text_content: string | null;
   created_at: string;
   audio_url: string | null;
+  assistant_audio_url: string | null;
   score: MessageScoreOut | null;
 }
 

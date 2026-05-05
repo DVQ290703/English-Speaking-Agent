@@ -84,14 +84,14 @@ export default function HistorySidebar({
     <>
       {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-[8000] bg-black/40 backdrop-blur-sm transition-opacity ${
+        className={`fixed inset-0 z-8000 bg-black/40 backdrop-blur-sm transition-opacity ${
           open ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
       />
       {/* Drawer */}
       <aside
-        className={`fixed left-0 top-0 bottom-0 z-[8001] w-80 max-w-[88vw] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 shadow-2xl transform transition-transform duration-200 flex flex-col ${
+        className={`fixed left-0 top-0 bottom-0 z-8001 w-80 max-w-[88vw] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 shadow-2xl transform transition-transform duration-200 flex flex-col ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
         aria-hidden={!open}

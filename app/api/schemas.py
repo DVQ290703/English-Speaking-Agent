@@ -130,6 +130,11 @@ class ConversationStatsResponse(BaseModel):
     sessions: list[ConversationStatOut]
 
 
+class PhonemeDetail(BaseModel):
+    phoneme: str
+    accuracy_score: float | None = None
+
+
 class WordDetail(BaseModel):
     word_index: int
     word: str
@@ -137,6 +142,7 @@ class WordDetail(BaseModel):
     error_type: str | None = None
     start_ms: int | None = None
     duration_ms: int | None = None
+    phonemes: list[PhonemeDetail] = []
 
 
 class MessageScoreOut(BaseModel):
@@ -155,6 +161,7 @@ class MessageWithScoreOut(BaseModel):
     text_content: str | None = None
     created_at: datetime
     audio_url: str | None = None
+    assistant_audio_url: str | None = None
     score: MessageScoreOut | None = None
 
 
