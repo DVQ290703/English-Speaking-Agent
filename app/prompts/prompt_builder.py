@@ -15,6 +15,36 @@ _BASE_FALLBACK = (
     "the learner keep speaking."
 )
 
+GRAMMAR_INSTRUCTION = """\
+---
+
+RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
+{
+  "response_text": "<your conversational reply>",
+  "grammar_errors": [
+    {
+      "original": "<exact substring from user input>",
+      "corrected": "<corrected form>",
+      "start_char": <integer, 0-indexed>,
+      "end_char": <integer, exclusive>,
+      "category": "<verb_tense|subject_verb_agreement|article|preposition|word_order|spelling|punctuation|other>",
+      "severity": "<minor|moderate|major>",
+      "explanation": "<one sentence explaining the error>",
+      "rule": "<grammar rule name or principle>",
+      "example": "<example of correct usage>"
+    }
+  ],
+  "corrected_sentence": "<full corrected version of the user's latest message>",
+  "overall_score": <integer 0-100>
+}
+
+Rules:
+- Assess ONLY the latest user message, not conversation history.
+- If there are no grammar errors, return grammar_errors as [] and overall_score as 100.
+- corrected_sentence is the full user message with all errors fixed.
+- start_char and end_char are character positions in the original user input string.\
+"""
+
 _CACHE: dict[str, Any] = {
     "base_mtime": None, "base": None,
     "topics_mtime": None, "topics": None,
@@ -108,8 +138,12 @@ def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
     return topic or None, sub_option or None
 
 
-def build_system_prompt(topic: str | None = None, sub_option: str | None = None) -> str:
-    """Compose a system prompt: base -> topic layer -> sub-option layer."""
+def build_system_prompt(
+    topic: str | None = None,
+    sub_option: str | None = None,
+    include_grammar: bool = False,
+) -> str:
+    """Compose a system prompt: base -> topic layer -> sub-option layer -> grammar instruction."""
     prompt_parts = [_load_base_prompt()]
 
     if topic:
@@ -145,5 +179,8 @@ def build_system_prompt(topic: str | None = None, sub_option: str | None = None)
                     "The learner selected this scenario. "
                     "Adapt the conversation to it while keeping the same coaching style."
                 )
+
+    if include_grammar:
+        prompt_parts.append(GRAMMAR_INSTRUCTION)
 
     return "\n\n".join(part for part in prompt_parts if part)
