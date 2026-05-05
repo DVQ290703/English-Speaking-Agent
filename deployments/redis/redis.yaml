@@ -22,6 +22,7 @@ spec:
   selector:
     matchLabels:
       app: redis
+      tier: cache
   template:
     metadata:
       labels:
