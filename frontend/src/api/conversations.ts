@@ -1,5 +1,5 @@
 // frontend/src/api/conversations.ts
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { API_BASE_URL, ENDPOINTS } from './config';
 
 export interface ConversationSummary {
   id: string;
@@ -91,7 +91,7 @@ async function apiFetch<T>(path: string, token: string, options?: RequestInit): 
 
 export async function fetchConversations(token: string): Promise<ConversationSummary[]> {
   const data = await apiFetch<{ conversations: ConversationSummary[] }>(
-    '/api/conversations',
+    ENDPOINTS.conversations.list,
     token,
   );
   return data.conversations;
@@ -102,7 +102,7 @@ export async function fetchConversationMessages(
   conversationId: string,
 ): Promise<MessageSummary[]> {
   const data = await apiFetch<{ conversation_id: string; messages: MessageSummary[] }>(
-    `/api/conversations/${conversationId}/messages`,
+    ENDPOINTS.conversations.messages(conversationId),
     token,
   );
   return data.messages;
@@ -113,27 +113,27 @@ export async function fetchMessagesWithScores(
   conversationId: string,
 ): Promise<MessageWithScoreOut[]> {
   const data = await apiFetch<{ conversation_id: string; messages: MessageWithScoreOut[] }>(
-    `/api/conversations/${conversationId}/messages-with-scores`,
+    ENDPOINTS.conversations.withScores(conversationId),
     token,
   );
   return data.messages;
 }
 
 export async function clearConversation(token: string, conversationId: string): Promise<void> {
-  await apiFetch<void>(`/api/conversations/${conversationId}/clear`, token, {
+  await apiFetch<void>(ENDPOINTS.conversations.clear(conversationId), token, {
     method: 'POST',
   });
 }
 
 export async function fetchForTopic(token: string, topicCode: string): Promise<ForTopicResponse> {
   return apiFetch<ForTopicResponse>(
-    `/api/conversations/for-topic?topic_code=${encodeURIComponent(topicCode)}`,
+    ENDPOINTS.conversations.forTopic(topicCode),
     token,
   );
 }
 
 export async function deleteConversation(token: string, conversationId: string): Promise<void> {
-  await apiFetch<void>(`/api/conversations/${conversationId}`, token, {
+  await apiFetch<void>(ENDPOINTS.conversations.delete(conversationId), token, {
     method: 'DELETE',
   });
 }
@@ -156,6 +156,6 @@ export interface ConversationStat {
 }
 
 export async function fetchConversationStats(token: string): Promise<ConversationStat[]> {
-  const data = await apiFetch<{ sessions: ConversationStat[] }>('/api/conversations/stats', token);
+  const data = await apiFetch<{ sessions: ConversationStat[] }>(ENDPOINTS.conversations.stats, token);
   return data.sessions;
 }

@@ -26,7 +26,6 @@ from app.core.logger import logger
 from app.core.security import get_current_user_id
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
-
 @router.get("", response_model=ConversationListResponse)
 def list_conversations(user_id: str = Depends(get_current_user_id)):
     logger.debug("list_conversations user_id=%s", user_id)
@@ -71,7 +70,7 @@ def get_conversations_for_topic(
     topic_code: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers."""
+    """Return up to 5 non-deleted conversations for a topic, latest-first, with session numbers and limit flag."""
     logger.debug("get_conversations_for_topic user_id=%s topic_code=%s", user_id, topic_code)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -152,7 +151,7 @@ def get_conversations_for_topic(
 
 @router.get("/stats", response_model=ConversationStatsResponse)
 def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
-    """Return per-conversation aggregated stats for the dashboard (score, duration, message count)."""
+    """Return per-conversation stats (scores, duration, message count) for the dashboard, latest 200."""
     logger.debug("get_conversation_stats user_id=%s", user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -222,62 +221,63 @@ def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
     return ConversationStatsResponse(sessions=sessions)
 
 
-@router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
-def get_conversation_messages(
-    conversation_id: str,
-    user_id: str = Depends(get_current_user_id),
-):
-    logger.info("get_conversation_messages conversation_id=%s user_id=%s", conversation_id, user_id)
-    _validate_uuid(conversation_id, "conversation_id")
+# @router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+# def get_conversation_messages(
+#     conversation_id: str,
+#     user_id: str = Depends(get_current_user_id),
+# ):
+#     """Return visible messages for a conversation (post-cleared_at only), oldest-first, with audio URLs."""
+#     logger.info("get_conversation_messages conversation_id=%s user_id=%s", conversation_id, user_id)
+#     _validate_uuid(conversation_id, "conversation_id")
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
-                (conversation_id, user_id),
-            )
-            if not cur.fetchone():
-                logger.warning("Conversation not found conversation_id=%s user_id=%s", conversation_id, user_id)
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+#     with get_connection() as conn:
+#         with conn.cursor() as cur:
+#             cur.execute(
+#                 "SELECT id FROM conversations WHERE id = %s AND user_id = %s LIMIT 1",
+#                 (conversation_id, user_id),
+#             )
+#             if not cur.fetchone():
+#                 logger.warning("Conversation not found conversation_id=%s user_id=%s", conversation_id, user_id)
+#                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-            cur.execute(
-                """
-                SELECT
-                    m.id::text,
-                    m.role,
-                    m.input_mode,
-                    m.text_content,
-                    m.created_at,
-                    aa.storage_key
-                FROM messages m
-                JOIN conversations c ON c.id = m.conversation_id
-                LEFT JOIN audio_assets aa ON aa.message_id = m.id
-                WHERE m.conversation_id = %s
-                  AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
-                ORDER BY m.created_at ASC
-                """,
-                (conversation_id,),
-            )
-            rows = cur.fetchall()
+#             cur.execute(
+#                 """
+#                 SELECT
+#                     m.id::text,
+#                     m.role,
+#                     m.input_mode,
+#                     m.text_content,
+#                     m.created_at,
+#                     aa.storage_key
+#                 FROM messages m
+#                 JOIN conversations c ON c.id = m.conversation_id
+#                 LEFT JOIN audio_assets aa ON aa.message_id = m.id
+#                 WHERE m.conversation_id = %s
+#                   AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+#                 ORDER BY m.created_at ASC
+#                 """,
+#                 (conversation_id,),
+#             )
+#             rows = cur.fetchall()
 
-    messages: list[MessageOut] = []
-    for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
-        audio_url: str | None = None
-        if storage_key:
-            audio_url = f"/api/audio/{storage_key}"
+#     messages: list[MessageOut] = []
+#     for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
+#         audio_url: str | None = None
+#         if storage_key:
+#             audio_url = f"/api/audio/{storage_key}"
 
-        messages.append(
-            MessageOut(
-                id=msg_id,
-                role=role,
-                input_mode=input_mode,
-                text_content=text_content,
-                created_at=created_at,
-                audio_url=audio_url,
-            )
-        )
+#         messages.append(
+#             MessageOut(
+#                 id=msg_id,
+#                 role=role,
+#                 input_mode=input_mode,
+#                 text_content=text_content,
+#                 created_at=created_at,
+#                 audio_url=audio_url,
+#             )
+#         )
 
-    return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
+#     return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
 
 
 @router.post("/{conversation_id}/clear", status_code=status.HTTP_204_NO_CONTENT)
@@ -285,7 +285,7 @@ def clear_conversation_history(
     conversation_id: uuid.UUID,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Set cleared_at = NOW() — hides prior messages from user but retains data in DB."""
+    """Hide all prior messages by setting cleared_at = NOW(). Data is retained; returns 204."""
     conv_id_str = str(conversation_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -311,7 +311,7 @@ def delete_conversation(
     conversation_id: uuid.UUID,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Soft-delete a conversation: sets deleted_at = NOW(). Data is retained in DB."""
+    """Soft-delete a conversation (sets deleted_at). Frees up the per-topic session slot; data is retained."""
     conv_id_str = str(conversation_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -337,7 +337,7 @@ def get_conversation_messages_with_scores(
     conversation_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return messages with embedded pronunciation scores and word-level details."""
+    """Return visible messages with embedded pronunciation scores and word/phoneme breakdowns."""
     _validate_uuid(conversation_id, "conversation_id")
 
     with get_connection() as conn:

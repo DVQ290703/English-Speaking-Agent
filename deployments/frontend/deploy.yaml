@@ -15,26 +15,6 @@ metadata:
 
 ---
 
-# ── ConfigMap ─────────────────────────────────────────────────────────────────
-# Externalises runtime configuration so the image never needs rebuilding
-# for environment-specific settings.
-# Update INTERNAL_API_URL once the backend Service name is known.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: frontend-agent-config
-  namespace: english-speaking-agent
-  labels:
-    app: frontend-agent
-    tier: frontend
-    project: english-speaking-agent
-data:
-  # Points to the backend Kubernetes Service (ClusterIP DNS).
-  # Format: http://<service-name>.<namespace>.svc.cluster.local:<port>
-  INTERNAL_API_URL: "http://backend-agent-service.english-speaking-agent.svc.cluster.local:8000"
-
----
-
 # ── Deployment ────────────────────────────────────────────────────────────────
 # Manages the desired state of the frontend pods.
 # 2 replicas spread across nodes for basic high availability.
@@ -99,11 +79,6 @@ spec:
             - name: http
               containerPort: 80
               protocol: TCP
-
-          # ── Environment from ConfigMap ──────────────────────────────────────
-          envFrom:
-            - configMapRef:
-                name: frontend-agent-config
 
           # ── Resource Limits ────────────────────────────────────────────────
           # nginx serving static assets is intentionally lightweight.
@@ -183,4 +158,4 @@ spec:
     - name: http
       protocol: TCP
       port: 80
-    targetPort: http
+      targetPort: http

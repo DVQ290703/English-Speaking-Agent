@@ -317,3 +317,20 @@ CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date
 -- );
 -- CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id    ON audit_logs(user_id);
 -- CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+
+-- =========================
+-- 9) GRAMMAR FEEDBACK
+-- =========================
+
+CREATE TABLE IF NOT EXISTS grammar_feedback (
+    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id         UUID        NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_input         TEXT        NOT NULL,
+    errors             JSONB       NOT NULL DEFAULT '[]',
+    corrected_sentence TEXT,
+    overall_score      INTEGER,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS grammar_feedback_message_id_idx
+    ON grammar_feedback(message_id);

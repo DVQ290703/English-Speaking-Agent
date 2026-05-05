@@ -9,7 +9,7 @@ from app.core.logger import logger
 router = APIRouter(prefix="/topics", tags=["topics"])
 
 
-@router.get("/categories", response_model=list[CategoryWithTopicsOut])
+@router.get("/get_categories_topics", response_model=list[CategoryWithTopicsOut])
 def list_categories():
     """Return all active categories with their active topics, ordered by sort_order."""
     with get_connection() as conn:

@@ -1,7 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { API_BASE_URL, ENDPOINTS } from './config';
 
 export async function loginRequest({ email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.login}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -19,7 +19,7 @@ export async function loginRequest({ email, password }) {
 }
 
 export async function registerRequest({ display_name, email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.register}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -37,7 +37,7 @@ export async function registerRequest({ display_name, email, password }) {
 }
 
 export async function fetchMe(token) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.me}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
