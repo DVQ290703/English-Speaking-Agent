@@ -653,7 +653,9 @@ export default function DashboardPage() {
   }, [loadStats]);
 
   useEffect(() => {
-    const onFocus = () => { void loadStats(); };
+    const onFocus = () => {
+      void loadStats();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [loadStats]);
@@ -668,9 +670,11 @@ export default function DashboardPage() {
       messages: s.user_message_count ?? 0,
       avgScore: Math.round(s.avg_score ?? 0),
       corrections: 0,
-      scores: s.scores && (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
-        ? s.scores
-        : null,
+      scores:
+        s.scores &&
+        (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
+          ? s.scores
+          : null,
     }));
   }, [apiSessions]);
 
@@ -894,7 +898,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mb-6">
             {statsLoading ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 px-6 py-5 shadow-sm">
+                <div
+                  key={i}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 px-6 py-5 shadow-sm"
+                >
                   <Skeleton className="h-8 w-16 mb-2" />
                   <Skeleton className="h-4 w-24" />
                 </div>

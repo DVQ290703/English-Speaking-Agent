@@ -156,9 +156,6 @@ export interface ConversationStat {
 }
 
 export async function fetchConversationStats(token: string): Promise<ConversationStat[]> {
-  const data = await apiFetch<{ sessions: ConversationStat[] }>(
-    '/api/conversations/stats',
-    token,
-  );
+  const data = await apiFetch<{ sessions: ConversationStat[] }>('/api/conversations/stats', token);
   return data.sessions;
 }
