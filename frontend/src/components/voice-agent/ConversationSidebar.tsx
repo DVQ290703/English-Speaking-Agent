@@ -1,4 +1,13 @@
-import { ArrowLeft, ChevronDown, ChevronRight, MessageSquare, PanelLeft, PanelLeftClose, Plus, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  PanelLeft,
+  PanelLeftClose,
+  Plus,
+  X,
+} from 'lucide-react';
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -140,8 +149,6 @@ export default function ConversationSidebar({
     }
   };
 
-  const uncategorizedConversations = conversations.filter((c) => !c.topic_code);
-
   /* ── View 1: Main menu — categories & topics ── */
   const renderMainMenu = () => (
     <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
@@ -163,11 +170,15 @@ export default function ConversationSidebar({
                   <span className="flex-1 text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider select-none">
                     {cat.title}
                   </span>
-                  {isCategoryExpanded
-                    ? <ChevronDown className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />
-                    : <ChevronRight className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />}
+                  {isCategoryExpanded ? (
+                    <ChevronDown className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-3 h-3 text-gray-400 dark:text-slate-500 shrink-0" />
+                  )}
                 </button>
-                <div className={`overflow-hidden transition-all duration-200 ease-in-out ${isCategoryExpanded ? 'max-h-250 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div
+                  className={`overflow-hidden transition-all duration-200 ease-in-out ${isCategoryExpanded ? 'max-h-250 opacity-100' : 'max-h-0 opacity-0'}`}
+                >
                   {cat.topics.map((tp) => {
                     const count = conversations.filter((c) => c.topic_code === tp.code).length;
                     const isActive = currentTopicCode === tp.code;
@@ -184,9 +195,13 @@ export default function ConversationSidebar({
                         }`}
                       >
                         <MessageSquare className="w-4 h-4 shrink-0 text-gray-400 dark:text-slate-500 group-hover:dark:text-slate-400" />
-                        <span className="flex-1 min-w-0 text-xs font-medium truncate">{tp.title}</span>
+                        <span className="flex-1 min-w-0 text-xs font-medium truncate">
+                          {tp.title}
+                        </span>
                         {count > 0 && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${limitReached ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${limitReached ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}
+                          >
                             {count}/{MAX_PER_TOPIC}
                           </span>
                         )}
@@ -197,7 +212,6 @@ export default function ConversationSidebar({
               </div>
             );
           })}
-
         </>
       )}
     </div>
@@ -232,7 +246,9 @@ export default function ConversationSidebar({
         <div className="px-3 py-2 shrink-0">
           <button
             type="button"
-            onClick={() => { if (!limitReached) onNewChat(topicCode); }}
+            onClick={() => {
+              if (!limitReached) onNewChat(topicCode);
+            }}
             disabled={limitReached}
             title={limitReached ? t('va.sidebar.limitReached') : t('va.sidebar.newChat')}
             className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -254,9 +270,18 @@ export default function ConversationSidebar({
             </p>
           ) : (
             topicConvs.map((c) => (
-              <ConvRow key={c.id} c={c} isActive={c.id === activeConversationId} isDeleting={deletingId === c.id}
-                onSelect={() => { onSelectConversation(c.id, c.topic_code ?? null); onClose(); }}
-                onDelete={(e) => void handleDelete(e, c.id)} deleteLabel={t('va.sidebar.delete')} />
+              <ConvRow
+                key={c.id}
+                c={c}
+                isActive={c.id === activeConversationId}
+                isDeleting={deletingId === c.id}
+                onSelect={() => {
+                  onSelectConversation(c.id, c.topic_code ?? null);
+                  onClose();
+                }}
+                onDelete={(e) => void handleDelete(e, c.id)}
+                deleteLabel={t('va.sidebar.delete')}
+              />
             ))
           )}
         </div>
@@ -266,25 +291,39 @@ export default function ConversationSidebar({
 
   const bg = 'bg-[#f9f9f9] dark:bg-[#0b1426]';
   const border = 'border-gray-200 dark:border-slate-800';
-  const btnCls = 'p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors';
+  const btnCls =
+    'p-1.5 rounded-md text-gray-400 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors';
 
   return (
     <>
       {/* ── Mobile backdrop ── */}
       {open && (
-        <div className="md:hidden fixed inset-0 z-9998 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div
+          className="md:hidden fixed inset-0 z-9998 bg-black/50 backdrop-blur-sm"
+          onClick={onClose}
+        />
       )}
 
       {/* ── Mobile: full sliding aside ── */}
-      <aside className={`
+      <aside
+        className={`
         md:hidden fixed inset-y-0 left-0 z-9999 w-64 shadow-2xl
         flex flex-col ${bg} border-r ${border}
         transition-transform duration-200 ease-in-out
         ${open ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      `}
+      >
         <div className="flex items-center justify-between px-3 py-3 shrink-0">
-          <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 select-none">{t('brand.name')}</span>
-          <button type="button" onClick={onToggleSidebar} title="Close sidebar" aria-label="Close sidebar" className={btnCls}>
+          <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 select-none">
+            {t('brand.name')}
+          </span>
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title="Close sidebar"
+            aria-label="Close sidebar"
+            className={btnCls}
+          >
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
@@ -292,14 +331,20 @@ export default function ConversationSidebar({
       </aside>
 
       {/* ── Desktop: single collapsible sidebar ── */}
-      <aside className={`
+      <aside
+        className={`
         hidden md:flex flex-col shrink-0 overflow-hidden
         ${bg} border-r ${border}
         transition-all duration-300 ease-in-out
         ${isOpen ? 'w-64' : 'w-12'}
-      `}>
-        <div className={`flex items-center shrink-0 h-12 transition-all duration-300 ${isOpen ? 'justify-between px-3 py-3' : 'justify-center py-3'}`}>
-          <span className={`text-sm font-semibold text-gray-800 dark:text-slate-200 select-none whitespace-nowrap overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0'}`}>
+      `}
+      >
+        <div
+          className={`flex items-center shrink-0 h-12 transition-all duration-300 ${isOpen ? 'justify-between px-3 py-3' : 'justify-center py-3'}`}
+        >
+          <span
+            className={`text-sm font-semibold text-gray-800 dark:text-slate-200 select-none whitespace-nowrap overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0'}`}
+          >
             {t('brand.name')}
           </span>
           <button

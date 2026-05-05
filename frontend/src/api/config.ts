@@ -15,7 +15,8 @@ export const ENDPOINTS = {
     messages: (id: string) => `/api/conversations/${id}/messages`,
     withScores: (id: string) => `/api/conversations/${id}/messages-with-scores`,
     clear: (id: string) => `/api/conversations/${id}/clear`,
-    forTopic: (code: string) => `/api/conversations/for-topic?topic_code=${encodeURIComponent(code)}`,
+    forTopic: (code: string) =>
+      `/api/conversations/for-topic?topic_code=${encodeURIComponent(code)}`,
     delete: (conversationId: string) => `/api/conversations/${conversationId}`,
     stats: '/api/conversations/stats',
   },

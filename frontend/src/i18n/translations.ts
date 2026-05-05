@@ -175,7 +175,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.minutes': '{n} min',
     'va.history.sentences': '{n} sentences',
     'va.history.count': '{n} session(s)',
-      'va.history.loading': 'Loading conversation...',
+    'va.history.loading': 'Loading conversation...',
 
     // Voice agent — conversation sidebar (left)
     'va.sidebar.newChat': 'New Chat',
@@ -533,7 +533,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.minutes': '{n} phút',
     'va.history.sentences': '{n} câu',
     'va.history.count': '{n} phiên',
-      'va.history.loading': 'Đang tải hội thoại...',
+    'va.history.loading': 'Đang tải hội thoại...',
 
     // Voice agent — conversation sidebar (left)
     'va.sidebar.newChat': 'Chat mới',
