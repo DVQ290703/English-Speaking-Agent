@@ -9,19 +9,21 @@ from app.api.schemas import (
     ConversationListResponse,
     ConversationMessagesResponse,
     ConversationOut,
+    ConversationScoresOut,
+    ConversationStatOut,
+    ConversationStatsResponse,
     ConversationWithScoresResponse,
     ForTopicConversationOut,
     ForTopicResponse,
     MessageOut,
     MessageScoreOut,
     MessageWithScoreOut,
+    PhonemeDetail,
     WordDetail,
 )
 from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import get_current_user_id
-from app.core.storage import get_presigned_url
-
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
@@ -148,6 +150,78 @@ def get_conversations_for_topic(
     )
 
 
+@router.get("/stats", response_model=ConversationStatsResponse)
+def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
+    """Return per-conversation aggregated stats for the dashboard (score, duration, message count)."""
+    logger.debug("get_conversation_stats user_id=%s", user_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.id::text,
+                    COALESCE(c.title, t.title, t.code, 'General') AS topic,
+                    t.code AS topic_code,
+                    c.started_at,
+                    CASE
+                        WHEN c.ended_at IS NOT NULL
+                        THEN EXTRACT(EPOCH FROM (c.ended_at - c.started_at)) * 1000
+                        ELSE NULL
+                    END AS duration_ms,
+                    AVG(pa.overall_score)
+                        FILTER (WHERE m.role = 'user' AND pa.overall_score IS NOT NULL)
+                        AS avg_score,
+                    AVG(pa.accuracy_score)
+                        FILTER (WHERE m.role = 'user' AND pa.accuracy_score IS NOT NULL)
+                        AS avg_accuracy,
+                    AVG(pa.fluency_score)
+                        FILTER (WHERE m.role = 'user' AND pa.fluency_score IS NOT NULL)
+                        AS avg_fluency,
+                    AVG(pa.prosody_score)
+                        FILTER (WHERE m.role = 'user' AND pa.prosody_score IS NOT NULL)
+                        AS avg_prosody,
+                    COUNT(m.id) FILTER (WHERE m.role = 'user') AS user_message_count
+                FROM conversations c
+                LEFT JOIN topics t ON t.id = c.topic_id
+                LEFT JOIN messages m ON m.conversation_id = c.id
+                LEFT JOIN pronunciation_assessments pa ON pa.message_id = m.id
+                WHERE c.user_id = %s
+                GROUP BY c.id, t.title, t.code, c.started_at, c.ended_at
+                ORDER BY c.started_at DESC
+                LIMIT 200
+                """,
+                (user_id,),
+            )
+            rows = cur.fetchall()
+
+    sessions: list[ConversationStatOut] = []
+    for (conv_id, topic, topic_code, started_at, duration_ms,
+         avg_score, avg_accuracy, avg_fluency, avg_prosody,
+         user_message_count) in rows:
+
+        scores: ConversationScoresOut | None = None
+        if avg_score is not None or avg_accuracy is not None or avg_fluency is not None:
+            scores = ConversationScoresOut(
+                pronunciation=round(avg_prosody, 1) if avg_prosody is not None else None,
+                fluency=round(avg_fluency, 1) if avg_fluency is not None else None,
+                accuracy=round(avg_accuracy, 1) if avg_accuracy is not None else None,
+            )
+
+        sessions.append(ConversationStatOut(
+            id=conv_id,
+            topic=topic,
+            topic_code=topic_code,
+            started_at=started_at,
+            duration_ms=duration_ms,
+            avg_score=round(avg_score, 1) if avg_score is not None else None,
+            user_message_count=int(user_message_count or 0),
+            scores=scores,
+        ))
+
+    logger.info("get_conversation_stats user_id=%s returned=%d", user_id, len(sessions))
+    return ConversationStatsResponse(sessions=sessions)
+
+
 @router.get("/{conversation_id}/messages", response_model=ConversationMessagesResponse)
 def get_conversation_messages(
     conversation_id: str,
@@ -187,17 +261,10 @@ def get_conversation_messages(
             rows = cur.fetchall()
 
     messages: list[MessageOut] = []
-    presign_ok = 0
-    presign_fail = 0
     for msg_id, role, input_mode, text_content, created_at, storage_key in rows:
         audio_url: str | None = None
         if storage_key:
-            try:
-                audio_url = get_presigned_url(storage_key)
-                presign_ok += 1
-            except Exception:
-                logger.exception("Failed to generate presigned URL for key=%s", storage_key)
-                presign_fail += 1
+            audio_url = f"/api/audio/{storage_key}"
 
         messages.append(
             MessageOut(
@@ -209,9 +276,6 @@ def get_conversation_messages(
                 audio_url=audio_url,
             )
         )
-
-    if presign_fail:
-        logger.warning("Presigned URL generation ok=%d failed=%d conversation_id=%s", presign_ok, presign_fail, conversation_id)
 
     return ConversationMessagesResponse(conversation_id=conversation_id, messages=messages)
 
@@ -295,7 +359,8 @@ def get_conversation_messages_with_scores(
                     m.input_mode,
                     m.text_content,
                     m.created_at,
-                    aa.storage_key,
+                    ua.storage_key,
+                    aa_tts.storage_key AS assistant_storage_key,
                     pa.overall_score,
                     pa.accuracy_score,
                     pa.fluency_score,
@@ -304,8 +369,10 @@ def get_conversation_messages_with_scores(
                     pa.id::text AS assessment_id
                 FROM messages m
                 JOIN conversations c ON c.id = m.conversation_id
-                LEFT JOIN audio_assets aa
-                    ON aa.message_id = m.id AND aa.audio_type = 'user_input'
+                LEFT JOIN audio_assets ua
+                    ON ua.message_id = m.id AND ua.audio_type = 'user_input'
+                LEFT JOIN audio_assets aa_tts
+                    ON aa_tts.message_id = m.id AND aa_tts.audio_type = 'assistant_tts'
                 LEFT JOIN pronunciation_assessments pa ON pa.message_id = m.id
                 WHERE m.conversation_id = %s
                   AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
@@ -316,41 +383,63 @@ def get_conversation_messages_with_scores(
             msg_rows = cur.fetchall()
 
             # batch-fetch all word details (one query, not N+1)
-            assessment_ids = [row[11] for row in msg_rows if row[11] is not None]
+            assessment_ids = [row[12] for row in msg_rows if row[12] is not None]
             word_map: dict[str, list[WordDetail]] = {}
+            # key: word_detail DB id (uuid text) → list of PhonemeDetail
+            phoneme_map: dict[str, list[PhonemeDetail]] = {}
             if assessment_ids:
                 cur.execute(
                     """
-                    SELECT assessment_id::text, word_index, word,
-                           accuracy_score, error_type,
-                           (offset_ticks / 10000)::int   AS start_ms,
-                           (duration_ticks / 10000)::int AS duration_ms
-                    FROM pronunciation_word_details
-                    WHERE assessment_id = ANY(%s::uuid[])
-                    ORDER BY assessment_id, word_index
+                    SELECT wd.id::text, wd.assessment_id::text, wd.word_index, wd.word,
+                           wd.accuracy_score, wd.error_type,
+                           (wd.offset_ticks / 10000)::int   AS start_ms,
+                           (wd.duration_ticks / 10000)::int AS duration_ms
+                    FROM pronunciation_word_details wd
+                    WHERE wd.assessment_id = ANY(%s::uuid[])
+                    ORDER BY wd.assessment_id, wd.word_index
                     """,
                     (assessment_ids,),
                 )
-                for a_id, wi, w, acc, err, s_ms, d_ms in cur.fetchall():
+                word_rows = cur.fetchall()
+                word_detail_ids = [r[0] for r in word_rows]
+
+                if word_detail_ids:
+                    cur.execute(
+                        """
+                        SELECT word_detail_id::text, phoneme_index, phoneme, accuracy_score
+                        FROM pronunciation_phoneme_details
+                        WHERE word_detail_id = ANY(%s::uuid[])
+                        ORDER BY word_detail_id, phoneme_index
+                        """,
+                        (word_detail_ids,),
+                    )
+                    for wd_id, p_idx, phoneme, p_acc in cur.fetchall():
+                        phoneme_map.setdefault(wd_id, []).append(
+                            PhonemeDetail(phoneme=phoneme, accuracy_score=p_acc)
+                        )
+
+                for wd_id, a_id, wi, w, acc, err, s_ms, d_ms in word_rows:
                     word_map.setdefault(a_id, []).append(
                         WordDetail(
                             word_index=wi, word=w,
                             accuracy_score=acc, error_type=err,
                             start_ms=s_ms, duration_ms=d_ms,
+                            phonemes=phoneme_map.get(wd_id, []),
                         )
                     )
 
     messages: list[MessageWithScoreOut] = []
     for (msg_id, role, input_mode, text_content, created_at,
-         storage_key, overall, accuracy, fluency, completeness,
+         storage_key, assistant_storage_key, overall, accuracy, fluency, completeness,
          prosody, assessment_id) in msg_rows:
 
         audio_url: str | None = None
         if storage_key:
-            try:
-                audio_url = get_presigned_url(storage_key)
-            except Exception:
-                logger.exception("Failed to generate presigned URL for key=%s", storage_key)
+            audio_url = f"/api/audio/{storage_key}"
+
+        assistant_audio_url: str | None = None
+        if assistant_storage_key:
+            assistant_audio_url = f"/api/audio/{assistant_storage_key}"
 
         score: MessageScoreOut | None = None
         if assessment_id is not None:
@@ -371,6 +460,7 @@ def get_conversation_messages_with_scores(
                 text_content=text_content,
                 created_at=created_at,
                 audio_url=audio_url,
+                assistant_audio_url=assistant_audio_url,
                 score=score,
             )
         )

@@ -12,6 +12,8 @@ import pytest
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest-only")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
+os.environ.setdefault("AZURE_SPEECH_KEY", "test-azure-key")
+os.environ.setdefault("AZURE_SPEECH_REGION", "eastus")
 
 from app.services.azure_assessment import AzureAssessmentService
 
@@ -98,6 +100,12 @@ class TestAzureAssessmentServiceInit:
     def test_legacy_env_names_still_work(self, monkeypatch):
         # Settings resolves legacy names at load time; service sees the resolved value
         monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "legacy-key")
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
+        svc = AzureAssessmentService()
+        assert svc.default_language == "en-US"
+
+    def test_default_language_is_en_us(self, monkeypatch):
+        monkeypatch.setattr("app.services.azure_assessment.AZURE_SPEECH_KEY", "key")
         monkeypatch.setattr("app.services.azure_assessment.AZURE_SERVICE_REGION", "eastus")
         svc = AzureAssessmentService()
         assert svc.default_language == "en-US"

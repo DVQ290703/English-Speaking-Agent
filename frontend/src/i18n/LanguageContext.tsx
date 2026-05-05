@@ -1,24 +1,16 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { translate, type Lang } from './translations';
 
 const STORAGE_KEY = 'va-ui-lang';
 
-type LanguageContextValue = {
+export type LanguageContextValue = {
   lang: Lang;
   setLang: (lang: Lang) => void;
   toggleLang: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
-const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
+export const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 function readInitialLang(): Lang {
   if (typeof window === 'undefined') return 'vi';
@@ -59,30 +51,18 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLangState(prev => (prev === 'vi' ? 'en' : 'vi'));
+    setLangState((prev) => (prev === 'vi' ? 'en' : 'vi'));
   }, []);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>) => translate(lang, key, vars),
-    [lang]
+    [lang],
   );
 
   const value = useMemo<LanguageContextValue>(
     () => ({ lang, setLang, toggleLang, t }),
-    [lang, setLang, toggleLang, t]
+    [lang, setLang, toggleLang, t],
   );
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
-}
-
-export function useLanguage(): LanguageContextValue {
-  const ctx = useContext(LanguageContext);
-  if (!ctx) {
-    throw new Error('useLanguage must be used inside <LanguageProvider>');
-  }
-  return ctx;
-}
-
-export function useT(): LanguageContextValue['t'] {
-  return useLanguage().t;
 }
