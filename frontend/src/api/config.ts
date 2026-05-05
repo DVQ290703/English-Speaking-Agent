@@ -16,10 +16,10 @@ export const ENDPOINTS = {
     withScores: (id: string) => `/api/conversations/${id}/messages-with-scores`,
     clear: (id: string) => `/api/conversations/${id}/clear`,
     forTopic: (code: string) => `/api/conversations/for-topic?topic_code=${encodeURIComponent(code)}`,
-    delete: (id: string) => `/api/conversations/${id}`,
+    delete: (conversationId: string) => `/api/conversations/${conversationId}`,
     stats: '/api/conversations/stats',
   },
   topics: {
-    categories: '/api/topics/categories',
+    categories: '/api/topics/get_categories_topics',
   },
 } as const;
