@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import { API_BASE_URL, ENDPOINTS } from './config';
 
 export interface ChatRespondParams {
   token: string;
@@ -62,7 +62,7 @@ export async function chatRespond({
     formData.append('conversation_id', conversationId);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/chat/respond`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.chat.respond}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -185,7 +185,7 @@ export async function assessPronunciation({
     formData.append('message_id', messageId.trim());
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/assess`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.chat.assess}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

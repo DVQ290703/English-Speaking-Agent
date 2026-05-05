@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json as _json
 import time as _time
 import uuid as _uuid
 
@@ -13,7 +14,8 @@ from app.api._audio import (
     _validate_uploaded_audio,
 )
 from app.api._validators import _enforce_max_length, _validate_uuid
-from app.api.schemas import ChatResponse
+from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan
+from app.services.grammar_parser import parse_grammar_response
 from app.core.ai_services import (
     _synthesize_audio_bytes,
     run_langraph_agent,
@@ -32,8 +34,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 _MAX_TEXT_CHARS = 4_000
 _MAX_HISTORY_CHARS = 50_000
-_MAX_TOPIC_CHARS = 80
-_MAX_SUB_OPTION_CHARS = 120
+_MAX_CATEGORY_CHARS = 80
+_MAX_TOPIC_CHARS = 120
 _INLINE_AUDIO_LIMIT_BYTES = 512 * 1024
 
 _input_guardrails = InputGuardrails()
@@ -97,19 +99,26 @@ def _insert_audio_asset(
 @router.post("/respond", response_model=ChatResponse)
 def chat_respond(
     text: str | None = Form(default=None),
+    category: str | None = Form(default=None),
     topic: str | None = Form(default=None),
-    sub_option: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
+    """Send a message (text or audio) and get an AI coach reply with TTS audio.
+
+    Audio input is transcribed via STT when no text is provided. Input and output
+    pass through guardrails. A new conversation is created if conversation_id is
+    omitted; category is matched to a topics row to enforce the 5-session limit.
+    Returns the reply text, inline or URL-referenced MP3, and a grammar summary.
+    """
     input_mode = "audio" if audio_file else "text"
     logger.info("chat_respond start user_id=%s input_mode=%s conversation_id=%s", user_id, input_mode, conversation_id)
 
     text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
+    category = _enforce_max_length(category, field="category", max_chars=_MAX_CATEGORY_CHARS)
     topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
-    sub_option = _enforce_max_length(sub_option, field="sub_option", max_chars=_MAX_SUB_OPTION_CHARS)
 
     user_input = (text or "").strip()
     audio_bytes_received = b""
@@ -200,11 +209,11 @@ def chat_respond(
             else:
                 topic_id = None
                 topic_title = None
-                topic_clean = topic.strip().lower() if topic else ""
-                if topic_clean:
+                category_clean = category.strip().lower() if category else ""
+                if category_clean:
                     cur.execute(
                         "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",
-                        (topic_clean, topic_clean),
+                        (category_clean, category_clean),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:
@@ -271,13 +280,13 @@ def chat_respond(
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
     # Convert DB history (list[dict]) to the "Role: text" string format the
-    # pipeline expects, and prepend topic/sub_option context lines so
+    # pipeline expects, and prepend category/topic context lines so
     # extract_prompt_context can build the dynamic system prompt.
     history_lines: list[str] = []
+    if category:
+        history_lines.append(f"Category: {category.strip()}")
     if topic:
         history_lines.append(f"Topic: {topic.strip()}")
-    if sub_option:
-        history_lines.append(f"Sub-option: {sub_option.strip()}")
     for msg in conversation_history:
         role_label = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role_label}: {msg['content']}")
@@ -287,11 +296,12 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_json = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
     )
+    _, grammar_data = parse_grammar_response(grammar_json, user_input)
 
     # ── Guardrails: Output ─────────────────────────────────────────────────
     output_result = _output_guardrails.check(response_text)
@@ -365,6 +375,23 @@ def chat_respond(
                     size_bytes=len(response_audio_bytes),
                 )
 
+            # Save grammar feedback (only when LLM returned valid JSON)
+            if grammar_json is not None:
+                cur.execute(
+                    """
+                    INSERT INTO grammar_feedback
+                        (message_id, user_input, errors, corrected_sentence, overall_score)
+                    VALUES (%s, %s, %s::jsonb, %s, %s)
+                    """,
+                    (
+                        user_message_id,
+                        user_input,
+                        _json.dumps([e.__dict__ for e in grammar_data.errors]),
+                        grammar_data.corrected_sentence,
+                        grammar_data.overall_score,
+                    ),
+                )
+
     # ── Audit Logging ──────────────────────────────────────────────────────
     _audit_logger.log(
         user_id=user_id,
@@ -404,6 +431,20 @@ def chat_respond(
         "yes" if assistant_audio_url else "no",
     )
 
+    grammar_summary = GrammarSummary(
+        error_count=len(grammar_data.errors),
+        has_errors=len(grammar_data.errors) > 0,
+        flagged_spans=[
+            GrammarSpan(
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+            )
+            for e in grammar_data.errors
+        ],
+    )
+
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
@@ -413,4 +454,5 @@ def chat_respond(
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
         user_message_id=user_message_id,
+        grammar_summary=grammar_summary,
     )

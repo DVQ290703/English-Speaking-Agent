@@ -15,6 +15,38 @@ _BASE_FALLBACK = (
     "the learner keep speaking."
 )
 
+GRAMMAR_INSTRUCTION = """\
+---
+
+RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
+{
+  "response_text": "<your conversational reply>",
+  "tagged_input": "<copy the user's latest message exactly, wrapping each grammar error in angle brackets>",
+  "grammar_errors": [
+    {
+      "original": "<error text exactly as it appears inside the angle brackets>",
+      "corrected": "<corrected form>",
+      "category": "<verb_tense|subject_verb_agreement|article|preposition|word_order|spelling|punctuation|other>",
+      "severity": "<minor|moderate|major>",
+      "explanation": "<one sentence explaining the error>",
+      "rule": "<grammar rule name or principle>",
+      "example": "<example of correct usage>"
+    }
+  ],
+  "corrected_sentence": "<full corrected version of the user's latest message>",
+  "overall_score": <integer 0-100>
+}
+
+Rules:
+- Assess ONLY the latest user message, not conversation history.
+- tagged_input: copy the user's message verbatim, wrapping each error in < > angle brackets.
+  Example — user says "I go to store yesterday" → tagged_input: "I <go> to <store> yesterday"
+- grammar_errors: one entry per < > span in tagged_input, listed in the same order.
+- original must match exactly the text inside the < > brackets.
+- If there are no errors, tagged_input equals the original message unchanged and grammar_errors is [].
+- overall_score: 100 minus (major_count×15 + moderate_count×8 + minor_count×3), minimum 0.\
+"""
+
 _CACHE: dict[str, Any] = {
     "base_mtime": None, "base": None,
     "topics_mtime": None, "topics": None,
@@ -100,50 +132,57 @@ def _load_topics() -> dict[str, Any]:
 
 
 def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
-    """Extract topic and scenario metadata from normalized history lines."""
+    """Extract category and topic metadata from normalized history lines."""
+    category_line = next((ln for ln in history if ln.startswith("Category:")), None)
     topic_line = next((ln for ln in history if ln.startswith("Topic:")), None)
-    sub_option_line = next((ln for ln in history if ln.startswith("Sub-option:")), None)
+    category = category_line[9:].strip() if category_line else None
     topic = topic_line[6:].strip() if topic_line else None
-    sub_option = sub_option_line[11:].strip() if sub_option_line else None
-    return topic or None, sub_option or None
+    return category or None, topic or None
 
 
-def build_system_prompt(topic: str | None = None, sub_option: str | None = None) -> str:
-    """Compose a system prompt: base -> topic layer -> sub-option layer."""
+def build_system_prompt(
+    category: str | None = None,
+    topic: str | None = None,
+    include_grammar: bool = False,
+) -> str:
+    """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
     prompt_parts = [_load_base_prompt()]
 
-    if topic:
+    if category:
         topics = _load_topics()
-        topic_key = _normalize_key(topic)
-        topic_data = topics.get(topic_key)
+        category_key = _normalize_key(category)
+        category_data = topics.get(category_key)
 
-        if topic_data:
-            topic_prompt = topic_data.get("topic_prompt", "").strip()
-            if topic_prompt:
-                prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{topic_prompt}")
+        if category_data:
+            category_prompt = category_data.get("topic_prompt", "").strip()
+            if category_prompt:
+                prompt_parts.append(f"---\n\n## Category: {category_key}\n{category_prompt}")
 
-            if sub_option:
-                sub_key = _normalize_key(sub_option)
-                option_prompt = topic_data.get("options", {}).get(sub_key, "").strip()
+            if topic:
+                topic_key = _normalize_key(topic)
+                option_prompt = category_data.get("options", {}).get(topic_key, "").strip()
                 if option_prompt:
-                    prompt_parts.append(f"---\n\n## Scenario: {sub_key}\n{option_prompt}")
+                    prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{option_prompt}")
                 else:
                     prompt_parts.append(
-                        f"---\n\n## Scenario: {sub_option.strip()}\n"
-                        "The learner selected this scenario. "
+                        f"---\n\n## Topic: {topic.strip()}\n"
+                        "The learner selected this topic. "
                         "Adapt the conversation to it while keeping the same coaching style."
                     )
         else:
             prompt_parts.append(
-                f"---\n\n## Topic: {topic.strip()}\n"
-                "The learner selected this topic. "
+                f"---\n\n## Category: {category.strip()}\n"
+                "The learner selected this category. "
                 "Create a realistic speaking-practice conversation around it."
             )
-            if sub_option:
+            if topic:
                 prompt_parts.append(
-                    f"---\n\n## Scenario: {sub_option.strip()}\n"
-                    "The learner selected this scenario. "
+                    f"---\n\n## Topic: {topic.strip()}\n"
+                    "The learner selected this topic. "
                     "Adapt the conversation to it while keeping the same coaching style."
                 )
+
+    if include_grammar:
+        prompt_parts.append(GRAMMAR_INSTRUCTION)
 
     return "\n\n".join(part for part in prompt_parts if part)

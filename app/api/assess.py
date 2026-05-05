@@ -52,6 +52,9 @@ def assess_pronunciation(
     message_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
+    """Score pronunciation via Azure. Scripted mode (with reference_text) gives word/phoneme error detail;
+    unscripted mode freely recognizes speech. Result is persisted and linked to message_id when provided.
+    """
     language = _normalize_language(_enforce_max_length(language, field="language", max_chars=10))
     reference_text = _enforce_max_length(
         reference_text,

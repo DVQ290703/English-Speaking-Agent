@@ -23,61 +23,61 @@ os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 # ---------------------------------------------------------------------------
 
 class TestNormalizeHistory:
-    def _call(self, history_raw, topic=None):
+    def _call(self, history_raw, category=None):
         # Import here to avoid module-level side effects
         from app.core.ai_services import normalize_history
-        return normalize_history(history_raw=history_raw, topic=topic)
+        return normalize_history(history_raw=history_raw, category=category)
 
     def test_normalize_history_no_history_no_topic_returns_empty(self):
-        result = self._call(None, topic=None)
+        result = self._call(None, category=None)
         assert result == []
 
     def test_normalize_history_topic_only_returns_topic_line(self):
-        result = self._call(None, topic="IELTS Part 1")
-        assert result == ["Topic: IELTS Part 1"]
+        result = self._call(None, category="IELTS Part 1")
+        assert result == ["Category: IELTS Part 1"]
 
     def test_normalize_history_topic_whitespace_stripped(self):
-        result = self._call(None, topic="  Daily  ")
-        assert result == ["Topic: Daily"]
+        result = self._call(None, category="  Daily  ")
+        assert result == ["Category: Daily"]
 
     def test_normalize_history_blank_topic_not_added(self):
-        result = self._call(None, topic="   ")
+        result = self._call(None, category="   ")
         assert result == []
 
-    def test_normalize_history_includes_sub_option_after_topic(self):
+    def test_normalize_history_includes_topic_after_category(self):
         from app.core.ai_services import normalize_history
 
-        result = normalize_history(history_raw=None, topic="Travel", sub_option="Airport Check-in")
+        result = normalize_history(history_raw=None, category="Travel", topic="Airport Check-in")
 
-        assert result == ["Topic: Travel", "Sub-option: Airport Check-in"]
+        assert result == ["Category: Travel", "Topic: Airport Check-in"]
 
     def test_normalize_history_valid_json_list_of_dicts(self):
         history = json.dumps([
             {"role": "user", "text": "Hello"},
             {"role": "assistant", "text": "Hi there"},
         ])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: Hello" in result
         assert "Assistant: Hi there" in result
 
     def test_normalize_history_prepends_topic_before_messages(self):
         history = json.dumps([{"role": "user", "text": "Hello"}])
-        result = self._call(history, topic="Travel")
-        assert result[0] == "Topic: Travel"
+        result = self._call(history, category="Travel")
+        assert result[0] == "Category: Travel"
         assert "User: Hello" in result
 
     def test_normalize_history_invalid_json_returns_topic_only(self):
-        result = self._call("not valid json {{", topic="Travel")
-        assert result == ["Topic: Travel"]
+        result = self._call("not valid json {{", category="Travel")
+        assert result == ["Category: Travel"]
 
     def test_normalize_history_non_list_json_returns_topic_only(self):
-        result = self._call(json.dumps({"key": "value"}), topic="Travel")
-        assert result == ["Topic: Travel"]
+        result = self._call(json.dumps({"key": "value"}), category="Travel")
+        assert result == ["Category: Travel"]
 
     def test_normalize_history_limits_to_last_10_items(self):
         items = [{"role": "user", "text": f"msg {i}"} for i in range(20)]
         history = json.dumps(items)
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         # 10 items → 10 lines
         assert len(result) == 10
 
@@ -86,19 +86,19 @@ class TestNormalizeHistory:
             {"role": "user", "text": ""},
             {"role": "assistant", "text": "Valid reply"},
         ])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: " not in result
         assert "Assistant: Valid reply" in result
 
     def test_normalize_history_string_items_included(self):
         history = json.dumps(["User: hi", "Assistant: hello"])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: hi" in result
         assert "Assistant: hello" in result
 
     def test_normalize_history_empty_string_items_skipped(self):
         history = json.dumps(["", "  ", "User: hello"])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "" not in result
         assert "User: hello" in result
 
@@ -293,36 +293,36 @@ class TestRunLangraphAgent:
 # ---------------------------------------------------------------------------
 
 class TestPromptArchitecture:
-    def test_build_system_prompt_layers_base_topic_and_sub_option(self):
+    def test_build_system_prompt_layers_base_category_and_topic(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(topic="travel", sub_option="airport_check_in")
+        prompt = build_system_prompt(category="travel", topic="airport_check_in")
 
         assert "AI English-speaking coach" in prompt
-        assert "## Topic: travel" in prompt
-        assert "## Scenario: airport_check_in" in prompt
+        assert "## Category: travel" in prompt
+        assert "## Topic: airport_check_in" in prompt
         assert "airport check-in" in prompt.lower()
 
-    def test_build_system_prompt_uses_unknown_sub_option_fallback(self):
+    def test_build_system_prompt_uses_unknown_topic_fallback(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(topic="daily_conversation", sub_option="Meeting a neighbor")
+        prompt = build_system_prompt(category="daily_conversation", topic="Meeting a neighbor")
 
-        assert "## Topic: daily_conversation" in prompt
+        assert "## Category: daily_conversation" in prompt
         assert "Meeting a neighbor" in prompt
 
 
-    def test_extract_prompt_context_reads_topic_and_sub_option_lines(self):
+    def test_extract_prompt_context_reads_category_and_topic_lines(self):
         from app.prompts.prompt_builder import extract_prompt_context
 
-        topic, sub_option = extract_prompt_context([
-            "Topic: Job Interview",
-            "Sub-option: Salary negotiation",
+        category, topic = extract_prompt_context([
+            "Category: Job Interview",
+            "Topic: Salary negotiation",
             "User: hello",
         ])
 
-        assert topic == "Job Interview"
-        assert sub_option == "Salary negotiation"
+        assert category == "Job Interview"
+        assert topic == "Salary negotiation"
 
 
 # ---------------------------------------------------------------------------
