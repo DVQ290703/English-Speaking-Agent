@@ -21,12 +21,11 @@ GRAMMAR_INSTRUCTION = """\
 RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
 {
   "response_text": "<your conversational reply>",
+  "tagged_input": "<copy the user's latest message exactly, wrapping each grammar error in angle brackets>",
   "grammar_errors": [
     {
-      "original": "<exact substring from user input>",
+      "original": "<error text exactly as it appears inside the angle brackets>",
       "corrected": "<corrected form>",
-      "start_char": <integer, 0-indexed>,
-      "end_char": <integer, exclusive>,
       "category": "<verb_tense|subject_verb_agreement|article|preposition|word_order|spelling|punctuation|other>",
       "severity": "<minor|moderate|major>",
       "explanation": "<one sentence explaining the error>",
@@ -40,9 +39,12 @@ RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
 
 Rules:
 - Assess ONLY the latest user message, not conversation history.
-- If there are no grammar errors, return grammar_errors as [] and overall_score as 100.
-- corrected_sentence is the full user message with all errors fixed.
-- start_char and end_char are character positions in the original user input string.\
+- tagged_input: copy the user's message verbatim, wrapping each error in < > angle brackets.
+  Example — user says "I go to store yesterday" → tagged_input: "I <go> to <store> yesterday"
+- grammar_errors: one entry per < > span in tagged_input, listed in the same order.
+- original must match exactly the text inside the < > brackets.
+- If there are no errors, tagged_input equals the original message unchanged and grammar_errors is [].
+- overall_score: 100 minus (major_count×15 + moderate_count×8 + minor_count×3), minimum 0.\
 """
 
 _CACHE: dict[str, Any] = {
