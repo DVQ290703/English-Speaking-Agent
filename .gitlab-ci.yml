@@ -41,7 +41,7 @@ test-backend:
   stage: test
   tags:
     - AWS-Gitlab-runner
-  image: python:3.10-slim
+  image: python:3.12-slim
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
   before_script:
@@ -151,8 +151,7 @@ build-frontend:
   stage: build
   tags:
     - AWS-Gitlab-runner
-  needs:
-    - job: test-backend
+  needs: []
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
@@ -165,6 +164,7 @@ build-frontend:
       /kaniko/executor \
         --context "${CI_PROJECT_DIR}" \
         --dockerfile "${CI_PROJECT_DIR}/Dockerfile.frontend" \
+        --build-arg VITE_API_BASE_URL="" \
         --destination "${VERSION_TAG}" \
         --destination "${LATEST_TAG}" \
         --insecure \
@@ -233,8 +233,7 @@ deploy-ingress:
   image:
     name: google/cloud-sdk:alpine
     entrypoint: [""]
-  needs:
-    - job: test-backend
+  needs: []
   before_script: *gcp_before_script
   script:
     - kubectl apply -f deployments/ingress.yaml
