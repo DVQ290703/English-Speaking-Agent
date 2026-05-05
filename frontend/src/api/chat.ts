@@ -1,26 +1,49 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+
+export interface ChatRespondParams {
+  token: string;
+  text?: string;
+  audioBlob?: Blob;
+  history?: Array<{ role: string; text: string }>;
+  topic?: string;
+  subOption?: string;
+  voiceGender?: 'Male' | 'Female' | string;
+  conversationId?: string | null;
+}
+
+export interface ChatRespondResult {
+  response_text: string;
+  audio_base64?: string;
+  audio_mime?: string;
+  user_input?: string;
+  user_audio_url?: string | null;
+  assistant_audio_url?: string | null;
+  conversation_id?: string;
+  user_message_id?: string;
+}
 
 export async function chatRespond({
   token,
   text,
   audioBlob,
+  history = [],
   topic = '',
   subOption = '',
   voiceGender = '',
   conversationId = null,
-}) {
+}: ChatRespondParams): Promise<ChatRespondResult> {
   const formData = new FormData();
 
   if (text && text.trim()) {
     formData.append('text', text.trim());
   }
 
-  if (topic && topic.trim()) {
-    formData.append('topic', topic.trim());
+  if (Array.isArray(history) && history.length > 0) {
+    formData.append('history', JSON.stringify(history));
   }
 
-  if (conversationId) {
-    formData.append('conversation_id', conversationId);
+  if (topic && topic.trim()) {
+    formData.append('topic', topic.trim());
   }
 
   if (subOption && subOption.trim()) {
@@ -35,6 +58,10 @@ export async function chatRespond({
     formData.append('audio_file', audioBlob, 'recording.webm');
   }
 
+  if (conversationId) {
+    formData.append('conversation_id', conversationId);
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/chat/respond`, {
     method: 'POST',
     headers: {
@@ -46,17 +73,17 @@ export async function chatRespond({
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || 'Chat request failed');
+    throw new Error((data as { detail?: string }).detail || 'Chat request failed');
   }
 
-  return data;
+  return data as ChatRespondResult;
 }
 
-function writeString(view, offset, str) {
+function writeString(view: DataView, offset: number, str: string): void {
   for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
 }
 
-function encodeWav(samples, sampleRate) {
+function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
   const buffer = new ArrayBuffer(44 + samples.length * 2);
   const view = new DataView(buffer);
   writeString(view, 0, 'RIFF');
@@ -79,7 +106,7 @@ function encodeWav(samples, sampleRate) {
   return buffer;
 }
 
-export async function toWav(blob) {
+export async function toWav(blob: Blob): Promise<Blob> {
   const arrayBuffer = await blob.arrayBuffer();
   const audioCtx = new AudioContext({ sampleRate: 16000 });
   try {
@@ -91,13 +118,57 @@ export async function toWav(blob) {
   }
 }
 
+export interface PhonemeResult {
+  phoneme: string;
+  accuracy_score: number;
+}
+
+export interface SyllableResult {
+  syllable: string;
+  accuracy_score: number;
+}
+
+export interface WordResult {
+  word: string;
+  accuracy_score: number;
+  error_type:
+    | 'None'
+    | 'Omission'
+    | 'Insertion'
+    | 'Mispronunciation'
+    | 'UnexpectedBreak'
+    | 'MissingBreak'
+    | 'Monotone';
+  syllables: SyllableResult[];
+  phonemes: PhonemeResult[];
+}
+
+export interface AssessPronunciationParams {
+  token: string;
+  audioBlob: Blob;
+  referenceText?: string | null;
+  language?: string | null;
+  messageId?: string | null;
+}
+
+export interface AssessPronunciationResult {
+  mode: 'scripted' | 'unscripted';
+  recognized_text: string;
+  pron_score: number;
+  accuracy_score: number;
+  fluency_score: number;
+  completeness_score: number | null;
+  prosody_score: number | null;
+  words: WordResult[];
+}
+
 export async function assessPronunciation({
   token,
   audioBlob,
   referenceText = null,
   language = null,
   messageId = null,
-}) {
+}: AssessPronunciationParams): Promise<AssessPronunciationResult> {
   const wavBlob = await toWav(audioBlob);
   const formData = new FormData();
   formData.append('audio_file', wavBlob, 'recording.wav');
@@ -110,8 +181,8 @@ export async function assessPronunciation({
     formData.append('language', language.trim());
   }
 
-  if (messageId) {
-    formData.append('message_id', messageId);
+  if (messageId && messageId.trim()) {
+    formData.append('message_id', messageId.trim());
   }
 
   const response = await fetch(`${API_BASE_URL}/api/assess`, {
@@ -125,8 +196,8 @@ export async function assessPronunciation({
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.detail || 'Assessment request failed');
+    throw new Error((data as { detail?: string }).detail || 'Assessment request failed');
   }
 
-  return data;
+  return data as AssessPronunciationResult;
 }

@@ -24,7 +24,7 @@ from app.core.ai_services import (
 from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import get_current_user_id
-from app.core.storage import _upload, build_object_key, get_presigned_url, store_user_audio
+from app.core.storage import _upload, build_object_key, store_user_audio
 from app.guardrails.audit.logger import AuditLogger
 from app.guardrails.exceptions import GuardrailException
 from app.guardrails.input import InputGuardrails
@@ -205,8 +205,8 @@ def chat_respond(
                 topic_clean = topic.strip().lower() if topic else ""
                 if topic_clean:
                     cur.execute(
-                        "SELECT id::text, title FROM topics WHERE code = %s LIMIT 1",
-                        (topic_clean,),
+                        "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",
+                        (topic_clean, topic_clean),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:
@@ -399,17 +399,11 @@ def chat_respond(
 
     user_audio_url: str | None = None
     if user_object_key:
-        try:
-            user_audio_url = get_presigned_url(user_object_key)
-        except Exception:
-            logger.exception("Failed to generate presigned URL for user audio message_id=%s", user_message_id)
+        user_audio_url = f"/api/audio/{user_object_key}"
 
     assistant_audio_url: str | None = None
     if assistant_object_key:
-        try:
-            assistant_audio_url = get_presigned_url(assistant_object_key)
-        except Exception:
-            logger.exception("Failed to generate presigned URL for assistant audio message_id=%s", assistant_message_id)
+        assistant_audio_url = f"/api/audio/{assistant_object_key}"
 
     inline_audio = ""
     if response_audio_bytes and len(response_audio_bytes) <= _INLINE_AUDIO_LIMIT_BYTES:

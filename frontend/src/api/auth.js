@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export async function loginRequest({ email, password }) {
   const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -18,13 +18,13 @@ export async function loginRequest({ email, password }) {
   return data;
 }
 
-export async function registerRequest({ name, email, password }) {
+export async function registerRequest({ display_name, email, password }) {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ display_name, email, password }),
   });
 
   const data = await response.json();

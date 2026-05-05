@@ -31,7 +31,7 @@ export default function SelectDropdown<T extends string>({
     <div ref={ref} className={`relative ${className}`}>
       <button
         data-testid={`select-${value}`}
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1 px-2 py-1 rounded text-xs text-gray-700 hover:bg-gray-100 transition-colors border border-gray-200 bg-white"
       >
         <span>{value}</span>
@@ -39,7 +39,7 @@ export default function SelectDropdown<T extends string>({
       </button>
       {open && (
         <div className="absolute top-full mt-1 right-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg min-w-40 overflow-hidden">
-          {options.map(opt => (
+          {options.map((opt) => (
             <button
               key={opt}
               data-testid={`option-${opt}`}
