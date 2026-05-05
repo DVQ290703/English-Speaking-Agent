@@ -939,223 +939,224 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       {/* Body row: persistent sidebar + main content */}
       <div className="flex flex-1 overflow-hidden relative">
+        {/* ChatGPT-style persistent sidebar */}
+        <ConversationSidebar
+          open={showSidebar}
+          onClose={() => setShowSidebar(false)}
+          token={getAuthSession()?.token ?? null}
+          topicCategories={topicCategories}
+          conversations={conversations}
+          loading={convsLoading || topicsLoading}
+          activeConversationId={conversationIdRef.current}
+          currentTopicCode={topic}
+          onSelectTopic={handleTopicSelect}
+          onSelectConversation={(id, topicCode) => {
+            if (isConnected) persistSession();
+            setShowSidebar(false);
+            loadConversationInPlace(id, topicCode ?? null);
+          }}
+          onNewChat={(topicCode) => {
+            if (isConnected) persistSession();
+            hasAutoLoadedRef.current = true;
+            setTopic(topicCode);
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.set('topic', topicCode);
+              url.searchParams.delete('session');
+              window.history.replaceState({}, '', url.toString());
+            } catch {
+              /* ignore */
+            }
+            startNewSession({ stayDisconnected: true });
+            setConvsRefreshKey((k) => k + 1);
+          }}
+          onConversationDeleted={(id) => {
+            setConversations((prev) => prev.filter((c) => c.id !== id));
+          }}
+          onToggleSidebar={() => setShowSidebar((v) => !v)}
+        />
 
-      {/* ChatGPT-style persistent sidebar */}
-      <ConversationSidebar
-        open={showSidebar}
-        onClose={() => setShowSidebar(false)}
-        token={getAuthSession()?.token ?? null}
-        topicCategories={topicCategories}
-        conversations={conversations}
-        loading={convsLoading || topicsLoading}
-        activeConversationId={conversationIdRef.current}
-        currentTopicCode={topic}
-        onSelectTopic={handleTopicSelect}
-        onSelectConversation={(id, topicCode) => {
-          if (isConnected) persistSession();
-          setShowSidebar(false);
-          loadConversationInPlace(id, topicCode ?? null);
-        }}
-        onNewChat={(topicCode) => {
-          if (isConnected) persistSession();
-          hasAutoLoadedRef.current = true;
-          setTopic(topicCode);
-          try {
-            const url = new URL(window.location.href);
-            url.searchParams.set('topic', topicCode);
-            url.searchParams.delete('session');
-            window.history.replaceState({}, '', url.toString());
-          } catch {
-            /* ignore */
-          }
-          startNewSession({ stayDisconnected: true });
-          setConvsRefreshKey((k) => k + 1);
-        }}
-        onConversationDeleted={(id) => {
-          setConversations((prev) => prev.filter((c) => c.id !== id));
-        }}
-        onToggleSidebar={() => setShowSidebar((v) => !v)}
-      />
-
-      {/* Main content */}
-      <div data-va="content" className="flex flex-1 overflow-hidden relative">
-        {/* Left panel: Audio & Video — drawer on mobile, persistent on md+ */}
-        {showLeftPanelMobile && (
+        {/* Main content */}
+        <div data-va="content" className="flex flex-1 overflow-hidden relative">
+          {/* Left panel: Audio & Video — drawer on mobile, persistent on md+ */}
+          {showLeftPanelMobile && (
+            <div
+              className="md:hidden fixed inset-0 z-7000 bg-black/40"
+              onClick={() => setShowLeftPanelMobile(false)}
+            />
+          )}
           <div
-            className="md:hidden fixed inset-0 z-7000 bg-black/40"
-            onClick={() => setShowLeftPanelMobile(false)}
-          />
-        )}
-        <div
-          data-va="left"
-          className={`${
-            showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-          } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
-        >
-          <LeftAudioPanel
-            gender={gender}
-            onChangeGender={setGender}
-            agentSpeaking={agentSpeaking}
-            isConnected={isConnected}
-            isConnecting={isConnecting}
-            micDevices={micDevices}
-            selectedMicId={selectedMicId}
-            onSelectMic={setSelectedMicId}
-            isRecording={isRecording}
-            micEnabled={micEnabled}
-            isSpeaking={isSpeaking}
-            currentUser={currentUser}
-          />
-
-          <AiFeedbackPanel
-            displayMsg={displayMsg}
-            selectedMsg={selectedMsg}
-            isAutoLatest={isAutoLatest}
-            isConnected={isConnected}
-            onShowLatest={() => setExpandedMsgId(null)}
-            onPlayAudio={(id) => void playMessageAudio(id)}
-          />
-
-          <div className="h-3" />
-        </div>
-
-        {/* Right panel: Conversation transcript */}
-        <div className="flex-1 flex flex-col">
-          {/* Panel top bar */}
-          <div
-            data-va="conv-header"
-            className="flex items-center justify-between px-4 py-2 border-b border-gray-200"
+            data-va="left"
+            className={`${
+              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-semibold text-gray-700">{t('va.conv.title')}</span>
-              {isConnected && (
+            <LeftAudioPanel
+              gender={gender}
+              onChangeGender={setGender}
+              agentSpeaking={agentSpeaking}
+              isConnected={isConnected}
+              isConnecting={isConnecting}
+              micDevices={micDevices}
+              selectedMicId={selectedMicId}
+              onSelectMic={setSelectedMicId}
+              isRecording={isRecording}
+              micEnabled={micEnabled}
+              isSpeaking={isSpeaking}
+              currentUser={currentUser}
+            />
+
+            <AiFeedbackPanel
+              displayMsg={displayMsg}
+              selectedMsg={selectedMsg}
+              isAutoLatest={isAutoLatest}
+              isConnected={isConnected}
+              onShowLatest={() => setExpandedMsgId(null)}
+              onPlayAudio={(id) => void playMessageAudio(id)}
+            />
+
+            <div className="h-3" />
+          </div>
+
+          {/* Right panel: Conversation transcript */}
+          <div className="flex-1 flex flex-col">
+            {/* Panel top bar */}
+            <div
+              data-va="conv-header"
+              className="flex items-center justify-between px-4 py-2 border-b border-gray-200"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-gray-700">{t('va.conv.title')}</span>
+                {isConnected && (
+                  <div className="flex items-center gap-1.5">
+                    <Circle
+                      className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? 'text-blue-600' : 'text-green-400'}`}
+                    />
+                    <span className="text-[10px] text-gray-600">
+                      {agentSpeaking ? t('va.conv.agentSpeaking') : t('va.conv.listening')}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <Circle
-                    className={`w-1.5 h-1.5 fill-current ${agentSpeaking ? 'text-blue-600' : 'text-green-400'}`}
-                  />
-                  <span className="text-[10px] text-gray-600">
-                    {agentSpeaking ? t('va.conv.agentSpeaking') : t('va.conv.listening')}
-                  </span>
+                  <SiOpenai className="w-4 h-4 text-gray-500" />
+                  <SelectDropdown value={model} options={MODELS} onChange={setModel} />
+                </div>
+                <SelectDropdown value={language} options={LANGUAGES} onChange={setLanguage} />
+              </div>
+            </div>
+
+            {/* Messages area */}
+            <div
+              data-va="messages"
+              className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
+            >
+              {/* Soft loading spinner while fetching existing conversation history */}
+              {historyLoading && (
+                <div className="h-full flex flex-col items-center justify-center gap-3">
+                  <div className="w-10 h-10 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin" />
+                  <p className="text-gray-400 dark:text-slate-500 text-xs">
+                    {t('va.history.loading')}
+                  </p>
                 </div>
               )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <SiOpenai className="w-4 h-4 text-gray-500" />
-                <SelectDropdown value={model} options={MODELS} onChange={setModel} />
-              </div>
-              <SelectDropdown value={language} options={LANGUAGES} onChange={setLanguage} />
-            </div>
-          </div>
 
-          {/* Messages area */}
-          <div
-            data-va="messages"
-            className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
-          >
-            {/* Soft loading spinner while fetching existing conversation history */}
-            {historyLoading && (
-              <div className="h-full flex flex-col items-center justify-center gap-3">
-                <div className="w-10 h-10 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin" />
-                <p className="text-gray-400 dark:text-slate-500 text-xs">{t('va.history.loading')}</p>
-              </div>
-            )}
-
-            {!historyLoading && status === 'disconnected' && messages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
-                  <SiOpenai className="w-8 h-8 text-blue-400/50" />
+              {!historyLoading && status === 'disconnected' && messages.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
+                    <SiOpenai className="w-8 h-8 text-blue-400/50" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-gray-600 text-sm">
+                      {t('va.empty.clickConnectPrefix')}{' '}
+                      <span className="font-semibold text-gray-900">{t('va.connect.connect')}</span>{' '}
+                      {t('va.empty.clickConnectSuffix')}
+                    </p>
+                    <p className="text-gray-400 text-xs">{t('va.empty.transcriptHere')}</p>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-gray-600 text-sm">
-                    {t('va.empty.clickConnectPrefix')}{' '}
-                    <span className="font-semibold text-gray-900">{t('va.connect.connect')}</span>{' '}
-                    {t('va.empty.clickConnectSuffix')}
-                  </p>
-                  <p className="text-gray-400 text-xs">{t('va.empty.transcriptHere')}</p>
-                </div>
-              </div>
-            )}
+              )}
 
-            {showSessionSummary && sessionSummary && (
-              <SessionSummaryModal
-                summary={sessionSummary}
-                onDismiss={() => setSummaryDismissed(true)}
-                onViewDashboard={() => {
-                  persistSession();
-                  navigate('/dashboard', {
-                    state: { highlightSessionId: sessionIdRef.current },
-                  });
-                }}
-                onNewSession={() => {
-                  setSummaryDismissed(true);
-                  startNewSession();
-                }}
-              />
-            )}
-
-            {status === 'connecting' && (
-              <div className="h-full flex flex-col items-center justify-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-100 border border-blue-300 flex items-center justify-center animate-pulse">
-                  <SiOpenai className="w-6 h-6 text-blue-400" />
-                </div>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-blue-500"
-                      style={{
-                        animation: `dotPulse 1s ease-in-out ${i * 200}ms infinite`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <p className="text-blue-600/70 text-xs">{t('va.connecting.note')}</p>
-              </div>
-            )}
-
-            {messages.map((msg) => {
-              const isUser = msg.role === 'user';
-              const canReplay = msg.role === 'agent' || Boolean(msg.userAudioUrl);
-              const expandable = isUser && !msg.typing;
-              const replay = canReplay ? () => void playMessageAudio(msg.id) : undefined;
-
-              return (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  onReplay={replay}
-                  expandable={expandable}
-                  expanded={expandedMsgId === msg.id}
-                  onToggleExpanded={
-                    expandable
-                      ? () => setExpandedMsgId((prev) => (prev === msg.id ? null : msg.id))
-                      : undefined
-                  }
+              {showSessionSummary && sessionSummary && (
+                <SessionSummaryModal
+                  summary={sessionSummary}
+                  onDismiss={() => setSummaryDismissed(true)}
+                  onViewDashboard={() => {
+                    persistSession();
+                    navigate('/dashboard', {
+                      state: { highlightSessionId: sessionIdRef.current },
+                    });
+                  }}
+                  onNewSession={() => {
+                    setSummaryDismissed(true);
+                    startNewSession();
+                  }}
                 />
-              );
-            })}
+              )}
 
-            <div ref={chatBottomRef} />
+              {status === 'connecting' && (
+                <div className="h-full flex flex-col items-center justify-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-100 border border-blue-300 flex items-center justify-center animate-pulse">
+                    <SiOpenai className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-blue-500"
+                        style={{
+                          animation: `dotPulse 1s ease-in-out ${i * 200}ms infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-blue-600/70 text-xs">{t('va.connecting.note')}</p>
+                </div>
+              )}
+
+              {messages.map((msg) => {
+                const isUser = msg.role === 'user';
+                const canReplay = msg.role === 'agent' || Boolean(msg.userAudioUrl);
+                const expandable = isUser && !msg.typing;
+                const replay = canReplay ? () => void playMessageAudio(msg.id) : undefined;
+
+                return (
+                  <MessageBubble
+                    key={msg.id}
+                    message={msg}
+                    onReplay={replay}
+                    expandable={expandable}
+                    expanded={expandedMsgId === msg.id}
+                    onToggleExpanded={
+                      expandable
+                        ? () => setExpandedMsgId((prev) => (prev === msg.id ? null : msg.id))
+                        : undefined
+                    }
+                  />
+                );
+              })}
+
+              <div ref={chatBottomRef} />
+            </div>
+
+            <ChatInputBar
+              inputRef={inputRef}
+              isConnected={isConnected}
+              isRecording={isRecording}
+              isSpeaking={isSpeaking}
+              micEnabled={micEnabled}
+              agentTyping={agentTyping}
+              chatInput={chatInput}
+              onToggleMic={toggleMic}
+              onChangeInput={setChatInput}
+              onKeyDown={handleKeyDown}
+              onSend={handleSendChat}
+            />
           </div>
-
-          <ChatInputBar
-            inputRef={inputRef}
-            isConnected={isConnected}
-            isRecording={isRecording}
-            isSpeaking={isSpeaking}
-            micEnabled={micEnabled}
-            agentTyping={agentTyping}
-            chatInput={chatInput}
-            onToggleMic={toggleMic}
-            onChangeInput={setChatInput}
-            onKeyDown={handleKeyDown}
-            onSend={handleSendChat}
-          />
         </div>
       </div>
-
-      </div>{/* end body row */}
+      {/* end body row */}
 
       {showHistory && (
         <HistorySidebar

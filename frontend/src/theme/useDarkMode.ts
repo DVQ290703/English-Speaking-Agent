@@ -28,22 +28,20 @@ function readInitial(): boolean {
         }
       }
     }
-    
+
     let isDark = false;
     if (stored === 'dark') isDark = true;
     else if (stored === 'light') isDark = false;
     else {
-      isDark = (
+      isDark =
         typeof window !== 'undefined' &&
         !!window.matchMedia &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches
-      );
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
-    
+
     // Áp dụng luôn theme ngay khi đọc lần đầu
     applyThemeToDocument(isDark);
     return isDark;
-    
   } catch {
     return false;
   }

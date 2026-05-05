@@ -210,7 +210,12 @@ function CategoryTabsRow({ categories, onStart }) {
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
       >
         {active.topics.map((t) => (
-          <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key, active.name)} />
+          <TopicCard
+            key={t.key}
+            topic={t}
+            accent={active.accent}
+            onStart={() => onStart(t.key, active.name)}
+          />
         ))}
       </div>
     </div>
