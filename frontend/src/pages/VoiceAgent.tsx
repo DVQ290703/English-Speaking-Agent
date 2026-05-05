@@ -28,7 +28,7 @@ import {
   SettingsPanel,
   VoiceAgentHeader,
 } from '../components/voice-agent';
-import type { Message, SessionSummary } from '../components/voice-agent';
+import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
 import {
   LANGUAGES,
   MODELS,
@@ -609,16 +609,41 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     if (!session?.token) return;
 
     function dbMsgToFrontend(m: MessageWithScoreOut, idx: number): Message {
+      const isAgent = m.role === 'assistant';
+      const mistakes: Mistake[] | undefined = m.score?.words.length
+        ? m.score.words.flatMap((w) => {
+            const err = w.error_type;
+            const acc = Math.round(w.accuracy_score ?? 0);
+            const phonemes = (w.phonemes ?? []).map((p) => ({
+              phoneme: p.phoneme,
+              accuracy_score: Math.round(p.accuracy_score ?? 0),
+            }));
+            const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+            const phonemeNote = lowPhonemes.length > 0
+              ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+              : '';
+            if (err && err !== 'None') {
+              const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+              return [{ wrong: w.word, correct: w.word, type: type as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+            }
+            if (acc < 90 || lowPhonemes.length > 0) {
+              return [{ wrong: w.word, correct: w.word, type: 'Pronunciation' as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+            }
+            return [];
+          })
+        : undefined;
       return {
         id: idx + 1,
-        role: m.role === 'assistant' ? 'agent' : 'user',
+        role: isAgent ? 'agent' : 'user',
         text: m.text_content ?? '',
         timestamp: new Date(m.created_at),
+        userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
+        minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
         assessmentStatus: m.score ? 'available' : 'unavailable',
         scoreDetails: m.score
           ? {
               overall: Math.round(m.score.overall_score ?? 0),
-              pronunciation: Math.round(m.score.accuracy_score ?? 0),
+              pronunciation: Math.round(m.score.overall_score ?? 0),
               fluency: Math.round(m.score.fluency_score ?? 0),
               accuracy: Math.round(m.score.accuracy_score ?? 0),
               completeness:
@@ -627,6 +652,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                   : undefined,
             }
           : undefined,
+        mistakes,
       };
     }
 
@@ -683,16 +709,42 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
     fetchMessagesWithScores(authSession.token, convId)
       .then((dbMessages) => {
-        const loaded = dbMessages.map((m, idx): Message => ({
+        const loaded = dbMessages.map((m, idx): Message => {
+          const isAgent = m.role === 'assistant';
+          const mistakes: Mistake[] | undefined = m.score?.words.length
+            ? m.score.words.flatMap((w) => {
+                const err = w.error_type;
+                const acc = Math.round(w.accuracy_score ?? 0);
+                const phonemes = (w.phonemes ?? []).map((p) => ({
+                  phoneme: p.phoneme,
+                  accuracy_score: Math.round(p.accuracy_score ?? 0),
+                }));
+                const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+                const phonemeNote = lowPhonemes.length > 0
+                  ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+                  : '';
+                if (err && err !== 'None') {
+                  const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+                  return [{ wrong: w.word, correct: w.word, type: type as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+                }
+                if (acc < 90 || lowPhonemes.length > 0) {
+                  return [{ wrong: w.word, correct: w.word, type: 'Pronunciation' as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+                }
+                return [];
+              })
+            : undefined;
+          return {
           id: idx + 1,
-          role: m.role === 'assistant' ? 'agent' : 'user',
+          role: isAgent ? 'agent' : 'user',
           text: m.text_content ?? '',
           timestamp: new Date(m.created_at),
+          userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
+          minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
           assessmentStatus: m.score ? 'available' : 'unavailable',
           scoreDetails: m.score
             ? {
                 overall: Math.round(m.score.overall_score ?? 0),
-                pronunciation: Math.round(m.score.accuracy_score ?? 0),
+                pronunciation: Math.round(m.score.overall_score ?? 0),
                 fluency: Math.round(m.score.fluency_score ?? 0),
                 accuracy: Math.round(m.score.accuracy_score ?? 0),
                 completeness:
@@ -701,7 +753,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     : undefined,
               }
             : undefined,
-        }));
+          mistakes,
+          };
+        });
         if (loaded.length > 0) {
           msgCounterRef.current = loaded.length + 101;
           setMessages(loaded);
