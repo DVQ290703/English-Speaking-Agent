@@ -185,6 +185,8 @@ def get_conversation_stats(user_id: str = Depends(get_current_user_id)):
                 LEFT JOIN messages m ON m.conversation_id = c.id
                 LEFT JOIN pronunciation_assessments pa ON pa.message_id = m.id
                 WHERE c.user_id = %s
+                  AND c.deleted_at IS NULL
+                  AND c.topic_id IS NOT NULL
                 GROUP BY c.id, t.title, t.code, c.started_at, c.ended_at
                 ORDER BY c.started_at DESC
                 LIMIT 200

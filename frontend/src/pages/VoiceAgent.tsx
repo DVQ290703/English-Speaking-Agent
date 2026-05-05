@@ -215,9 +215,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // Prevents the "auto-load latest conversation" effect from re-firing after the
   // initial load (e.g. after New Chat or after the first navigation has happened).
   const hasAutoLoadedRef = useRef(false);
-  // Set to true inside handleConnect when the session is brand-new (no prior
-  // conversations for the topic) so the post-connect effect sends a greeting.
-  const shouldGreetRef = useRef(false);
   const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
@@ -356,7 +353,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return () => window.removeEventListener('unhandledrejection', handler);
   }, []);
 
-  const { sendChatMessage, sendGreeting } = useSendChatMessage({
+  const { sendChatMessage } = useSendChatMessage({
     messages,
     topic,
     subOption,
@@ -502,8 +499,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           toast.error(t('va.sidebar.limitReached'));
           return;
         }
-        // Brand-new topic session → queue a greeting once connected
-        shouldGreetRef.current = true;
+        // Auto-enable mic for a brand-new session so Connect immediately
+        // opens the microphone (user intent persisted via the ref).
+        userMicIntentRef.current = true;
+        setMicEnabled(true);
       }
       setSummaryDismissed(true);
       clearTimers();
@@ -533,16 +532,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     t,
     topic,
     ttsActiveRef,
+    setMicEnabled,
   ]);
-
-  // When we transition to "connected" and a greeting was queued (brand-new
-  // topic session with no prior conversations), send the AI opening message.
-  useEffect(() => {
-    if (status !== 'connected') return;
-    if (!shouldGreetRef.current) return;
-    shouldGreetRef.current = false;
-    void sendGreeting();
-  }, [status, sendGreeting]);
 
   // Validate the initial topic code against the loaded DB topics. If the code
   // from the URL/sessionStorage doesn't match any active topic, clear it so
@@ -702,6 +693,19 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting';
+
+  // Auto-enable microphone when we transition to 'connected'.
+  useEffect(() => {
+    if (status !== 'connected') return;
+    // Mark that the user (or system) intends the mic to be on so other
+    // components (e.g. agent audio restoring behavior) can respect it.
+    userMicIntentRef.current = true;
+    try {
+      setMicEnabled(true);
+    } catch {
+      /* ignore */
+    }
+  }, [status, setMicEnabled]);
 
   // Load a DB conversation in-place (no full page reload): reset all local
   // state, restore conversationIdRef, update the URL, then fetch messages.
