@@ -210,7 +210,7 @@ function CategoryTabsRow({ categories, onStart }) {
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
       >
         {active.topics.map((t) => (
-          <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key)} />
+          <TopicCard key={t.key} topic={t} accent={active.accent} onStart={() => onStart(t.key, active.name)} />
         ))}
       </div>
     </div>
@@ -703,10 +703,13 @@ export default function DashboardPage() {
     navigate('/', { replace: true });
   };
 
-  const startSession = (topicKey) => {
-    // Navigate to VoiceAgent with the topic code. VoiceAgent will automatically
-    // load the most recent DB conversation for this topic (if any exists).
-    navigate(`/VoiceAgent?topic=${encodeURIComponent(topicKey)}`);
+  const startSession = (topicKey, categoryName) => {
+    // Navigate to VoiceAgent with the topic and category codes. VoiceAgent will
+    // automatically load the most recent DB conversation for this topic (if any exists).
+    const params = new URLSearchParams();
+    if (categoryName) params.set('categories', categoryName);
+    params.set('topic', topicKey);
+    navigate(`/VoiceAgent?${params.toString()}`);
   };
 
   const handleChartStart = useCallback(() => {
@@ -888,7 +891,7 @@ export default function DashboardPage() {
           <div className="mb-10">
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-slate-100">
               {t('dash.greeting', {
-                name: displayName.split(' ').slice(-1)[0],
+                name: displayName,
               })}
             </h1>
             <p className="text-base text-gray-500 dark:text-slate-400 mt-2">{t('dash.subtitle')}</p>
