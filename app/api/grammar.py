@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.auth import get_current_user_id
+from app.core.security import get_current_user_id
 from app.api.schemas import GrammarDetailResponse, GrammarErrorDetail
 from app.core.database import get_connection
 from app.core.logger import logger
