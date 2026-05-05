@@ -193,6 +193,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [convsLoading, setConvsLoading] = useState(false);
+  // True while fetching message history for an existing conversation (soft load,
+  // no full page reload). Drives the inline spinner inside the messages area.
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [convsRefreshKey, setConvsRefreshKey] = useState(0);
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -569,29 +572,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey]);
 
-  // When the page loads with a ?topic= but no ?session= (e.g. navigating from
-  // the dashboard), automatically open the most recent DB conversation for that
-  // topic so the user lands directly in context. Fires only once per mount.
-  useEffect(() => {
-    if (hasAutoLoadedRef.current) return;
-    if (conversationIdRef.current) return; // already in a DB session
-    if (!topic) return;
-    if (conversations.length === 0) return; // wait for conversations to load
-
-    hasAutoLoadedRef.current = true;
-
-    const latest = conversations
-      .filter((c) => c.topic_code === topic)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
-
-    if (latest) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('session', latest.id);
-      url.searchParams.set('topic', topic);
-      window.location.assign(url.toString());
-    }
-  }, [conversations, topic]);
-
   // If a DB conversation_id was supplied via ?session=<uuid>, load its messages
   // from the backend on mount. The conversation is set to read-only view
   // (disconnected) so the user can review then start a new session.
@@ -733,6 +713,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         /* ignore */
       }
 
+      setHistoryLoading(true);
       fetchMessagesWithScores(authSession.token, convId)
         .then((dbMessages) => {
           const loaded = dbMessages.map((m, idx): Message => {
@@ -806,10 +787,32 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         })
         .catch(() => {
           /* silently ignore — user can still start fresh */
-        });
+        })
+        .finally(() => setHistoryLoading(false));
     },
     [startNewSession, setTopic, setMessages],
   );
+
+  // When the page loads with a ?topic= but no ?session= (e.g. navigating from
+  // the dashboard), automatically open the most recent DB conversation for that
+  // topic so the user lands directly in context. Fires only once per mount.
+  useEffect(() => {
+    if (hasAutoLoadedRef.current) return;
+    if (conversationIdRef.current) return; // already in a DB session
+    if (!topic) return;
+    if (conversations.length === 0) return; // wait for conversations to load
+
+    hasAutoLoadedRef.current = true;
+
+    const latest = conversations
+      .filter((c) => c.topic_code === topic)
+      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+
+    if (latest) {
+      // Use in-place loading to avoid a full page reload (SPA navigation).
+      loadConversationInPlace(latest.id, topic);
+    }
+  }, [conversations, topic, loadConversationInPlace]);
 
   const handleTopicSelect = useCallback(
     (code: string) => {
@@ -1050,7 +1053,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             data-va="messages"
             className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
           >
-            {status === 'disconnected' && messages.length === 0 && (
+            {/* Soft loading spinner while fetching existing conversation history */}
+            {historyLoading && (
+              <div className="h-full flex flex-col items-center justify-center gap-3">
+                <div className="w-10 h-10 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin" />
+                <p className="text-gray-400 dark:text-slate-500 text-xs">{t('va.history.loading')}</p>
+              </div>
+            )}
+
+            {!historyLoading && status === 'disconnected' && messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
                   <SiOpenai className="w-8 h-8 text-blue-400/50" />
@@ -1152,10 +1163,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onClose={() => setShowHistory(false)}
           token={getAuthSession()?.token ?? null}
           onSelectSession={(id) => {
-            const url = new URL(window.location.href);
-            url.searchParams.set('session', id);
-            url.searchParams.delete('topic');
-            window.location.assign(url.toString());
+            setShowHistory(false);
+            const topicCode = conversations.find((c) => c.id === id)?.topic_code ?? null;
+            loadConversationInPlace(id, topicCode);
           }}
         />
       )}
