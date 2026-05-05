@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json as _json
 import time as _time
 import uuid as _uuid
 
@@ -13,7 +14,8 @@ from app.api._audio import (
     _validate_uploaded_audio,
 )
 from app.api._validators import _enforce_max_length, _validate_uuid
-from app.api.schemas import ChatResponse
+from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan
+from app.services.grammar_parser import parse_grammar_response
 from app.core.ai_services import (
     _synthesize_audio_bytes,
     run_langraph_agent,
@@ -287,11 +289,12 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_json = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
     )
+    _, grammar_data = parse_grammar_response(grammar_json, user_input)
 
     # ── Guardrails: Output ─────────────────────────────────────────────────
     output_result = _output_guardrails.check(response_text)
@@ -365,6 +368,23 @@ def chat_respond(
                     size_bytes=len(response_audio_bytes),
                 )
 
+            # Save grammar feedback (only when LLM returned valid JSON)
+            if grammar_json is not None:
+                cur.execute(
+                    """
+                    INSERT INTO grammar_feedback
+                        (message_id, user_input, errors, corrected_sentence, overall_score)
+                    VALUES (%s, %s, %s::jsonb, %s, %s)
+                    """,
+                    (
+                        user_message_id,
+                        user_input,
+                        _json.dumps([e.__dict__ for e in grammar_data.errors]),
+                        grammar_data.corrected_sentence,
+                        grammar_data.overall_score,
+                    ),
+                )
+
     # ── Audit Logging ──────────────────────────────────────────────────────
     _audit_logger.log(
         user_id=user_id,
@@ -410,6 +430,20 @@ def chat_respond(
         "yes" if assistant_audio_url else "no",
     )
 
+    grammar_summary = GrammarSummary(
+        error_count=len(grammar_data.errors),
+        has_errors=len(grammar_data.errors) > 0,
+        flagged_spans=[
+            GrammarSpan(
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+            )
+            for e in grammar_data.errors
+        ],
+    )
+
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
@@ -419,4 +453,5 @@ def chat_respond(
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
         user_message_id=user_message_id,
+        grammar_summary=grammar_summary,
     )
