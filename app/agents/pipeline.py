@@ -15,18 +15,18 @@ class VoiceAgentPipeline:
         self.app = self._build_graph()
 
     def _respond_node(self, state: AgentState) -> AgentState:
-        """Generate the assistant response and update the running conversation history."""
+        """Generate the assistant response with grammar analysis."""
         logger.debug("respond_node start input_length=%d", len(state["user_input"]))
-        response_text = self.llm_service.generate_response(
+        response_text, grammar_json = self.llm_service.generate_response_with_grammar(
             user_input=state["user_input"],
             history=state.get("history", []),
         )
-        logger.debug("respond_node done response_length=%d", len(response_text))
+        logger.debug("respond_node done response_length=%d grammar_present=%s", len(response_text), grammar_json is not None)
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
             f"Assistant: {response_text}",
         ]
-        return {**state, "response_text": response_text, "history": history}
+        return {**state, "response_text": response_text, "history": history, "grammar_json": grammar_json}
 
     def _tts_node(self, state: AgentState) -> AgentState:
         """Convert the generated reply into speech and store the raw bytes in state."""
@@ -60,5 +60,6 @@ class VoiceAgentPipeline:
             "audio_bytes": b"",
             "history": history or [],
             "voice_gender": voice_gender,
+            "grammar_json": None,
         }
         return self.app.invoke(initial_state)

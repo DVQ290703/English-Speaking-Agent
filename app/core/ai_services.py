@@ -120,8 +120,8 @@ def run_langraph_agent(
     user_input: str,
     history: list[str] | None = None,
     voice_gender: str | None = None,
-) -> tuple[str, bytes]:
-    """Run the conversation pipeline and return (response_text, audio_bytes)."""
+) -> tuple[str, bytes, str | None]:
+    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_json)."""
     history = history or []
     logger.info("run_langraph_agent start user_input_length=%d history_lines=%d", len(user_input), len(history))
     try:
@@ -129,18 +129,20 @@ def run_langraph_agent(
         result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender)
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
+        grammar_json: str | None = result.get("grammar_json")
 
         logger.info(
-            "Pipeline run complete response_text_length=%d audio_bytes=%d",
+            "Pipeline run complete response_text_length=%d audio_bytes=%d grammar_present=%s",
             len(response_text),
             len(audio_bytes),
+            grammar_json is not None,
         )
 
         if response_text:
             if not audio_bytes:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender)
-            return response_text, audio_bytes
+            return response_text, audio_bytes, grammar_json
 
         logger.warning("Pipeline returned empty response_text - using fallback")
     except Exception:
@@ -148,4 +150,4 @@ def run_langraph_agent(
 
     fallback_text = "Sorry, I couldn't process your request right now."
     logger.info("Returning fallback response")
-    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender)
+    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender), None
