@@ -65,7 +65,15 @@ export function getInitialSessionState(): InitialSessionState {
         topic = raw;
         subOption = DASHBOARD_TO_SUB_OPTION[raw] ?? null;
       }
-      return { messages: [], sessionId: null, conversationId: null, topic, customTopicLabel: null, subOption, nextMsgId: 101 };
+      return {
+        messages: [],
+        sessionId: null,
+        conversationId: null,
+        topic,
+        customTopicLabel: null,
+        subOption,
+        nextMsgId: 101,
+      };
     }
   } catch {
     /* ignore */

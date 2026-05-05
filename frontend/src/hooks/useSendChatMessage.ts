@@ -410,9 +410,7 @@ export default function useSendChatMessage({
 
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === typingId
-            ? { ...m, text: responseText, typing: false, audioUrl: playedUrl }
-            : m,
+          m.id === typingId ? { ...m, text: responseText, typing: false, audioUrl: playedUrl } : m,
         ),
       );
     } catch {

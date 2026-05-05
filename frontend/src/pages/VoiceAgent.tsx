@@ -92,10 +92,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const { categories: topicCategories } = useTopics();
 
   // Flat list of all DB topics — derived from loaded categories
-  const allDbTopics = useMemo(
-    () => topicCategories.flatMap((c) => c.topics),
-    [topicCategories],
-  );
+  const allDbTopics = useMemo(() => topicCategories.flatMap((c) => c.topics), [topicCategories]);
 
   const [topic, setTopic] = useState<string | null>(initialState.topic);
   const [customTopicLabel, setCustomTopicLabel] = useState<string | null>(
@@ -440,41 +437,44 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     hasSavedCurrentSessionRef,
   });
 
-  const startNewSession = useCallback((opts: { stayDisconnected?: boolean } = {}) => {
-    window.speechSynthesis?.cancel();
-    ttsActiveRef.current = false;
-    // Allow the new session to be persisted when the time comes.
-    hasSavedCurrentSessionRef.current = false;
-    // Cancel any in-flight connect timers from a previous startNewSession /
-    // handleConnect call so they can't fire after we've moved on.
-    clearTimers();
-    const myVersion = ++sessionVersionRef.current;
-    setMessages([]);
-    setExpandedMsgId(null);
-    setSummaryDismissed(false);
-    clearLocalAudioUrls();
-    setFeedbacks([]);
-    sessionStartRef.current = Date.now();
-    sessionIdRef.current = null;
-    conversationIdRef.current = null;
+  const startNewSession = useCallback(
+    (opts: { stayDisconnected?: boolean } = {}) => {
+      window.speechSynthesis?.cancel();
+      ttsActiveRef.current = false;
+      // Allow the new session to be persisted when the time comes.
+      hasSavedCurrentSessionRef.current = false;
+      // Cancel any in-flight connect timers from a previous startNewSession /
+      // handleConnect call so they can't fire after we've moved on.
+      clearTimers();
+      const myVersion = ++sessionVersionRef.current;
+      setMessages([]);
+      setExpandedMsgId(null);
+      setSummaryDismissed(false);
+      clearLocalAudioUrls();
+      setFeedbacks([]);
+      sessionStartRef.current = Date.now();
+      sessionIdRef.current = null;
+      conversationIdRef.current = null;
 
-    if (opts.stayDisconnected) {
-      setStatusSync('disconnected');
-      return;
-    }
+      if (opts.stayDisconnected) {
+        setStatusSync('disconnected');
+        return;
+      }
 
-    setStatusSync('connecting');
+      setStatusSync('connecting');
 
-    const t0 = setTimeout(() => {
-      // Bail out if a newer session/connect has superseded this one.
-      if (sessionVersionRef.current !== myVersion) return;
-      setStatusSync('connected');
-      setAgentTyping(false);
-      setAgentSpeaking(false);
-    }, 600);
+      const t0 = setTimeout(() => {
+        // Bail out if a newer session/connect has superseded this one.
+        if (sessionVersionRef.current !== myVersion) return;
+        setStatusSync('connected');
+        setAgentTyping(false);
+        setAgentSpeaking(false);
+      }, 600);
 
-    timersRef.current.push(t0);
-  }, [clearTimers, clearLocalAudioUrls, setStatusSync, ttsActiveRef]);
+      timersRef.current.push(t0);
+    },
+    [clearTimers, clearLocalAudioUrls, setStatusSync, ttsActiveRef],
+  );
 
   const handleConnect = useCallback(() => {
     // Read status from a ref so rapid clicks within a single event-loop
@@ -531,7 +531,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
       timersRef.current.push(t0);
     }
-  }, [clearTimers, conversations, persistSession, setConvsRefreshKey, setStatusSync, t, topic, ttsActiveRef]);
+  }, [
+    clearTimers,
+    conversations,
+    persistSession,
+    setConvsRefreshKey,
+    setStatusSync,
+    t,
+    topic,
+    ttsActiveRef,
+  ]);
 
   // When we transition to "connected" and a greeting was queued (brand-new
   // topic session with no prior conversations), send the AI opening message.
@@ -619,15 +628,32 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               accuracy_score: Math.round(p.accuracy_score ?? 0),
             }));
             const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-            const phonemeNote = lowPhonemes.length > 0
-              ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-              : '';
+            const phonemeNote =
+              lowPhonemes.length > 0
+                ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+                : '';
             if (err && err !== 'None') {
               const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-              return [{ wrong: w.word, correct: w.word, type: type as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+              return [
+                {
+                  wrong: w.word,
+                  correct: w.word,
+                  type: type as Mistake['type'],
+                  note: `Accuracy ${acc}%${phonemeNote}`,
+                  phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+                },
+              ];
             }
             if (acc < 90 || lowPhonemes.length > 0) {
-              return [{ wrong: w.word, correct: w.word, type: 'Pronunciation' as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
+              return [
+                {
+                  wrong: w.word,
+                  correct: w.word,
+                  type: 'Pronunciation' as Mistake['type'],
+                  note: `Accuracy ${acc}%${phonemeNote}`,
+                  phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+                },
+              ];
             }
             return [];
           })
@@ -686,111 +712,138 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   // Load a DB conversation in-place (no full page reload): reset all local
   // state, restore conversationIdRef, update the URL, then fetch messages.
-  const loadConversationInPlace = useCallback((convId: string, topicCode: string | null) => {
-    const authSession = getAuthSession();
-    if (!authSession?.token) return;
+  const loadConversationInPlace = useCallback(
+    (convId: string, topicCode: string | null) => {
+      const authSession = getAuthSession();
+      if (!authSession?.token) return;
 
-    hasAutoLoadedRef.current = true;
-    startNewSession({ stayDisconnected: true });
-    // startNewSession clears conversationIdRef — restore it immediately.
-    conversationIdRef.current = convId;
-    if (topicCode) setTopic(topicCode);
-
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('session', convId);
-      if (topicCode) {
-        url.searchParams.set('topic', topicCode);
-      } else {
-        url.searchParams.delete('topic');
-      }
-      window.history.replaceState({}, '', url.toString());
-    } catch { /* ignore */ }
-
-    fetchMessagesWithScores(authSession.token, convId)
-      .then((dbMessages) => {
-        const loaded = dbMessages.map((m, idx): Message => {
-          const isAgent = m.role === 'assistant';
-          const mistakes: Mistake[] | undefined = m.score?.words.length
-            ? m.score.words.flatMap((w) => {
-                const err = w.error_type;
-                const acc = Math.round(w.accuracy_score ?? 0);
-                const phonemes = (w.phonemes ?? []).map((p) => ({
-                  phoneme: p.phoneme,
-                  accuracy_score: Math.round(p.accuracy_score ?? 0),
-                }));
-                const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-                const phonemeNote = lowPhonemes.length > 0
-                  ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-                  : '';
-                if (err && err !== 'None') {
-                  const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-                  return [{ wrong: w.word, correct: w.word, type: type as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
-                }
-                if (acc < 90 || lowPhonemes.length > 0) {
-                  return [{ wrong: w.word, correct: w.word, type: 'Pronunciation' as Mistake['type'], note: `Accuracy ${acc}%${phonemeNote}`, phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined }];
-                }
-                return [];
-              })
-            : undefined;
-          return {
-          id: idx + 1,
-          role: isAgent ? 'agent' : 'user',
-          text: m.text_content ?? '',
-          timestamp: new Date(m.created_at),
-          userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
-          minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
-          assessmentStatus: m.score ? 'available' : 'unavailable',
-          scoreDetails: m.score
-            ? {
-                overall: Math.round(m.score.overall_score ?? 0),
-                pronunciation: Math.round(m.score.overall_score ?? 0),
-                fluency: Math.round(m.score.fluency_score ?? 0),
-                accuracy: Math.round(m.score.accuracy_score ?? 0),
-                completeness:
-                  m.score.completeness_score != null
-                    ? Math.round(m.score.completeness_score)
-                    : undefined,
-              }
-            : undefined,
-          mistakes,
-          };
-        });
-        if (loaded.length > 0) {
-          msgCounterRef.current = loaded.length + 101;
-          setMessages(loaded);
-        }
-      })
-      .catch(() => { /* silently ignore — user can still start fresh */ });
-  }, [startNewSession, setTopic, setMessages]);
-
-  const handleTopicSelect = useCallback((code: string) => {
-    setCustomTopicLabel(null);
-    setSubOption(null);
-    setShowSettings(false);
-
-    // Find the most recently created conversation for this topic
-    const latest = conversations
-      .filter((c) => c.topic_code === code)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
-
-    if (latest) {
-      loadConversationInPlace(latest.id, code);
-    } else {
-      // No existing conversation — show blank new chat for this topic
-      hasAutoLoadedRef.current = false;
+      hasAutoLoadedRef.current = true;
       startNewSession({ stayDisconnected: true });
-      setTopic(code);
+      // startNewSession clears conversationIdRef — restore it immediately.
+      conversationIdRef.current = convId;
+      if (topicCode) setTopic(topicCode);
+
       try {
         const url = new URL(window.location.href);
-        url.searchParams.set('topic', code);
-        url.searchParams.delete('session');
+        url.searchParams.set('session', convId);
+        if (topicCode) {
+          url.searchParams.set('topic', topicCode);
+        } else {
+          url.searchParams.delete('topic');
+        }
         window.history.replaceState({}, '', url.toString());
       } catch {
         /* ignore */
       }
-    }
-  }, [conversations, loadConversationInPlace, startNewSession, setTopic]);
+
+      fetchMessagesWithScores(authSession.token, convId)
+        .then((dbMessages) => {
+          const loaded = dbMessages.map((m, idx): Message => {
+            const isAgent = m.role === 'assistant';
+            const mistakes: Mistake[] | undefined = m.score?.words.length
+              ? m.score.words.flatMap((w) => {
+                  const err = w.error_type;
+                  const acc = Math.round(w.accuracy_score ?? 0);
+                  const phonemes = (w.phonemes ?? []).map((p) => ({
+                    phoneme: p.phoneme,
+                    accuracy_score: Math.round(p.accuracy_score ?? 0),
+                  }));
+                  const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+                  const phonemeNote =
+                    lowPhonemes.length > 0
+                      ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+                      : '';
+                  if (err && err !== 'None') {
+                    const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+                    return [
+                      {
+                        wrong: w.word,
+                        correct: w.word,
+                        type: type as Mistake['type'],
+                        note: `Accuracy ${acc}%${phonemeNote}`,
+                        phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+                      },
+                    ];
+                  }
+                  if (acc < 90 || lowPhonemes.length > 0) {
+                    return [
+                      {
+                        wrong: w.word,
+                        correct: w.word,
+                        type: 'Pronunciation' as Mistake['type'],
+                        note: `Accuracy ${acc}%${phonemeNote}`,
+                        phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+                      },
+                    ];
+                  }
+                  return [];
+                })
+              : undefined;
+            return {
+              id: idx + 1,
+              role: isAgent ? 'agent' : 'user',
+              text: m.text_content ?? '',
+              timestamp: new Date(m.created_at),
+              userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
+              minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
+              assessmentStatus: m.score ? 'available' : 'unavailable',
+              scoreDetails: m.score
+                ? {
+                    overall: Math.round(m.score.overall_score ?? 0),
+                    pronunciation: Math.round(m.score.overall_score ?? 0),
+                    fluency: Math.round(m.score.fluency_score ?? 0),
+                    accuracy: Math.round(m.score.accuracy_score ?? 0),
+                    completeness:
+                      m.score.completeness_score != null
+                        ? Math.round(m.score.completeness_score)
+                        : undefined,
+                  }
+                : undefined,
+              mistakes,
+            };
+          });
+          if (loaded.length > 0) {
+            msgCounterRef.current = loaded.length + 101;
+            setMessages(loaded);
+          }
+        })
+        .catch(() => {
+          /* silently ignore — user can still start fresh */
+        });
+    },
+    [startNewSession, setTopic, setMessages],
+  );
+
+  const handleTopicSelect = useCallback(
+    (code: string) => {
+      setCustomTopicLabel(null);
+      setSubOption(null);
+      setShowSettings(false);
+
+      // Find the most recently created conversation for this topic
+      const latest = conversations
+        .filter((c) => c.topic_code === code)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+
+      if (latest) {
+        loadConversationInPlace(latest.id, code);
+      } else {
+        // No existing conversation — show blank new chat for this topic
+        hasAutoLoadedRef.current = false;
+        startNewSession({ stayDisconnected: true });
+        setTopic(code);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set('topic', code);
+          url.searchParams.delete('session');
+          window.history.replaceState({}, '', url.toString());
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [conversations, loadConversationInPlace, startNewSession, setTopic],
+  );
 
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
@@ -901,7 +954,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         loading={convsLoading}
         activeConversationId={conversationIdRef.current}
         currentTopicCode={topic}
-        currentTopicTitle={topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : null}
+        currentTopicTitle={
+          topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : null
+        }
         onSelectConversation={(id, topicCode) => {
           if (isConnected) persistSession();
           setShowSidebar(false);
@@ -916,7 +971,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             const url = new URL(window.location.href);
             url.searchParams.delete('session');
             window.history.replaceState({}, '', url.toString());
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           // Stay disconnected so the user presses Connect to start fresh.
           startNewSession({ stayDisconnected: true });
           setConvsRefreshKey((k) => k + 1);
