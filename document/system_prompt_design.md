@@ -39,9 +39,18 @@ Each layer is joined with `\n\n---\n\n` as a separator. Missing layers are silen
 | File | Role | Format |
 |------|------|--------|
 | `prompts/system_prompt.md` | Base persona and coaching rules | Plain markdown |
-| `prompts/topic_prompts.md` | Category and topic-specific instructions | Structured markdown (see below) |
+| `prompts/topic_prompts.md` | Prompt index that includes split topic files | Structured markdown (see below) |
+| `prompts/topic_prompts/*.md` | Category and topic-specific instructions | Structured markdown sections |
 
 ### `topic_prompts.md` Structure
+
+```markdown
+!include topic_prompts/daily_conversation.md
+---
+!include topic_prompts/job_interview.md
+```
+
+Each included file keeps the same internal structure:
 
 ```markdown
 # Topic: daily_conversation
@@ -49,17 +58,6 @@ Each layer is joined with `\n\n---\n\n` as a separator. Missing layers are silen
 
 ## Sub-topic: ordering_food
 <scenario-specific instructions>
-
-## Sub-topic: weekend_plans
-<scenario-specific instructions>
-
----
-
-# Topic: job_interview
-<category-level context>
-
-## Sub-topic: tell_me_about_yourself
-...
 ```
 
 Keys are normalized at parse time: `"Ordering Food"` → `"ordering_food"` (lowercase, non-alphanumeric → underscore).
@@ -73,7 +71,7 @@ Prompt files are read from disk once and cached in a module-level dict keyed by 
 ```python
 _CACHE = {
     "base_mtime": None, "base": None,      # system_prompt.md
-    "topics_mtime": None, "topics": None,  # topic_prompts.md parsed dict
+    "topics_signature": None, "topics": None,  # topic_prompts.md + included files
 }
 ```
 

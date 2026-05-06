@@ -178,14 +178,14 @@ Main backend test commands:
 PowerShell:
 
 ```powershell
-python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py -q
 python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
 Git Bash:
 
 ```bash
-python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py -q
 python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
@@ -195,7 +195,6 @@ Current test layout contains:
 - API route tests
 - schema tests
 - AI service tests
-- user data flow tests
 - Azure assessment tests
 
 Important:
