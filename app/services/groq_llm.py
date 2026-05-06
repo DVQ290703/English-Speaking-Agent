@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from app.core.logger import logger
-from app.prompts.prompt_builder import build_system_prompt, extract_prompt_context
+from app.prompts.prompt_builder import build_system_prompt
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md"
 
@@ -42,7 +42,13 @@ class GroqLLMService:
         self.client = ChatGroq(api_key=api_key, model=model_name, temperature=0.2)
         logger.info("GroqLLMService ready model=%s", model_name)
 
-    def generate_response(self, user_input: str, history: list[str] | None = None) -> str:
+    def generate_response(
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        category: str | None = None,
+        topic: str | None = None,
+    ) -> str:
         """Generate a reply using the system prompt and properly-structured conversation history."""
         history = history or []
         logger.info(
@@ -52,7 +58,6 @@ class GroqLLMService:
             len(user_input),
         )
 
-        category, topic = extract_prompt_context(history)
         dynamic_prompt = build_system_prompt(category=category, topic=topic)
         messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
@@ -79,7 +84,11 @@ class GroqLLMService:
         return result
 
     def generate_response_with_grammar(
-        self, user_input: str, history: list[str] | None = None
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        category: str | None = None,
+        topic: str | None = None,
     ) -> tuple[str, str | None]:
         """Generate a reply with grammar analysis in one JSON-mode LLM call.
 
@@ -94,7 +103,6 @@ class GroqLLMService:
             len(user_input),
         )
 
-        category, topic = extract_prompt_context(history)
         dynamic_prompt = build_system_prompt(category=category, topic=topic, include_grammar=True)
         messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
@@ -121,5 +129,5 @@ class GroqLLMService:
         except Exception:
             logger.exception("GroqLLM generate_response_with_grammar failed, falling back to plain response")
 
-        fallback = self.generate_response(user_input=user_input, history=history)
+        fallback = self.generate_response(user_input=user_input, history=history, category=category, topic=topic)
         return fallback, None

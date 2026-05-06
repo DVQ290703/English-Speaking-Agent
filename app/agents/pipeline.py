@@ -20,6 +20,8 @@ class VoiceAgentPipeline:
         response_text, grammar_json = self.llm_service.generate_response_with_grammar(
             user_input=state["user_input"],
             history=state.get("history", []),
+            category=state.get("category"),
+            topic=state.get("topic"),
         )
         logger.debug("respond_node done response_length=%d grammar_present=%s", len(response_text), grammar_json is not None)
         history = state.get("history", []) + [
@@ -52,6 +54,8 @@ class VoiceAgentPipeline:
         user_input: str,
         history: list[str] | None = None,
         voice_gender: str | None = None,
+        category: str | None = None,
+        topic: str | None = None,
     ) -> AgentState:
         """Execute the pipeline for a single user message and return the final state."""
         initial_state: AgentState = {
@@ -61,5 +65,7 @@ class VoiceAgentPipeline:
             "history": history or [],
             "voice_gender": voice_gender,
             "grammar_json": None,
+            "category": category,
+            "topic": topic,
         }
         return self.app.invoke(initial_state)
