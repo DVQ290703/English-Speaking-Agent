@@ -5,6 +5,10 @@ import {
   type ISpeechRecognition,
   type Language,
 } from '../components/voice-agent/constants';
+import type { VADSessionQuality } from '../lib/vad/VADTypes';
+
+const VAD_GATE_MIN_SPEECH_RATIO = 0.15;
+const VAD_GATE_MIN_DURATION_MS = 400;
 
 export interface UseSpeechRecognitionParams {
   status: ConnectionStatus;
@@ -20,6 +24,7 @@ export interface UseSpeechRecognitionParams {
   startUserAudioCapture: () => Promise<void>;
   stopUserAudioCapture: () => Promise<Blob | undefined>;
   sendChatMessage: (text: string, audioBlob?: Blob) => void;
+  getLastSessionQuality: () => VADSessionQuality;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -45,12 +50,97 @@ export default function useSpeechRecognition({
   startUserAudioCapture,
   stopUserAudioCapture,
   sendChatMessage,
+  getLastSessionQuality,
   t,
 }: UseSpeechRecognitionParams) {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
   const micPermissionInFlightRef = useRef<Promise<boolean> | null>(null);
+  const isHandlingEndRef = useRef(false);
+  const backendOnlyCaptureRef = useRef(false);
+  const stopUserAudioCaptureRef = useRef(stopUserAudioCapture);
+  const sendChatMessageRef = useRef(sendChatMessage);
+  const getLastSessionQualityRef = useRef(getLastSessionQuality);
 
   useEffect(() => {
+    stopUserAudioCaptureRef.current = stopUserAudioCapture;
+  }, [stopUserAudioCapture]);
+
+  useEffect(() => {
+    sendChatMessageRef.current = sendChatMessage;
+  }, [sendChatMessage]);
+
+  useEffect(() => {
+    getLastSessionQualityRef.current = getLastSessionQuality;
+  }, [getLastSessionQuality]);
+
+  useEffect(() => {
+    const passesVADQualityGate = (): boolean => {
+      const quality = getLastSessionQualityRef.current();
+
+      console.log('[Speech] VAD quality gate check', {
+        speechDetected: quality.speechDetected,
+        speechFrameRatio: quality.speechFrameRatio,
+        peakRMS: quality.peakRMS,
+        durationMs: quality.durationMs,
+      });
+
+      if (!quality.speechDetected && quality.speechFrameRatio < VAD_GATE_MIN_SPEECH_RATIO) {
+        console.warn('[Speech] VAD quality gate: no speech detected — send aborted', {
+          speechFrameRatio: quality.speechFrameRatio,
+          peakRMS: quality.peakRMS,
+        });
+        return false;
+      }
+
+      if (
+        quality.durationMs < VAD_GATE_MIN_DURATION_MS &&
+        quality.speechFrameRatio < VAD_GATE_MIN_SPEECH_RATIO * 2
+      ) {
+        console.warn('[Speech] VAD quality gate: too short with low speech ratio — send aborted');
+        return false;
+      }
+
+      console.log('[Speech] VAD quality gate: PASSED — proceeding to send');
+      return true;
+    };
+
+    const safeStopRecording = async (reason: string): Promise<Blob | undefined> => {
+      try {
+        return await stopUserAudioCaptureRef.current();
+      } catch (err) {
+        console.error('[Speech] stopRecording threw:', { reason, err });
+        return undefined;
+      }
+    };
+
+    const stopAndSendBackendOnly = async (reason: string) => {
+      if (isHandlingEndRef.current) {
+        return;
+      }
+
+      isHandlingEndRef.current = true;
+      try {
+        const recordedAudio = await safeStopRecording(reason);
+        if (!recordedAudio || recordedAudio.size === 0) {
+          console.warn('[Speech] backend-only mode: blob missing or empty — send aborted');
+          return;
+        }
+
+        if (!passesVADQualityGate()) {
+          return;
+        }
+
+        // Firefox and other non-Web-Speech browsers still capture audio via MediaRecorder.
+        // Delegate transcription to backend Groq Whisper STT via audio_file upload.
+        console.log('[Speech] SpeechRecognition unavailable — delegating transcription to backend STT');
+        setChatInput('');
+        await Promise.resolve(sendChatMessageRef.current('', recordedAudio));
+      } finally {
+        backendOnlyCaptureRef.current = false;
+        isHandlingEndRef.current = false;
+      }
+    };
+
     if (status !== 'connected' || !micEnabled) {
       recognitionRef.current?.stop();
       // Defer state updates to avoid triggering cascading renders inside
@@ -64,7 +154,12 @@ export default function useSpeechRecognition({
           /* ignore */
         }
       }, 0);
-      void stopUserAudioCapture();
+      if (!isHandlingEndRef.current && (recognitionRef.current || backendOnlyCaptureRef.current)) {
+        void safeStopRecording('status/mic gate');
+      }
+      if (!isHandlingEndRef.current && backendOnlyCaptureRef.current) {
+        void stopAndSendBackendOnly('status/mic gate');
+      }
       return;
     }
 
@@ -77,15 +172,16 @@ export default function useSpeechRecognition({
 
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
-      alert(t('va.alert.noBrowserSupport'));
-      setTimeout(() => {
-        try {
-          setMicEnabled(false);
-        } catch {
-          /* ignore */
-        }
-      }, 0);
-      return;
+      // Firefox does not expose SpeechRecognition/WebKitSpeechRecognition.
+      // Keep MediaRecorder capture enabled and let the backend transcribe audio_file.
+      console.log('[Speech] SpeechRecognition not supported — using backend STT only');
+      backendOnlyCaptureRef.current = true;
+      setIsRecording(true);
+      void startUserAudioCapture();
+
+      return () => {
+        backendOnlyCaptureRef.current = false;
+      };
     }
 
     let stopped = false;
@@ -177,28 +273,92 @@ export default function useSpeechRecognition({
       recognition.continuous = false;
       recognitionRef.current = recognition;
       let hasSentFinal = false;
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      const stopAndSend = async () => {
+        if (isHandlingEndRef.current) {
+          return;
+        }
+
+        // Edge: prevent double-stop race condition
+        isHandlingEndRef.current = true;
+
+        try {
+          console.log('[Speech] calling stopRecording, blob expected next');
+          const recordedAudio = await safeStopRecording('stopAndSend');
+          console.log('[Speech] received blob', {
+            type: recordedAudio?.type,
+            size: recordedAudio?.size,
+          });
+
+          if (!recordedAudio || recordedAudio.size === 0) {
+            console.error('[Speech] blob missing or empty — send aborted');
+            return;
+          }
+
+          if (!passesVADQualityGate()) {
+            return;
+          }
+
+          const messageText = finalTranscript.trim() || interimTranscript.trim();
+          if (!messageText && !recordedAudio) {
+            console.warn('[Speech] no transcript and no blob — send aborted');
+            return;
+          }
+
+          if (!messageText && recordedAudio) {
+            // Edge: window.SpeechRecognition fires onend without onresult for some utterances.
+            // Delegate transcription to backend Groq Whisper STT via audio_file upload.
+            console.log('[Speech] transcript empty but blob present — delegating STT to backend');
+          }
+
+          if (messageText) {
+            console.log('[Speech] using transcript', {
+              source: finalTranscript.trim() ? 'final' : 'interim (Edge fallback)',
+              text: messageText,
+            });
+          }
+
+          setChatInput('');
+          console.log('[Speech] calling sendMessage with blob', {
+            hasBlob: !!recordedAudio,
+            size: recordedAudio?.size,
+          });
+          await Promise.resolve(sendChatMessageRef.current(messageText, recordedAudio));
+        } catch (err) {
+          console.error('[Speech] stop/send flow failed', err);
+        } finally {
+          isHandlingEndRef.current = false;
+        }
+      };
 
       recognition.onstart = () => {
         consecutiveErrors = 0;
+        isHandlingEndRef.current = false;
+        finalTranscript = '';
+        interimTranscript = '';
         setIsRecording(true);
         void startUserAudioCapture();
       };
 
       recognition.onresult = async (event: SpeechRecognitionEvent) => {
-        let interim = '';
-        let final = '';
+        console.log('[Speech] recognition ended, triggering stop flow');
+        interimTranscript = '';
+        let finalChunk = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) final += transcript;
-          else interim += transcript;
+          if (event.results[i].isFinal) finalChunk += transcript;
+          else interimTranscript += transcript;
         }
-        if (final && !hasSentFinal) {
+        if (finalChunk) {
+          finalTranscript = `${finalTranscript} ${finalChunk}`.trim();
+        }
+        if (finalChunk && !hasSentFinal) {
           hasSentFinal = true;
-          const recordedAudio = await stopUserAudioCapture();
-          setChatInput('');
-          sendChatMessage(final, recordedAudio);
+          await stopAndSend();
         } else {
-          setChatInput(interim);
+          setChatInput(interimTranscript);
         }
       };
 
@@ -218,12 +378,22 @@ export default function useSpeechRecognition({
           consecutiveErrors += 1;
         }
         setIsRecording(false);
-        void stopUserAudioCapture();
+        if (!isHandlingEndRef.current) {
+          void safeStopRecording('recognition.onerror');
+        }
       };
 
-      recognition.onend = () => {
+      recognition.onend = async () => {
+        console.log('[Speech] recognition ended, triggering stop flow');
         setIsRecording(false);
-        void stopUserAudioCapture();
+        // ⚠️ RACE CONDITION: on Edge, speech end fires before blob resolves
+        if (!isHandlingEndRef.current) {
+          try {
+            await stopAndSend();
+          } catch (err) {
+            console.error('[Speech] onend flow failed', err);
+          }
+        }
         if (stopped) return;
         if (consecutiveErrors >= 4) {
           stopped = true;
@@ -253,16 +423,16 @@ export default function useSpeechRecognition({
       if (restartTimer) clearTimeout(restartTimer);
       recognitionRef.current?.stop();
       recognitionRef.current = null;
-      void stopUserAudioCapture();
+      if (!isHandlingEndRef.current) {
+        void safeStopRecording('effect cleanup');
+      }
     };
   }, [
     status,
     micEnabled,
     language,
     selectedMicId,
-    sendChatMessage,
     startUserAudioCapture,
-    stopUserAudioCapture,
     setChatInput,
     setIsRecording,
     setMicEnabled,

@@ -42,6 +42,16 @@ export interface GrammarFeedbackPayload {
   overall_score?: number;
 }
 
+function extensionFromMimeType(mimeType: string): string {
+  const mime = (mimeType || '').toLowerCase();
+  if (mime.includes('webm')) return 'webm';
+  if (mime.includes('ogg')) return 'ogg';
+  if (mime.includes('wav')) return 'wav';
+  if (mime.includes('mp4')) return 'mp4';
+  if (mime.includes('aac') || mime.includes('m4a')) return 'm4a';
+  return 'bin';
+}
+
 export async function chatRespond({
   token,
   text,
@@ -53,6 +63,10 @@ export async function chatRespond({
   voiceGender = '',
   conversationId = null,
 }: ChatRespondParams): Promise<ChatRespondResult> {
+  console.log('[API] building FormData', {
+    blobType: audioBlob?.type,
+    blobSize: audioBlob?.size,
+  });
   const formData = new FormData();
 
   if (text && text.trim()) {
@@ -80,28 +94,39 @@ export async function chatRespond({
   }
 
   if (audioBlob) {
-    formData.append('audio_file', audioBlob, 'recording.webm');
+    if (audioBlob.size === 0) {
+      console.warn('[chatRespond] audioBlob has zero size; skipping audio upload field');
+    } else {
+      const ext = extensionFromMimeType(audioBlob.type);
+      formData.append('audio_file', audioBlob, `recording.${ext}`);
+    }
   }
 
   if (conversationId) {
     formData.append('conversation_id', conversationId);
   }
 
-  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.chat.respond}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  });
+  try {
+    console.log('[API] FormData ready, sending request');
+    const response = await fetch(`${API_BASE_URL}${ENDPOINTS.chat.respond}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    throw new Error((data as { detail?: string }).detail || 'Chat request failed');
+    if (!response.ok) {
+      throw new Error((data as { detail?: string }).detail || 'Chat request failed');
+    }
+
+    return data as ChatRespondResult;
+  } catch (error) {
+    console.error('[API] send failed', error);
+    throw error;
   }
-
-  return data as ChatRespondResult;
 }
 
 // Placeholder: ready for the upcoming grammar endpoint contract.

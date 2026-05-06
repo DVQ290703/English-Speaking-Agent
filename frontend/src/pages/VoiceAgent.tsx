@@ -349,10 +349,18 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const { mediaStreamRef, startUserAudioCapture, stopUserAudioCapture, releaseMediaStream } =
     useAudioCapture(selectedMicIdRef);
 
+  const handleVADEndOfSpeech = useCallback(() => {
+    userMicIntentRef.current = false;
+    setMicEnabled(false);
+  }, []);
+
   // Detects whether the user's voice is currently above the noise floor.
   // Drives mic-button + waveform animations so they only animate during
-  // actual speech (not just because the mic is open).
-  const isSpeaking = useVoiceActivity(mediaStreamRef, isRecording);
+  // actual speech (not just because the mic is open). End-of-speech funnels
+  // through the existing mic toggle path so blob/send behavior stays unchanged.
+  const { isSpeaking, getLastSessionQuality } = useVoiceActivity(mediaStreamRef, isRecording, {
+    onSpeechComplete: handleVADEndOfSpeech,
+  });
 
   const {
     ttsActiveRef,
@@ -485,6 +493,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     startUserAudioCapture,
     stopUserAudioCapture,
     sendChatMessage,
+    getLastSessionQuality,
     t,
   });
 

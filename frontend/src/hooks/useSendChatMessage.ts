@@ -79,7 +79,19 @@ export default function useSendChatMessage({
   const sendChatMessage = useCallback(
     async (text: string, audioBlob?: Blob) => {
       const trimmed = text.trim();
-      if (!trimmed || agentTyping) return;
+      const hasText = !!trimmed;
+      const hasAudio = !!audioBlob && audioBlob.size > 0;
+      console.log('[SendMessage] called', { hasText, hasBlob: hasAudio, blobSize: audioBlob?.size });
+      if (!hasText && !hasAudio) {
+        // Edge: window.SpeechRecognition fires onend without onresult for some utterances.
+        // Delegate transcription to backend Groq Whisper STT via audio_file upload.
+        console.warn('[SendMessage] nothing to send — no text and no blob');
+        return;
+      }
+      if (agentTyping) {
+        console.log('[SendMessage] SKIPPED send — reason:', 'agentTyping in progress');
+        return;
+      }
 
       const session = getAuthSession();
       const userId = msgCounterRef.current++;
@@ -130,6 +142,7 @@ export default function useSendChatMessage({
       try {
         let userMessageId: string | null = null;
         if (session?.token) {
+          console.log('[SendMessage] sending to API', { hasBlob: hasAudio });
           const data = await chatRespond({
             token: session.token,
             text: trimmed,
