@@ -23,4 +23,7 @@ export const ENDPOINTS = {
   topics: {
     categories: '/api/topics/get_categories_topics',
   },
+  grammar: {
+    detailFeedback: (messageId: string) => `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
+  },
 } as const;

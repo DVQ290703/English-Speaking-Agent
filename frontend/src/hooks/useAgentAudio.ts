@@ -292,10 +292,10 @@ export default function useAgentAudio({
 
               void audio.play().catch((err) => {
                 stopAndCleanupAudio(id);
-                console.warn('User audio playback failed for', wavUrl, err);
+                void err;
               });
             } catch (err) {
-              console.warn('Failed to convert user audio to WAV', err);
+              void err;
               if (!isMountedRef.current) return;
               speakText(msg.text);
             }
@@ -325,7 +325,7 @@ export default function useAgentAudio({
 
             void audio.play().catch((err) => {
               stopAndCleanupAudio(id);
-              console.warn('User audio playback failed for', url, err);
+              void err;
             });
           }
         } else if (msg.userAudioUrl) {
@@ -343,13 +343,13 @@ export default function useAgentAudio({
 
           void audio.play().catch((err) => {
             stopAndCleanupAudio(id);
-            console.warn('User audio playback failed for', msg.userAudioUrl, err);
+            void err;
           });
         } else {
           speakText(msg.text);
         }
       } catch (err) {
-        console.warn('User audio playback error', err);
+        void err;
       }
     },
     [messagesRef, playAgentAudio, speakText, stopAndCleanupAudio, trimLocalAudioUrls],

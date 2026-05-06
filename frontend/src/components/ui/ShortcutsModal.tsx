@@ -57,7 +57,7 @@ export default function ShortcutsModal({ open, onClose }: { open: boolean; onClo
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
