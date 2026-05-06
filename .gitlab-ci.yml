@@ -188,7 +188,7 @@ deploy-backend:
   image:
     name: google/cloud-sdk:alpine
     entrypoint: [""]
-  needs: []
+  needs:
     # - job: test-backend
     - job: build-backend
       optional: true
