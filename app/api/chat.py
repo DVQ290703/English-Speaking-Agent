@@ -209,7 +209,7 @@ def chat_respond(
             else:
                 topic_id = None
                 topic_title = None
-                category_clean = category.strip().lower() if category else ""
+                category_clean = (topic or category or "").strip().lower()
                 if category_clean:
                     cur.execute(
                         "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",

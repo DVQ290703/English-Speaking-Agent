@@ -126,10 +126,7 @@ export async function clearConversation(token: string, conversationId: string): 
 }
 
 export async function fetchForTopic(token: string, topicCode: string): Promise<ForTopicResponse> {
-  return apiFetch<ForTopicResponse>(
-    ENDPOINTS.conversations.forTopic(topicCode),
-    token,
-  );
+  return apiFetch<ForTopicResponse>(ENDPOINTS.conversations.forTopic(topicCode), token);
 }
 
 export async function deleteConversation(token: string, conversationId: string): Promise<void> {
@@ -156,6 +153,9 @@ export interface ConversationStat {
 }
 
 export async function fetchConversationStats(token: string): Promise<ConversationStat[]> {
-  const data = await apiFetch<{ sessions: ConversationStat[] }>(ENDPOINTS.conversations.stats, token);
+  const data = await apiFetch<{ sessions: ConversationStat[] }>(
+    ENDPOINTS.conversations.stats,
+    token,
+  );
   return data.sessions;
 }
