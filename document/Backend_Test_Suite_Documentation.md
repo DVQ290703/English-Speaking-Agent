@@ -22,9 +22,8 @@ Goals:
 | AI services | `tests/test_ai_services/test_ai_services.py` | 25 |
 | API schemas | `tests/test_api/test_schemas.py` | 30 |
 | API routes | `tests/test_api/test_routes.py` | 51 |
-| User data flow | `tests/test_api/test_user_data_flow.py` | 18 |
 | Azure assessment service | `tests/test_services/test_azure_assessment.py` | 18 |
-| Total test functions defined |  | 165 |
+| Total test functions defined |  | 147 |
 
 Notes:
 
@@ -36,11 +35,11 @@ Notes:
 The following command groups were verified against the current codebase:
 
 ```bash
-python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py -q
 python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
-These cover 147 passing tests in the current local environment.
+These cover 129 passing tests in the current local environment.
 
 The remaining Azure-specific module is expected to run when Azure Speech SDK is installed:
 
@@ -119,15 +118,6 @@ Covered behaviors:
 - TTS fallback
 - pipeline fallback response
 
-### User Flows
-
-Covered behaviors:
-
-- full user lifecycle
-- continuing an existing conversation
-- message ordering
-- per-user access isolation
-
 ## 6. Running Tests
 
 ### Full suite
@@ -203,7 +193,6 @@ Reason:
 - `tests/conftest.py`
 - `tests/helpers/db_mocks.py`
 - `tests/test_api/test_routes.py`
-- `tests/test_api/test_user_data_flow.py`
 - `tests/test_security/test_security.py`
 - `tests/test_ai_services/test_ai_services.py`
 - `tests/test_services/test_azure_assessment.py`

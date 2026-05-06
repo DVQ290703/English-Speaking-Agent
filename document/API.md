@@ -1,6 +1,6 @@
 # API Documentation
 
-Tai lieu nay mo ta API backend hien tai trong `app/main.py` va `app/api/routes.py`.
+Tai lieu nay mo ta API backend hien tai trong `app/main.py` va `app/api/router.py`.
 
 ## Base URLs
 

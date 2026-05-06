@@ -35,7 +35,7 @@ The product is built around a short feedback loop:
 ### Runtime stack
 
 - FastAPI app in `app/main.py`
-- routes in `app/api/routes.py`
+- routes in `app/api/router.py`
 - PostgreSQL for relational data
 - MinIO for audio objects
 - Groq for STT and LLM
@@ -117,7 +117,7 @@ The assistant prompt is now layered:
 
 Implementation files:
 
-- `app/prompts/prompt_architecture.json`
+- `app/prompts/topic_prompts.md`
 - `app/prompts/prompt_builder.py`
 - `app/services/groq_llm.py`
 
@@ -240,9 +240,8 @@ Current backend hardening includes:
 | `tests/test_ai_services/test_ai_services.py` | 25 |
 | `tests/test_api/test_schemas.py` | 30 |
 | `tests/test_api/test_routes.py` | 51 |
-| `tests/test_api/test_user_data_flow.py` | 18 |
 | `tests/test_services/test_azure_assessment.py` | 18 |
-| Total defined test functions | 165 |
+| Total defined test functions | 147 |
 
 ### Verified local result
 
@@ -252,8 +251,6 @@ In the current environment, the following verified subset passes:
 - routes
 - schemas
 - AI services
-- user data flow
-
 Azure service tests require the Azure Speech SDK dependency to be installed before they can be collected and executed.
 
 ## 12. Current Frontend/Backend Contract Notes
@@ -278,9 +275,9 @@ Azure service tests require the Azure Speech SDK dependency to be installed befo
 For implementation truth, prefer:
 
 - `app/main.py`
-- `app/api/routes.py`
+- `app/api/router.py`
 - `app/api/schemas.py`
-- `app/prompts/prompt_architecture.json`
+- `app/prompts/topic_prompts.md`
 - `app/prompts/prompt_builder.py`
 - `db_schema/schema.sql`
 - `API.md`
