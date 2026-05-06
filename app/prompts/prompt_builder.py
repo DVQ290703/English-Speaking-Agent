@@ -64,9 +64,11 @@ def _load_base_prompt() -> str:
         mtime = _SYSTEM_PROMPT_PATH.stat().st_mtime
     except OSError:
         logger.exception("system_prompt.md not found at %s", _SYSTEM_PROMPT_PATH)
+        logger.debug("prompt_builder using inline fallback base prompt")
         return _BASE_FALLBACK
 
     if _CACHE["base_mtime"] == mtime and isinstance(_CACHE["base"], str):
+        logger.debug("prompt_builder base prompt cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["base"]))
         return _CACHE["base"]
 
     try:
@@ -77,6 +79,7 @@ def _load_base_prompt() -> str:
 
     _CACHE["base_mtime"] = mtime
     _CACHE["base"] = text
+    logger.debug("prompt_builder base prompt cache MISS — reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
     return text
 
 
@@ -117,6 +120,7 @@ def _load_topics() -> dict[str, Any]:
         return {}
 
     if _CACHE["topics_mtime"] == mtime and isinstance(_CACHE["topics"], dict):
+        logger.debug("prompt_builder topics cache HIT mtime=%.3f known_categories=%s", mtime, list(_CACHE["topics"].keys()))
         return _CACHE["topics"]
 
     try:
@@ -128,6 +132,11 @@ def _load_topics() -> dict[str, Any]:
     topics = _parse_topics(content)
     _CACHE["topics_mtime"] = mtime
     _CACHE["topics"] = topics
+    logger.debug(
+        "prompt_builder topics cache MISS — reloaded from disk mtime=%.3f categories=%s",
+        mtime,
+        {k: list(v.get("options", {}).keys()) for k, v in topics.items()},
+    )
     return topics
 
 
@@ -146,6 +155,11 @@ def build_system_prompt(
     include_grammar: bool = False,
 ) -> str:
     """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
+    logger.debug(
+        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s",
+        category, topic, include_grammar,
+    )
+
     prompt_parts = [_load_base_prompt()]
 
     if category:
@@ -153,23 +167,46 @@ def build_system_prompt(
         category_key = _normalize_key(category)
         category_data = topics.get(category_key)
 
+        logger.debug(
+            "prompt_builder category lookup raw=%r normalized=%r found=%s",
+            category, category_key, category_data is not None,
+        )
+
         if category_data:
             category_prompt = category_data.get("topic_prompt", "").strip()
             if category_prompt:
                 prompt_parts.append(f"---\n\n## Category: {category_key}\n{category_prompt}")
+                logger.debug("prompt_builder layer=category injected chars=%d", len(category_prompt))
+            else:
+                logger.debug("prompt_builder layer=category found but topic_prompt is empty, skipping")
 
             if topic:
                 topic_key = _normalize_key(topic)
                 option_prompt = category_data.get("options", {}).get(topic_key, "").strip()
+
+                logger.debug(
+                    "prompt_builder topic lookup raw=%r normalized=%r found=%s available=%s",
+                    topic, topic_key, bool(option_prompt),
+                    list(category_data.get("options", {}).keys()),
+                )
+
                 if option_prompt:
                     prompt_parts.append(f"---\n\n## Topic: {topic_key}\n{option_prompt}")
+                    logger.debug("prompt_builder layer=topic injected chars=%d", len(option_prompt))
                 else:
                     prompt_parts.append(
                         f"---\n\n## Topic: {topic.strip()}\n"
                         "The learner selected this topic. "
                         "Adapt the conversation to it while keeping the same coaching style."
                     )
+                    logger.debug("prompt_builder layer=topic NOT found in options — using generic fallback")
+            else:
+                logger.debug("prompt_builder no topic provided, skipping topic layer")
         else:
+            logger.debug(
+                "prompt_builder category NOT found in topics — using generic fallback available_categories=%s",
+                list(topics.keys()),
+            )
             prompt_parts.append(
                 f"---\n\n## Category: {category.strip()}\n"
                 "The learner selected this category. "
@@ -181,8 +218,17 @@ def build_system_prompt(
                     "The learner selected this topic. "
                     "Adapt the conversation to it while keeping the same coaching style."
                 )
+                logger.debug("prompt_builder layer=topic generic fallback injected (category was also missing)")
+    else:
+        logger.debug("prompt_builder no category provided — base prompt only")
 
     if include_grammar:
         prompt_parts.append(GRAMMAR_INSTRUCTION)
+        logger.debug("prompt_builder layer=grammar injected")
 
-    return "\n\n".join(part for part in prompt_parts if part)
+    final_prompt = "\n\n".join(part for part in prompt_parts if part)
+    logger.debug(
+        "prompt_builder final prompt layers=%d total_chars=%d",
+        len(prompt_parts), len(final_prompt),
+    )
+    return final_prompt
