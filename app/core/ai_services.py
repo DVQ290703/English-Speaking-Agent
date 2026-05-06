@@ -46,17 +46,16 @@ def get_assessment_service():
     return service
 
 
-def normalize_history(history_raw: str | None, category: str | None, topic: str | None = None) -> list[str]:
-    """Convert raw UI history JSON into a compact list of prompt-ready conversation lines."""
+def normalize_history(history_raw: str | None, category: str | None = None, topic: str | None = None) -> list[str]:
+    """Convert raw UI history JSON into a compact list of prompt-ready conversation lines.
+
+    NOTE: category and topic are accepted for call-site compatibility but are no longer
+    injected into history. They are passed directly to the pipeline via run_langraph_agent().
+    """
     history_lines: list[str] = []
 
-    if category and category.strip():
-        history_lines.append(f"Category: {category.strip()}")
-    if topic and topic.strip():
-        history_lines.append(f"Topic: {topic.strip()}")
-
     if not history_raw:
-        logger.debug("normalize_history no history provided category_present=%s", bool(category and category.strip()))
+        logger.debug("normalize_history no history provided")
         return history_lines
 
     try:
@@ -120,13 +119,15 @@ def run_langraph_agent(
     user_input: str,
     history: list[str] | None = None,
     voice_gender: str | None = None,
+    category: str | None = None,
+    topic: str | None = None,
 ) -> tuple[str, bytes, str | None]:
     """Run the conversation pipeline and return (response_text, audio_bytes, grammar_json)."""
     history = history or []
-    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d", len(user_input), len(history))
+    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d category=%s topic=%s", len(user_input), len(history), category, topic)
     try:
         pipeline = get_voice_agent_pipeline()
-        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender)
+        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, category=category, topic=topic)
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
         grammar_json: str | None = result.get("grammar_json")
