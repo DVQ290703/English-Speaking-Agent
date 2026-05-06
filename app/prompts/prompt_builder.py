@@ -146,8 +146,8 @@ def _collect_include_signature(
 
 def _parse_topics(content: str) -> dict[str, Any]:
     topics: dict[str, Any] = {}
-    topic_re = re.compile(r"^# Topic:\s*(.+)$", re.MULTILINE)
-    subtopic_re = re.compile(r"^## Sub-topic:\s*(.+)$", re.MULTILINE)
+    topic_re = re.compile(r"^# Category:\s*(.+)$", re.MULTILINE)
+    subtopic_re = re.compile(r"^## Topic:\s*(.+)$", re.MULTILINE)
     sep_re = re.compile(r"^---\s*$", re.MULTILINE)
 
     topic_matches = list(topic_re.finditer(content))
