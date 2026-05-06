@@ -8,3 +8,5 @@ class AgentState(TypedDict):
     history: list[str]
     voice_gender: str | None
     grammar_json: str | None  # raw JSON from LLM grammar call; None on failure
+    category: str | None      # routing context — e.g. "daily_conversation"
+    topic: str | None         # routing context — e.g. "ordering_food"

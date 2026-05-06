@@ -279,14 +279,9 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
-    # Convert DB history (list[dict]) to the "Role: text" string format the
-    # pipeline expects, and prepend category/topic context lines so
-    # extract_prompt_context can build the dynamic system prompt.
+    # Convert DB history (list[dict]) to the "Role: text" string format the pipeline expects.
+    # category and topic are passed directly to run_langraph_agent() for typed prompt routing.
     history_lines: list[str] = []
-    if category:
-        history_lines.append(f"Category: {category.strip()}")
-    if topic:
-        history_lines.append(f"Topic: {topic.strip()}")
     for msg in conversation_history:
         role_label = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role_label}: {msg['content']}")
@@ -300,6 +295,8 @@ def chat_respond(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
+        category=category,
+        topic=topic,
     )
     _, grammar_data = parse_grammar_response(grammar_json, user_input)
 
