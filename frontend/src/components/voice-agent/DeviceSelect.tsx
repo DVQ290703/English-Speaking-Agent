@@ -27,7 +27,7 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
     <div ref={ref} className="relative">
       <button
         data-testid="device-select"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-800 transition-colors max-w-40"
       >
         <span className="truncate">{shortVal}</span>
@@ -35,7 +35,7 @@ export default function DeviceSelect({ value, options, onChange }: DeviceSelectP
       </button>
       {open && (
         <div className="absolute top-full mt-1 left-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg min-w-55 overflow-hidden">
-          {options.map(opt => (
+          {options.map((opt) => (
             <button
               key={opt}
               data-testid={`device-option-${opt}`}

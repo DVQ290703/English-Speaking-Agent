@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json as _json
 import time as _time
 import uuid as _uuid
 
@@ -13,17 +14,17 @@ from app.api._audio import (
     _validate_uploaded_audio,
 )
 from app.api._validators import _enforce_max_length, _validate_uuid
-from app.api.schemas import ChatResponse
+from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan
+from app.services.grammar_parser import parse_grammar_response
 from app.core.ai_services import (
     _synthesize_audio_bytes,
-    normalize_history,
     run_langraph_agent,
     transcribe_audio,
 )
 from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import get_current_user_id
-from app.core.storage import _upload, build_object_key, get_presigned_url, store_user_audio
+from app.core.storage import _upload, build_object_key, store_user_audio
 from app.guardrails.audit.logger import AuditLogger
 from app.guardrails.exceptions import GuardrailException
 from app.guardrails.input import InputGuardrails
@@ -33,8 +34,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 _MAX_TEXT_CHARS = 4_000
 _MAX_HISTORY_CHARS = 50_000
-_MAX_TOPIC_CHARS = 80
-_MAX_SUB_OPTION_CHARS = 120
+_MAX_CATEGORY_CHARS = 80
+_MAX_TOPIC_CHARS = 120
 _INLINE_AUDIO_LIMIT_BYTES = 512 * 1024
 
 _input_guardrails = InputGuardrails()
@@ -48,6 +49,32 @@ _GUARDRAIL_HTTP_STATUS: dict[str, int] = {
     "INJECTION_DETECTED": status.HTTP_400_BAD_REQUEST,
     "TOPIC_BLOCKED": status.HTTP_400_BAD_REQUEST,
 }
+
+
+def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
+    """
+    Return the last `limit` visible (post-cleared_at) user+assistant turns
+    for the given conversation, oldest-first, ready for the LLM context.
+    Returns empty list if conv_id is None or no messages found.
+    """
+    if not conv_id:
+        return []
+    cur.execute(
+        """
+        SELECT m.role, m.text_content
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.conversation_id = %s
+          AND m.role IN ('user', 'assistant')
+          AND m.text_content IS NOT NULL
+          AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
+        ORDER BY m.created_at DESC
+        LIMIT %s
+        """,
+        (conv_id, limit),
+    )
+    rows = cur.fetchall()
+    return [{"role": row[0], "content": row[1]} for row in reversed(rows)]
 
 
 def _insert_audio_asset(
@@ -72,21 +99,26 @@ def _insert_audio_asset(
 @router.post("/respond", response_model=ChatResponse)
 def chat_respond(
     text: str | None = Form(default=None),
-    history: str | None = Form(default=None),
+    category: str | None = Form(default=None),
     topic: str | None = Form(default=None),
-    sub_option: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
 ):
+    """Send a message (text or audio) and get an AI coach reply with TTS audio.
+
+    Audio input is transcribed via STT when no text is provided. Input and output
+    pass through guardrails. A new conversation is created if conversation_id is
+    omitted; category is matched to a topics row to enforce the 5-session limit.
+    Returns the reply text, inline or URL-referenced MP3, and a grammar summary.
+    """
     input_mode = "audio" if audio_file else "text"
     logger.info("chat_respond start user_id=%s input_mode=%s conversation_id=%s", user_id, input_mode, conversation_id)
 
     text = _enforce_max_length(text, field="text", max_chars=_MAX_TEXT_CHARS)
-    history = _enforce_max_length(history, field="history", max_chars=_MAX_HISTORY_CHARS)
+    category = _enforce_max_length(category, field="category", max_chars=_MAX_CATEGORY_CHARS)
     topic = _enforce_max_length(topic, field="topic", max_chars=_MAX_TOPIC_CHARS)
-    sub_option = _enforce_max_length(sub_option, field="sub_option", max_chars=_MAX_SUB_OPTION_CHARS)
 
     user_input = (text or "").strip()
     audio_bytes_received = b""
@@ -176,28 +208,61 @@ def chat_respond(
                 conv_id = row[0]
             else:
                 topic_id = None
-                topic_clean = topic.strip() if topic else ""
-                if topic_clean:
+                topic_title = None
+                category_clean = (topic or category or "").strip().lower()
+                if category_clean:
                     cur.execute(
-                        "SELECT id::text FROM topics WHERE code = %s LIMIT 1",
-                        (topic_clean.lower(),),
+                        "SELECT id::text, title FROM topics WHERE code = %s OR LOWER(title) = %s LIMIT 1",
+                        (category_clean, category_clean),
                     )
                     topic_row = cur.fetchone()
                     if topic_row:
-                        topic_id = topic_row[0]
-                title = f"Chat on {topic_clean}" if topic_clean else "New Conversation"
+                        topic_id, topic_title = topic_row[0], topic_row[1]
+
+                if topic_id:
+                    # 5-limit: count active (non-deleted) conversations for this topic
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) FROM conversations
+                        WHERE user_id = %s AND topic_id = %s AND deleted_at IS NULL
+                        """,
+                        (user_id, topic_id),
+                    )
+                    active_count = cur.fetchone()[0]
+                    if active_count >= 5:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Conversation limit reached",
+                        )
+
+                    # Session number = total ever (including deleted) + 1
+                    cur.execute(
+                        "SELECT COUNT(*) FROM conversations WHERE user_id = %s AND topic_id = %s",
+                        (user_id, topic_id),
+                    )
+                    total_ever = cur.fetchone()[0]
+                    title = f"{topic_title} - Session {total_ever + 1}"
+                else:
+                    title = "New Conversation"
+
                 cur.execute(
                     "INSERT INTO conversations (user_id, topic_id, title) VALUES (%s, %s, %s) RETURNING id::text",
                     (user_id, topic_id, title),
                 )
                 conv_id = cur.fetchone()[0]
-                logger.info("New conversation created conv_id=%s topic_id=%s", conv_id, topic_id)
+                logger.info(
+                    "New conversation created conv_id=%s topic_id=%s title=%r",
+                    conv_id, topic_id, title,
+                )
 
             cur.execute(
                 "SELECT COALESCE(MAX(turn_number), 0) + 1 FROM turns WHERE conversation_id = %s",
                 (conv_id,),
             )
             turn_number = cur.fetchone()[0]
+
+            # Server-side history — replaces client-owned history field
+            conversation_history = _fetch_visible_history(cur, conv_id)
 
     user_object_key: str | None = None
     user_mime_type = "audio/webm"
@@ -214,17 +279,26 @@ def chat_respond(
         except Exception:
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
-    conversation_history = normalize_history(history_raw=history, topic=topic, sub_option=sub_option)
+    # Convert DB history (list[dict]) to the "Role: text" string format the pipeline expects.
+    # category and topic are passed directly to run_langraph_agent() for typed prompt routing.
+    history_lines: list[str] = []
+    for msg in conversation_history:
+        role_label = "User" if msg["role"] == "user" else "Assistant"
+        history_lines.append(f"{role_label}: {msg['content']}")
+
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),
-        len(conversation_history),
+        len(history_lines),
     )
-    response_text, response_audio_bytes = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_json = run_langraph_agent(
         user_input=user_input,
-        history=conversation_history,
+        history=history_lines,
         voice_gender=voice_gender,
+        category=category,
+        topic=topic,
     )
+    _, grammar_data = parse_grammar_response(grammar_json, user_input)
 
     # ── Guardrails: Output ─────────────────────────────────────────────────
     output_result = _output_guardrails.check(response_text)
@@ -298,6 +372,23 @@ def chat_respond(
                     size_bytes=len(response_audio_bytes),
                 )
 
+            # Save grammar feedback (only when LLM returned valid JSON)
+            if grammar_json is not None:
+                cur.execute(
+                    """
+                    INSERT INTO grammar_feedback
+                        (message_id, user_input, errors, corrected_sentence, overall_score)
+                    VALUES (%s, %s, %s::jsonb, %s, %s)
+                    """,
+                    (
+                        user_message_id,
+                        user_input,
+                        _json.dumps([e.__dict__ for e in grammar_data.errors]),
+                        grammar_data.corrected_sentence,
+                        grammar_data.overall_score,
+                    ),
+                )
+
     # ── Audit Logging ──────────────────────────────────────────────────────
     _audit_logger.log(
         user_id=user_id,
@@ -312,17 +403,11 @@ def chat_respond(
 
     user_audio_url: str | None = None
     if user_object_key:
-        try:
-            user_audio_url = get_presigned_url(user_object_key)
-        except Exception:
-            logger.exception("Failed to generate presigned URL for user audio message_id=%s", user_message_id)
+        user_audio_url = f"/api/audio/{user_object_key}"
 
     assistant_audio_url: str | None = None
     if assistant_object_key:
-        try:
-            assistant_audio_url = get_presigned_url(assistant_object_key)
-        except Exception:
-            logger.exception("Failed to generate presigned URL for assistant audio message_id=%s", assistant_message_id)
+        assistant_audio_url = f"/api/audio/{assistant_object_key}"
 
     inline_audio = ""
     if response_audio_bytes and len(response_audio_bytes) <= _INLINE_AUDIO_LIMIT_BYTES:
@@ -343,6 +428,20 @@ def chat_respond(
         "yes" if assistant_audio_url else "no",
     )
 
+    grammar_summary = GrammarSummary(
+        error_count=len(grammar_data.errors),
+        has_errors=len(grammar_data.errors) > 0,
+        flagged_spans=[
+            GrammarSpan(
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+            )
+            for e in grammar_data.errors
+        ],
+    )
+
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
@@ -351,4 +450,6 @@ def chat_respond(
         user_audio_url=user_audio_url,
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
+        user_message_id=user_message_id,
+        grammar_summary=grammar_summary,
     )

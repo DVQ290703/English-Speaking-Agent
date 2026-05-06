@@ -1,7 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+import { API_BASE_URL, ENDPOINTS } from './config';
 
 export async function loginRequest({ email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.login}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -18,13 +18,13 @@ export async function loginRequest({ email, password }) {
   return data;
 }
 
-export async function registerRequest({ name, email, password }) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+export async function registerRequest({ display_name, email, password }) {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.register}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ display_name, email, password }),
   });
 
   const data = await response.json();
@@ -37,7 +37,7 @@ export async function registerRequest({ name, email, password }) {
 }
 
 export async function fetchMe(token) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.auth.me}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

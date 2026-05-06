@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -52,6 +52,19 @@ class LoginResponse(BaseModel):
     user: UserOut
 
 
+class GrammarSpan(BaseModel):
+    original: str
+    corrected: str
+    start_char: int
+    end_char: int
+
+
+class GrammarSummary(BaseModel):
+    error_count: int
+    has_errors: bool
+    flagged_spans: list[GrammarSpan]
+
+
 class ChatResponse(BaseModel):
     user_input: str
     response_text: str
@@ -60,6 +73,10 @@ class ChatResponse(BaseModel):
     user_audio_url: str | None = None
     assistant_audio_url: str | None = None
     conversation_id: str
+    user_message_id: str | None = None
+    grammar_summary: GrammarSummary = Field(
+        default_factory=lambda: GrammarSummary(error_count=0, has_errors=False, flagged_spans=[])
+    )
 
 
 class MessageOut(BaseModel):
@@ -78,15 +95,95 @@ class ConversationOut(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     topic_id: str | None
+    topic_code: str | None = None
+    cleared_at: datetime | None = None
 
 
 class ConversationListResponse(BaseModel):
     conversations: list[ConversationOut]
 
 
+class ForTopicConversationOut(BaseModel):
+    id: str
+    title: str | None
+    status: str
+    session_number: int
+    started_at: datetime
+    updated_at: datetime
+
+
+class ForTopicResponse(BaseModel):
+    topic_code: str
+    topic_title: str
+    conversations: list[ForTopicConversationOut]
+    total: int
+    limit_reached: bool
+
+
 class ConversationMessagesResponse(BaseModel):
     conversation_id: str
     messages: list[MessageOut]
+
+
+class ConversationScoresOut(BaseModel):
+    pronunciation: float | None = None
+    fluency: float | None = None
+    accuracy: float | None = None
+
+
+class ConversationStatOut(BaseModel):
+    id: str
+    topic: str
+    topic_code: str | None = None
+    started_at: datetime
+    duration_ms: float | None = None
+    avg_score: float | None = None
+    user_message_count: int = 0
+    scores: ConversationScoresOut | None = None
+
+
+class ConversationStatsResponse(BaseModel):
+    sessions: list[ConversationStatOut]
+
+
+class PhonemeDetail(BaseModel):
+    phoneme: str
+    accuracy_score: float | None = None
+
+
+class WordDetail(BaseModel):
+    word_index: int
+    word: str
+    accuracy_score: float | None = None
+    error_type: str | None = None
+    start_ms: int | None = None
+    duration_ms: int | None = None
+    phonemes: list[PhonemeDetail] = []
+
+
+class MessageScoreOut(BaseModel):
+    overall_score: float | None = None
+    accuracy_score: float | None = None
+    fluency_score: float | None = None
+    completeness_score: float | None = None
+    prosody_score: float | None = None
+    words: list[WordDetail] = []
+
+
+class MessageWithScoreOut(BaseModel):
+    id: str
+    role: str
+    input_mode: str | None = None
+    text_content: str | None = None
+    created_at: datetime
+    audio_url: str | None = None
+    assistant_audio_url: str | None = None
+    score: MessageScoreOut | None = None
+
+
+class ConversationWithScoresResponse(BaseModel):
+    conversation_id: str
+    messages: list[MessageWithScoreOut]
 
 
 class SyllableResult(BaseModel):
@@ -128,6 +225,7 @@ class WordResult(BaseModel):
 
 
 class AssessmentResponse(BaseModel):
+    assessment_id: str | None = None
     mode: Literal["scripted", "unscripted"]
     recognized_text: str
     pron_score: float
@@ -136,3 +234,39 @@ class AssessmentResponse(BaseModel):
     completeness_score: float | None
     prosody_score: float | None
     words: list[WordResult]
+
+
+class TopicOut(BaseModel):
+    code: str
+    title: str
+    description: str | None
+    difficulty_level: str | None
+    sort_order: int
+
+
+class CategoryWithTopicsOut(BaseModel):
+    code: str
+    title: str
+    sort_order: int
+    topics: list[TopicOut]
+
+
+class GrammarErrorDetail(BaseModel):
+    id: int
+    original: str
+    corrected: str
+    start_char: int
+    end_char: int
+    category: str
+    severity: str
+    explanation: str
+    rule: str
+    example: str
+
+
+class GrammarDetailResponse(BaseModel):
+    message_id: str
+    user_input: str
+    errors: list[GrammarErrorDetail]
+    corrected_sentence: str | None
+    overall_score: int

@@ -1,5 +1,5 @@
 import { Bot, Play, User } from 'lucide-react';
-import { useT } from '../../i18n/LanguageContext';
+import { useT } from '../../i18n/useLanguage';
 
 export interface Mistake {
   wrong: string;
@@ -19,6 +19,7 @@ export interface ScoreDetails {
 
 export interface Message {
   id: number;
+  backendMessageId?: string;
   role: 'agent' | 'user';
   text: string;
   timestamp: Date;
@@ -34,31 +35,118 @@ export interface Message {
   assessmentNote?: string;
 }
 
-const _PHONEME_TIPS: Record<string, string> = {
-  θ: "Đặt đầu lưỡi giữa hai cửa răng, thổi nhẹ (ví dụ 'think').",
-  ð: "Đặt đầu lưỡi giữa răng, thổi và rung nhẹ (ví dụ 'this').",
-  r: "Cuộn nhẹ phần sau lưỡi hoặc uốn nhẹ lưỡi về sau; tránh phát âm giống 'đ'.",
-  l: "Chạm đầu lưỡi vào hàm trên khi phát âm (ví dụ 'light').",
+const PHONEME_TIPS_BASE: Record<string, string> = {
+  p: "Bật môi mạnh, không rung thanh quản (ví dụ 'pen'). Chú ý bật hơi rõ ở đầu từ.",
+  b: "Khép môi, bật ra và rung thanh quản (ví dụ 'book').",
+  t: "Đầu lưỡi chạm lợi trên rồi bật ra, không rung (ví dụ 'top'). Bật hơi rõ ở đầu từ.",
+  d: "Đầu lưỡi chạm lợi trên, bật ra và rung thanh quản (ví dụ 'dog').",
+  k: "Phần sau lưỡi chạm vòm mềm rồi bật ra, không rung (ví dụ 'cat').",
+  g: "Phần sau lưỡi chạm vòm mềm, bật ra và rung thanh quản (ví dụ 'go').",
+  f: "Răng trên chạm môi dưới, thổi hơi ra, không rung (ví dụ 'fish').",
   v: "Chạm răng trên vào môi dưới và rung, không bật môi (ví dụ 'very').",
-  w: "Tròn môi và đẩy môi ra trước (ví dụ 'we').",
-  ʃ: "Đặt lưỡi hơi lùi, răng không chạm, thổi nhẹ (ví dụ 'she').",
-  ʒ: "Tương tự 'ʃ' nhưng có rung thanh quản (ví dụ 'vision').",
-  tʃ: "Kết hợp 't' + 'ʃ' (ví dụ 'church').",
-  dʒ: "Kết hợp 'd' + 'ʒ' (ví dụ 'judge').",
-  æ: "Mở miệng rộng, lưỡi thấp (ví dụ 'cat').",
-  ɑ: "Mở rộng miệng, lưỡi thấp sau (ví dụ 'father').",
-  ɒ: "Môi hơi tròn (BrE 'lot').",
-  ɔ: "Môi hơi tròn, kéo dài hơn 'ɒ' (ví dụ 'thought').",
-  ɜ: "Âm giữa miệng, giữ lưỡi ở giữa (ví dụ 'bird').",
-  ɪ: "Ngắn, không kéo dài (ví dụ 'sit').",
-  iː: "Kéo dài âm 'ee' (ví dụ 'see').",
-  uː: "Kéo dài âm 'oo' (ví dụ 'food').",
-  ʊ: "Ngắn, giống 'u' (ví dụ 'book').",
-  ə: "Schwa - âm trung tính, chú ý phát âm nhẹ (ví dụ 'sofa').",
-  eɪ: "Âm đôi, từ 'e' chuyển sang 'i' (ví dụ 'say').",
-  aɪ: "Âm đôi, từ 'a' sang 'i' (ví dụ 'my').",
-  oʊ: "Âm đôi, từ 'o' sang 'u' (ví dụ 'go').",
+  θ: "Đặt đầu lưỡi giữa hai cửa răng, thổi nhẹ, không rung (ví dụ 'think').",
+  ð: "Đặt đầu lưỡi giữa răng, thổi và rung nhẹ (ví dụ 'this').",
+  s: "Đầu lưỡi gần lợi trên, thổi hơi ra như tiếng rắn, không rung (ví dụ 'see').",
+  z: "Như 's' nhưng rung thanh quản (ví dụ 'zoo'). Đừng phát âm thành 's'.",
+  ʃ: "Đặt lưỡi hơi lùi, môi tròn nhẹ, thổi nhẹ, không rung (ví dụ 'she').",
+  ʒ: "Tương tự 'ʃ' nhưng có rung thanh quản (ví dụ 'vision', 'measure').",
+  h: "Thổi hơi nhẹ ra từ cổ họng, miệng mở (ví dụ 'hat').",
+  tʃ: "Kết hợp 't' + 'ʃ', bật ra một tiếng ngắn (ví dụ 'church').",
+  dʒ: "Kết hợp 'd' + 'ʒ', có rung thanh quản (ví dụ 'judge', 'gym').",
+  m: "Khép môi, hơi đi qua mũi, có rung (ví dụ 'mom').",
+  n: "Đầu lưỡi chạm lợi trên, hơi đi qua mũi, có rung (ví dụ 'no').",
+  ŋ: "Sau lưỡi chạm vòm mềm, hơi đi qua mũi (ví dụ 'sing'). Không bật 'g' ra cuối.",
+  l: "Chạm đầu lưỡi vào lợi trên khi phát âm (ví dụ 'light'). Cuối từ thì lưỡi cong nhẹ về sau.",
+  r: "Cuộn nhẹ phần sau lưỡi hoặc uốn nhẹ lưỡi về sau, không chạm vòm; tránh phát âm giống 'đ' tiếng Việt.",
+  w: "Tròn môi và đẩy môi ra trước (ví dụ 'we', 'water').",
+  j: "Lưỡi gần vòm cứng, lướt nhanh sang nguyên âm sau (ví dụ 'yes').",
+  ɪ: "Ngắn, không kéo dài, miệng hơi mở (ví dụ 'sit'). Không phát âm thành 'iː'.",
+  iː: "Kéo dài âm 'ee', miệng hơi cười (ví dụ 'see', 'meet').",
+  e: "Miệng mở vừa, lưỡi giữa-trước (ví dụ 'bed', 'red').",
+  æ: "Mở miệng rộng, lưỡi thấp phía trước (ví dụ 'cat', 'apple').",
+  ʌ: "Miệng mở vừa, lưỡi giữa, ngắn (ví dụ 'cup', 'love').",
+  ɑ: "Mở rộng miệng, lưỡi thấp sau (ví dụ 'father', 'car').",
+  ɒ: "Môi hơi tròn, miệng mở, ngắn (giọng Anh 'lot').",
+  ɔ: "Môi tròn, kéo dài hơn 'ɒ' (ví dụ 'thought', 'law').",
+  ʊ: "Ngắn, môi tròn nhẹ, giống 'u' (ví dụ 'book', 'put').",
+  uː: "Kéo dài âm 'oo', môi tròn chặt (ví dụ 'food', 'blue').",
+  ɜ: "Âm giữa miệng, giữ lưỡi ở giữa, kéo dài (ví dụ 'bird', 'work').",
+  ə: "Schwa — âm trung tính, ngắn và yếu, không nhấn (ví dụ 'sofa', 'about').",
+  eɪ: "Âm đôi, từ 'e' chuyển sang 'i' (ví dụ 'say', 'day').",
+  aɪ: "Âm đôi, từ 'a' sang 'i' (ví dụ 'my', 'time').",
+  ɔɪ: "Âm đôi, từ 'ɔ' sang 'i' (ví dụ 'boy', 'coin').",
+  aʊ: "Âm đôi, từ 'a' sang 'u', môi tròn dần (ví dụ 'now', 'house').",
+  oʊ: "Âm đôi, từ 'o' sang 'u' (giọng Mỹ 'go', 'no').",
+  əʊ: "Âm đôi, bắt đầu schwa rồi sang 'u' (giọng Anh 'go', 'no').",
+  ɪə: "Âm đôi, từ 'ɪ' sang schwa (giọng Anh 'here', 'near').",
+  eə: "Âm đôi, từ 'e' sang schwa (giọng Anh 'hair', 'care').",
+  ʊə: "Âm đôi, từ 'ʊ' sang schwa (giọng Anh 'tour', 'pure').",
 };
+
+const ARPABET_TO_IPA: Record<string, string> = {
+  AA: 'ɑ',
+  AE: 'æ',
+  AH: 'ʌ',
+  AO: 'ɔ',
+  AW: 'aʊ',
+  AY: 'aɪ',
+  EH: 'e',
+  ER: 'ɜ',
+  EY: 'eɪ',
+  IH: 'ɪ',
+  IY: 'iː',
+  OW: 'oʊ',
+  OY: 'ɔɪ',
+  UH: 'ʊ',
+  UW: 'uː',
+  AX: 'ə',
+  B: 'b',
+  CH: 'tʃ',
+  D: 'd',
+  DH: 'ð',
+  F: 'f',
+  G: 'g',
+  HH: 'h',
+  H: 'h',
+  JH: 'dʒ',
+  K: 'k',
+  L: 'l',
+  M: 'm',
+  N: 'n',
+  NG: 'ŋ',
+  P: 'p',
+  R: 'r',
+  S: 's',
+  SH: 'ʃ',
+  T: 't',
+  TH: 'θ',
+  V: 'v',
+  W: 'w',
+  Y: 'j',
+  Z: 'z',
+  ZH: 'ʒ',
+};
+
+export const PHONEME_TIPS: Record<string, string> = (() => {
+  const out: Record<string, string> = { ...PHONEME_TIPS_BASE };
+  for (const [key, tip] of Object.entries(PHONEME_TIPS_BASE)) {
+    if (key.endsWith('ː')) {
+      const short = key.slice(0, -1);
+      if (!(short in out)) out[short] = tip;
+    } else {
+      const long = key + 'ː';
+      if (!(long in out)) out[long] = tip;
+    }
+  }
+  for (const [arpa, ipa] of Object.entries(ARPABET_TO_IPA)) {
+    const tip = out[ipa];
+    if (!tip) continue;
+    if (!(arpa in out)) out[arpa] = tip;
+    const lower = arpa.toLowerCase();
+    if (!(lower in out)) out[lower] = tip;
+  }
+  return out;
+})();
 
 interface MessageBubbleProps {
   message: Message;
@@ -71,7 +159,7 @@ interface MessageBubbleProps {
 function TypingIndicator() {
   return (
     <div className="flex items-center gap-1 px-1 py-0.5">
-      {[0, 150, 300].map(delay => (
+      {[0, 150, 300].map((delay) => (
         <div
           key={delay}
           className="w-1.5 h-1.5 rounded-full bg-blue-400"
@@ -87,17 +175,17 @@ function ScoreBadge({ score }: { score: number }) {
   const isGood = score >= 85;
   const isMid = score >= 70;
   const cls = isGood
-    ? 'text-green-700 bg-green-50 border-green-500/35'
+    ? 'text-green-700 bg-green-50 border-green-500/35 dark:text-green-200 dark:bg-green-500/25 dark:border-green-400/60'
     : isMid
-      ? 'text-amber-700 bg-yellow-50 border-yellow-500/35'
-      : 'text-orange-700 bg-orange-50 border-orange-500/35';
+      ? 'text-amber-700 bg-yellow-50 border-yellow-500/35 dark:text-amber-200 dark:bg-amber-500/25 dark:border-amber-400/60'
+      : 'text-orange-700 bg-orange-50 border-orange-500/35 dark:text-orange-200 dark:bg-orange-500/25 dark:border-orange-400/60';
   return (
     <span
       title={t('bubble.score.title')}
       className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border text-[10px] font-bold leading-4 tracking-wide select-none ${cls}`}
     >
       <span className="tabular-nums font-bold">{score}</span>
-      <span data-score-suffix className="text-black/30 font-normal text-[9px] ml-0.5">
+      <span data-score-suffix className="font-normal text-[10px] ml-0.5 opacity-70">
         /<span className="font-semibold">100</span>
       </span>
     </span>
@@ -110,7 +198,7 @@ function ReplayButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       title={t('bubble.replay.title')}
-      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35"
+      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 dark:border-white/25 dark:bg-white/10 dark:text-white/70 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35 dark:hover:bg-blue-400/25 dark:hover:text-blue-300 dark:hover:border-blue-400/50"
     >
       <Play className="w-2 h-2 fill-current" />
     </button>

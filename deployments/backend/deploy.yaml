@@ -3,7 +3,6 @@
 # Apply  : kubectl apply -f deployments/backend/deploy.yaml
 # Status : kubectl get pods -l app=backend-agent -n english-speaking-agent
 # =============================================================================
-# 
 # ── Namespace ─────────────────────────────────────────────────────────────────
 # Shared with frontend. Idempotent — safe to re-apply.
 apiVersion: v1

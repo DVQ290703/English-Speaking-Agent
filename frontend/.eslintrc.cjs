@@ -1,39 +1,48 @@
+/* eslint-env node */
 module.exports = {
   root: true,
   env: {
     browser: true,
-    es2021: true,
+    es2022: true, // Hiện đại
     node: true,
   },
   parser: '@typescript-eslint/parser',
   parserOptions: {
-    ecmaVersion: 2021,
+    ecmaVersion: 'latest',
     sourceType: 'module',
     ecmaFeatures: { jsx: true },
-    jsxRuntime: 'automatic',
+  },
+  settings: {
+    react: { version: 'detect' },
   },
   plugins: ['@typescript-eslint', 'react', 'react-hooks', 'prettier'],
   extends: [
     'eslint:recommended',
-    'plugin:react/recommended',
-    'plugin:react-hooks/recommended',
     'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended',
+    'plugin:react/recommended',
+    'plugin:react/jsx-runtime', // Tốt nhất cho React 17, 18+
+    'plugin:prettier/recommended', // Phải để cuối cùng
   ],
-  settings: {
-    react: {
-      version: 'detect',
-    },
-  },
   rules: {
-    'prettier/prettier': 'error',
-    'react/prop-types': 'off',
-    'react/react-in-jsx-scope': 'off',
-    // allow empty catch blocks for patterns that intentionally ignore errors
-    'no-empty': ['error', { allowEmptyCatch: true }],
-    // prefer warnings for unused vars during incremental cleanup; ignore vars starting with '_'
-    '@typescript-eslint/no-unused-vars': ['warn', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
-    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    'react-hooks/rules-of-hooks': 'error',
+    'react-hooks/exhaustive-deps': 'warn',
+    'prettier/prettier': 'error', // Ép lỗi Prettier ngay trong ESLint
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+    ],
     '@typescript-eslint/no-explicit-any': 'warn',
+    'react/prop-types': 'off',
+    'no-empty': ['error', { allowEmptyCatch: true }], // Nhặt từ Option 2 sang
   },
+  overrides: [
+    {
+      files: ['*.js', '*.jsx'],
+      rules: {
+        '@typescript-eslint/no-var-requires': 'off',
+        '@typescript-eslint/no-require-imports': 'off',
+      },
+    },
+  ],
+  ignorePatterns: ['dist', 'build', 'node_modules', 'public', '*.config.*', '.eslintrc.cjs'],
 };

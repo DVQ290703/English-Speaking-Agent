@@ -1,5 +1,6 @@
 """Groq LLM service — generates speech-friendly responses via ChatGroq."""
 
+import json
 import os
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from app.core.logger import logger
-from app.prompts.prompt_builder import build_system_prompt, extract_prompt_context
+from app.prompts.prompt_builder import build_system_prompt
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md"
 
@@ -41,7 +42,13 @@ class GroqLLMService:
         self.client = ChatGroq(api_key=api_key, model=model_name, temperature=0.2)
         logger.info("GroqLLMService ready model=%s", model_name)
 
-    def generate_response(self, user_input: str, history: list[str] | None = None) -> str:
+    def generate_response(
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        category: str | None = None,
+        topic: str | None = None,
+    ) -> str:
         """Generate a reply using the system prompt and properly-structured conversation history."""
         history = history or []
         logger.info(
@@ -51,13 +58,12 @@ class GroqLLMService:
             len(user_input),
         )
 
-        topic, sub_option = extract_prompt_context(history)
-        dynamic_prompt = build_system_prompt(topic=topic, sub_option=sub_option)
+        dynamic_prompt = build_system_prompt(category=category, topic=topic)
         messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
 
         if history:
-            if topic:
-                logger.debug("GroqLLM resolved dynamic prompt topic=%s sub_option_present=%s", topic, bool(sub_option))
+            if category:
+                logger.debug("GroqLLM resolved dynamic prompt category=%s topic_present=%s", category, bool(topic))
 
             for line in history[-8:]:
                 if line.startswith("User:"):
@@ -76,3 +82,52 @@ class GroqLLMService:
 
         logger.info("GroqLLM response_length=%d", len(result))
         return result
+
+    def generate_response_with_grammar(
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        category: str | None = None,
+        topic: str | None = None,
+    ) -> tuple[str, str | None]:
+        """Generate a reply with grammar analysis in one JSON-mode LLM call.
+
+        Returns (response_text, raw_json_str).
+        Falls back to (plain_response_text, None) when JSON mode fails.
+        """
+        history = history or []
+        logger.info(
+            "GroqLLM generate_response_with_grammar model=%s history_lines=%d input_length=%d",
+            self.model_name,
+            len(history),
+            len(user_input),
+        )
+
+        dynamic_prompt = build_system_prompt(category=category, topic=topic, include_grammar=True)
+        messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
+
+        for line in history[-8:]:
+            if line.startswith("User:"):
+                messages.append(HumanMessage(content=line[5:].strip()))
+            elif line.startswith("Assistant:"):
+                messages.append(AIMessage(content=line[10:].strip()))
+
+        messages.append(HumanMessage(content=user_input))
+
+        try:
+            json_client = self.client.bind(response_format={"type": "json_object"})
+            response = json_client.invoke(messages)
+            raw = response.content if isinstance(response, AIMessage) else str(response)
+
+            data = json.loads(raw)
+            response_text = data.get("response_text", "").strip()
+            if response_text:
+                logger.info("GroqLLM grammar response parsed ok response_length=%d", len(response_text))
+                return response_text, raw
+
+            logger.warning("GroqLLM grammar response missing response_text key, falling back")
+        except Exception:
+            logger.exception("GroqLLM generate_response_with_grammar failed, falling back to plain response")
+
+        fallback = self.generate_response(user_input=user_input, history=history, category=category, topic=topic)
+        return fallback, None

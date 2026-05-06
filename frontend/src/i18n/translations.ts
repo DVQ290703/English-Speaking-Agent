@@ -11,7 +11,7 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
   if (value === undefined) return key;
   if (vars) {
     return value.replace(/\{(\w+)\}/g, (_, name) =>
-      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`
+      Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : `{${name}}`,
     );
   }
   return value;
@@ -29,6 +29,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'lang.en.long': 'English',
     'lang.vi.long': 'Tiếng Việt',
 
+    // Theme toggle
+    'theme.toggle.toDark': 'Switch to dark mode',
+    'theme.toggle.toLight': 'Switch to light mode',
+
     // Common
     'common.signIn': 'Sign in',
     'common.signUp': 'Sign up',
@@ -40,8 +44,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.agent': 'Agent',
     'common.start': 'Start',
     'common.replay': 'Replay',
-    'common.delete': 'Delete',
-    'common.confirm': 'Confirm',
     'common.dashboard': 'Dashboard',
 
     // Dashboard
@@ -60,34 +62,29 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.stats.streak.sub': 'keep it up!',
     'dash.stats.minutes': '{n} min',
 
-    'dash.storage.full': '⚠ Storage almost full',
-    'dash.storage.usage': 'Storage usage',
-    'dash.storage.fullNote':
-      'New sessions may start dropping audio or older history. Clean up to free space.',
-    'dash.storage.cleanup': 'Clean up old sessions',
-    'dash.storage.confirmCleanup': 'Confirm: remove oldest {n}?',
-    'dash.storage.sessionsCount': '{n}/{max} sessions',
+    'dash.chart.title': 'IELTS Band Score Trend',
+    'dash.chart.subtitle': 'Your estimated IELTS band across all sessions',
+    'dash.chart.avgLabel': 'Median Band',
+    'dash.chart.band': 'Band',
+    'dash.chart.pts': 'band',
+    'dash.chart.tabLine': 'Trend',
+    'dash.chart.tabRadar': 'Skills',
+    'dash.chart.sessionCount': '{n} sessions recorded',
+    'dash.chart.practiceBtn': 'Start new session →',
+    'dash.chart.emptyTitle': 'No data yet',
+    'dash.chart.emptyBody':
+      'Complete a speaking session to see your IELTS band score trend over time.',
+    'dash.chart.emptyBtn': 'Start speaking →',
+    'dash.chart.radar.pronunciation': 'Pronunciation',
+    'dash.chart.radar.fluency': 'Fluency',
+    'dash.chart.radar.accuracy': 'Accuracy',
+    'dash.chart.radar.label': 'Avg Band',
+    'dash.chart.radar.note': 'Based on sub-scores from sessions with pronunciation assessment',
 
     'dash.topics.title': 'Choose a practice topic',
     'dash.topics.subtitle': 'Browse by category and pick what you want to practise today.',
     'dash.topics.scrollLeft': 'Scroll left',
     'dash.topics.scrollRight': 'Scroll right',
-
-    'dash.history.title': 'Session History',
-    'dash.history.count': '{n} sessions',
-    'dash.history.searchPlaceholder': 'Search by topic, date, or score...',
-    'dash.history.clearSearch': 'Clear search',
-    'dash.history.empty': 'No sessions yet for this topic.',
-    'dash.history.cta': 'Ready to practise? Start a new session.',
-    'dash.history.startSpeaking': 'Start speaking →',
-    'dash.history.tabAll': 'All',
-
-    'dash.session.justSaved': 'Just saved',
-    'dash.session.viewTranscript': 'View transcript →',
-    'dash.session.turns': '{n} turns',
-    'dash.session.fixes': '{n} fixes',
-    'dash.session.deleteConfirm': 'Delete this practice session? This cannot be undone.',
-    'dash.session.deleteAria': 'Delete session',
 
     'dash.logout.title': 'Sign out?',
     'dash.logout.body': 'Are you sure you want to sign out of your account?',
@@ -97,13 +94,131 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.loading': 'Loading your workspace...',
     'dash.fallbackName': 'Learner',
 
+    // Error boundary
+    'error.title': 'Something went wrong',
+    'error.body': 'The page failed to load. Please try again or reload.',
+    'error.retry': 'Try again',
+    'error.reload': 'Reload page',
+
+    // Toasts
+    'toast.signedOut': 'Signed out successfully.',
+    'toast.resumingTopic': 'Resuming your last conversation on this topic.',
+    'toast.welcomeBack': 'Welcome back, {name}!',
+    'toast.loginFailed': 'Login failed',
+    'toast.accountCreated': 'Account created!',
+    'toast.registerFailed': 'Registration failed. Please try again.',
+    'toast.loginRequired': 'Please sign in to access this page.',
+
+    // Auth (loading states)
+    'auth.signingIn': 'Signing in…',
+    'auth.creatingAccount': 'Creating account…',
+
+    // Shortcuts cheatsheet
+    'shortcuts.title': 'Keyboard shortcuts',
+    'shortcuts.subtitle': 'Speed up your practice with these keys',
+    'shortcuts.hint': 'Press ? anywhere to open or close this panel',
+    'shortcuts.section.global': 'Global',
+    'shortcuts.section.voice': 'Voice session',
+    'shortcuts.section.dashboard': 'Dashboard',
+    'shortcuts.openCheatsheet': 'Open this cheatsheet',
+    'shortcuts.closeModal': 'Close any modal',
+    'shortcuts.toggleMic': 'Toggle microphone',
+    'shortcuts.sendText': 'Send typed message',
+    'shortcuts.muteAgent': 'Mute / unmute agent voice',
+    'shortcuts.replayLast': 'Replay last agent reply',
+    'shortcuts.newSession': 'Start new session',
+    'shortcuts.toggleTheme': 'Toggle dark mode',
+
+    // Badges / gamification
+    'badges.title': 'Achievements',
+    'badges.subtitle': 'Earn badges as you practise',
+    'badges.locked': 'Locked',
+    'badges.unlocked': 'Unlocked',
+    'badges.progress': '{n} of {total} unlocked',
+    'badges.firstSession.name': 'First Step',
+    'badges.firstSession.desc': 'Complete your first session',
+    'badges.threeDayStreak.name': 'On a Roll',
+    'badges.threeDayStreak.desc': '3-day practice streak',
+    'badges.sevenDayStreak.name': 'Week Warrior',
+    'badges.sevenDayStreak.desc': '7-day practice streak',
+    'badges.tenSessions.name': 'Dedicated',
+    'badges.tenSessions.desc': 'Complete 10 sessions',
+    'badges.band65.name': 'Solid 6.5',
+    'badges.band65.desc': 'Reach Band 6.5',
+    'badges.band70.name': 'Strong 7.0',
+    'badges.band70.desc': 'Reach Band 7.0',
+    'badges.hourPracticed.name': 'Hour Hero',
+    'badges.hourPracticed.desc': 'Practise 60 minutes total',
+
+    // Compare mode chart
+    'dash.chart.compareToggle': 'Compare to last period',
+    'dash.chart.thisPeriod': 'This period',
+    'dash.chart.lastPeriod': 'Last period',
+    'dash.chart.delta.up': '+{n} band vs last period',
+    'dash.chart.delta.down': '{n} band vs last period',
+    'dash.chart.delta.same': 'Same as last period',
+
+    // Empty-state illustration
+    'dash.empty.step1': 'Pick a topic',
+    'dash.empty.step2': 'Talk with the AI',
+    'dash.empty.step3': 'See your IELTS band',
+
+    // Voice agent — history sidebar
+    'va.history.title': 'Past sessions',
+    'va.history.empty': 'No past sessions yet. Finish your first chat!',
+    'va.history.open': 'Open history',
+    'va.history.close': 'Close history',
+    'va.history.viewSummary': 'View summary',
+    'va.history.delete': 'Delete',
+    'va.history.confirmDelete': 'Delete this session?',
+    'va.history.deleted': 'Session deleted.',
+    'va.history.minutes': '{n} min',
+    'va.history.sentences': '{n} sentences',
+    'va.history.count': '{n} session(s)',
+    'va.history.loading': 'Loading conversation...',
+
+    // Voice agent — conversation sidebar (left)
+    'va.sidebar.newChat': 'New Chat',
+    'va.sidebar.today': 'Today',
+    'va.sidebar.yesterday': 'Yesterday',
+    'va.sidebar.thisWeek': 'This Week',
+    'va.sidebar.older': 'Older',
+    'va.sidebar.empty': 'No conversations yet.',
+    'va.sidebar.delete': 'Delete',
+    'va.sidebar.confirmDelete': 'Delete this conversation?',
+    'va.sidebar.confirmDeleteTitle': 'Confirm Deletion',
+    'va.sidebar.deleted': 'Deleted.',
+    'va.sidebar.deleteFailed': 'Could not delete conversation.',
+    'va.sidebar.close': 'Close sidebar',
+    'va.sidebar.limitReached':
+      'This topic has reached the 5-session limit. Delete an old session to start a new one.',
+    'va.sidebar.limitWarningAlert':
+      'Session limit reached (5/5). Delete an older session to start a new one.',
+    'va.sidebar.limitBadge': '5/5',
+    'va.sidebar.noTopicSelected': 'Select a topic first to see conversation history.',
+    'va.sidebar.emptyTopic': 'No conversations for this topic yet.',
+    'va.sidebar.topicCount': '{count}/5 sessions',
+    'va.sidebar.uncategorized': 'No topic assigned',
+
+    // Onboarding tip (first time)
+    'onboarding.title': 'Welcome to Voice Trainer 👋',
+    'onboarding.body':
+      'Pick any topic below to start a guided English speaking session. The AI listens, scores your pronunciation, and gives instant feedback. Press ? anytime to see shortcuts.',
+    'onboarding.cta': 'Got it, let\u2019s go',
+
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',
     'category.IELTS Speaking.desc': 'Practise official IELTS-style speaking parts.',
+    'category.ielts.name': 'IELTS Speaking',
+    'category.ielts.desc': 'Practise official IELTS-style speaking parts.',
     'category.Business & Career.name': 'Business & Career',
     'category.Business & Career.desc': 'Workplace English and professional speaking.',
+    'category.business.name': 'Business & Career',
+    'category.business.desc': 'Workplace English and professional speaking.',
     'category.Daily Life.name': 'Daily Life',
     'category.Daily Life.desc': 'Everyday situations you face all the time.',
+    'category.daily.name': 'Daily Life',
+    'category.daily.desc': 'Everyday situations you face all the time.',
     'category.Travel & Culture.name': 'Travel & Culture',
     'category.Travel & Culture.desc': 'From booking flights to cross-cultural chats.',
 
@@ -128,6 +243,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.Negotiation.desc': 'Bargain politely, propose terms, reach agreement.',
     'topic.Email & Phone.title': 'Phone & Email Talk',
     'topic.Email & Phone.desc': 'Professional phone calls and follow-ups.',
+    'topic.Travel English.title': 'Travel English',
+    'topic.Travel English.desc': 'Booking, directions, airports, holiday stories.',
+    'topic.Business Meeting.title': 'Business Meeting',
+    'topic.Business Meeting.desc': 'Meetings, negotiations, presentations.',
     'topic.Daily Conversation.title': 'Daily Conversation',
     'topic.Daily Conversation.desc': 'Hobbies, family, weekend plans, weather.',
     'topic.Shopping.title': 'Shopping',
@@ -180,11 +299,36 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.left.scoreBreakdown': 'Score breakdown',
     'va.left.errors': 'Errors',
     'va.left.errorsCount': 'Errors ({n})',
+    'va.left.combinedTitle': 'Pronunciation & Grammar',
+    'va.left.combinedSummary':
+      'You have {pronunciation} pronunciation issues and {grammar} grammar issues.',
+    'va.left.pronunciationCardTitle': 'Pronunciation Issues',
+    'va.left.pronunciationSummary': 'Detected {pronunciation} pronunciation issues.',
+    'va.left.grammarCardTitle': 'Grammar Issues',
+    'va.left.grammarSummary': 'Detected {grammar} grammar issues.',
+    'va.left.perfectPronunciation': 'Perfect pronunciation.',
+    'va.left.correctGrammar': 'Correct grammar.',
+    'va.left.clickDetails': 'Bấm để xem chi tiết →',
     'va.left.noIssues': 'Great job! No issues detected in this sentence.',
+    'va.left.checkingGrammar': 'Checking grammar...',
     'va.left.feedbackEmptyConnected':
       'Send a message to see feedback for your latest sentence here.',
     'va.left.assessing': 'Assessing...',
     'va.left.feedbackEmptyDisconnected': 'Connect to see real-time English corrections',
+
+    // VoiceAgent — combined feedback modal
+    'va.modal.pronunciationIssues': 'Pronunciation Issues',
+    'va.modal.grammarIssues': 'Grammar Issues',
+    'va.modal.original': 'Original',
+    'va.modal.corrected': 'Corrected',
+    'va.modal.correctedSentence': 'Corrected sentence',
+    'va.modal.targetSentence': 'Target sentence',
+    'va.modal.explanation': 'Explanation',
+    'va.modal.noExplanation': 'No additional explanation provided.',
+    'va.tip.title': 'Phoneme tip',
+    'va.tip.phoneme': 'Phoneme',
+    'va.tip.accuracy': 'Accuracy',
+    'va.tip.noTip': 'No tip available for this phoneme yet.',
 
     // VoiceAgent — score labels
     'va.score.overall': 'Overall',
@@ -215,8 +359,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.input.connectHint': 'Connect to start chatting',
     'va.input.listening': 'Listening to your voice...',
     'va.input.agentTyping': 'Agent is typing...',
-    'va.input.placeholder': 'Type a message... (Enter to send)',
-    'va.input.statusHint': '{n} messages • Enter to send, Shift+Enter for newline',
+    'va.input.placeholder': 'Type a message...',
+    'va.input.statusHint': '{n} messages',
 
     // VoiceAgent — settings overlay
     'va.settings.title': 'Practice topic',
@@ -272,6 +416,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'lang.en.long': 'English',
     'lang.vi.long': 'Tiếng Việt',
 
+    // Theme toggle
+    'theme.toggle.toDark': 'Chuyển sang giao diện tối',
+    'theme.toggle.toLight': 'Chuyển sang giao diện sáng',
+
     // Common
     'common.signIn': 'Đăng nhập',
     'common.signUp': 'Đăng ký',
@@ -283,8 +431,6 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.agent': 'Trợ lý',
     'common.start': 'Bắt đầu',
     'common.replay': 'Phát lại',
-    'common.delete': 'Xóa',
-    'common.confirm': 'Xác nhận',
     'common.dashboard': 'Trang chính',
 
     // Dashboard
@@ -303,34 +449,29 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.stats.streak.sub': 'cố lên!',
     'dash.stats.minutes': '{n} phút',
 
-    'dash.storage.full': '⚠ Bộ nhớ gần đầy',
-    'dash.storage.usage': 'Mức sử dụng bộ nhớ',
-    'dash.storage.fullNote':
-      'Phiên mới có thể bị mất audio hoặc lịch sử cũ. Hãy dọn dẹp để giải phóng dung lượng.',
-    'dash.storage.cleanup': 'Dọn dẹp phiên cũ',
-    'dash.storage.confirmCleanup': 'Xác nhận: xóa {n} phiên cũ nhất?',
-    'dash.storage.sessionsCount': '{n}/{max} phiên',
+    'dash.chart.title': 'Xu hướng Band IELTS',
+    'dash.chart.subtitle': 'Band IELTS ước tính qua các phiên luyện tập',
+    'dash.chart.avgLabel': 'Band giữa',
+    'dash.chart.band': 'Band',
+    'dash.chart.pts': 'band',
+    'dash.chart.tabLine': 'Xu hướng',
+    'dash.chart.tabRadar': 'Kỹ năng',
+    'dash.chart.sessionCount': '{n} phiên đã ghi nhận',
+    'dash.chart.practiceBtn': 'Bắt đầu phiên mới →',
+    'dash.chart.emptyTitle': 'Chưa có dữ liệu',
+    'dash.chart.emptyBody':
+      'Hoàn thành một phiên nói để xem xu hướng band IELTS của bạn theo thời gian.',
+    'dash.chart.emptyBtn': 'Bắt đầu nói →',
+    'dash.chart.radar.pronunciation': 'Phát âm',
+    'dash.chart.radar.fluency': 'Lưu loát',
+    'dash.chart.radar.accuracy': 'Chính xác',
+    'dash.chart.radar.label': 'Band TB',
+    'dash.chart.radar.note': 'Dựa trên điểm thành phần từ các phiên có đánh giá phát âm',
 
     'dash.topics.title': 'Chọn chủ đề luyện tập',
     'dash.topics.subtitle': 'Duyệt theo danh mục và chọn chủ đề bạn muốn luyện hôm nay.',
     'dash.topics.scrollLeft': 'Cuộn sang trái',
     'dash.topics.scrollRight': 'Cuộn sang phải',
-
-    'dash.history.title': 'Lịch sử phiên',
-    'dash.history.count': '{n} phiên',
-    'dash.history.searchPlaceholder': 'Tìm theo chủ đề, ngày, hoặc điểm...',
-    'dash.history.clearSearch': 'Xóa tìm kiếm',
-    'dash.history.empty': 'Chưa có phiên nào cho chủ đề này.',
-    'dash.history.cta': 'Sẵn sàng luyện tập? Bắt đầu một phiên mới.',
-    'dash.history.startSpeaking': 'Bắt đầu nói →',
-    'dash.history.tabAll': 'Tất cả',
-
-    'dash.session.justSaved': 'Vừa lưu',
-    'dash.session.viewTranscript': 'Xem hội thoại →',
-    'dash.session.turns': '{n} lượt',
-    'dash.session.fixes': '{n} sửa',
-    'dash.session.deleteConfirm': 'Xóa phiên luyện tập này? Hành động này không thể hoàn tác.',
-    'dash.session.deleteAria': 'Xóa phiên',
 
     'dash.logout.title': 'Đăng xuất?',
     'dash.logout.body': 'Bạn có chắc muốn đăng xuất khỏi tài khoản không?',
@@ -340,13 +481,129 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'dash.loading': 'Đang tải không gian làm việc...',
     'dash.fallbackName': 'Học viên',
 
+    // Error boundary
+    'error.title': 'Đã có lỗi xảy ra',
+    'error.body': 'Trang không tải được. Vui lòng thử lại hoặc tải lại trang.',
+    'error.retry': 'Thử lại',
+    'error.reload': 'Tải lại trang',
+
+    // Toasts
+    'toast.signedOut': 'Đã đăng xuất.',
+    'toast.resumingTopic': 'Đang tiếp tục cuộc trò chuyện gần nhất của chủ đề này.',
+    'toast.welcomeBack': 'Chào bạn trở lại, {name}!',
+    'toast.loginFailed': 'Đăng nhập thất bại',
+    'toast.accountCreated': 'Đã tạo tài khoản!',
+    'toast.registerFailed': 'Đăng ký thất bại. Vui lòng thử lại.',
+    'toast.loginRequired': 'Vui lòng đăng nhập để vào trang này.',
+
+    // Auth (loading states)
+    'auth.signingIn': 'Đang đăng nhập…',
+    'auth.creatingAccount': 'Đang tạo tài khoản…',
+
+    // Shortcuts cheatsheet
+    'shortcuts.title': 'Phím tắt',
+    'shortcuts.subtitle': 'Luyện tập nhanh hơn với các phím này',
+    'shortcuts.hint': 'Bấm ? bất cứ đâu để mở/đóng bảng này',
+    'shortcuts.section.global': 'Toàn cục',
+    'shortcuts.section.voice': 'Phiên luyện nói',
+    'shortcuts.section.dashboard': 'Trang chính',
+    'shortcuts.openCheatsheet': 'Mở bảng phím tắt này',
+    'shortcuts.closeModal': 'Đóng cửa sổ',
+    'shortcuts.toggleMic': 'Bật/tắt micro',
+    'shortcuts.sendText': 'Gửi tin nhắn đã gõ',
+    'shortcuts.muteAgent': 'Tắt/bật tiếng trợ lý',
+    'shortcuts.replayLast': 'Nghe lại câu cuối của trợ lý',
+    'shortcuts.newSession': 'Bắt đầu phiên mới',
+    'shortcuts.toggleTheme': 'Đổi giao diện sáng/tối',
+
+    // Badges / gamification
+    'badges.title': 'Thành tích',
+    'badges.subtitle': 'Nhận huy hiệu khi bạn luyện tập',
+    'badges.locked': 'Chưa mở',
+    'badges.unlocked': 'Đã mở',
+    'badges.progress': 'Đã mở {n}/{total}',
+    'badges.firstSession.name': 'Bước đầu tiên',
+    'badges.firstSession.desc': 'Hoàn thành phiên đầu tiên',
+    'badges.threeDayStreak.name': 'Đà tốt',
+    'badges.threeDayStreak.desc': 'Chuỗi 3 ngày liên tiếp',
+    'badges.sevenDayStreak.name': 'Chiến binh tuần',
+    'badges.sevenDayStreak.desc': 'Chuỗi 7 ngày liên tiếp',
+    'badges.tenSessions.name': 'Chăm chỉ',
+    'badges.tenSessions.desc': 'Hoàn thành 10 phiên',
+    'badges.band65.name': 'Vững Band 6.5',
+    'badges.band65.desc': 'Đạt Band 6.5',
+    'badges.band70.name': 'Mạnh Band 7.0',
+    'badges.band70.desc': 'Đạt Band 7.0',
+    'badges.hourPracticed.name': 'Anh hùng 1 giờ',
+    'badges.hourPracticed.desc': 'Luyện tập tổng 60 phút',
+
+    // Compare mode chart
+    'dash.chart.compareToggle': 'So với kỳ trước',
+    'dash.chart.thisPeriod': 'Kỳ này',
+    'dash.chart.lastPeriod': 'Kỳ trước',
+    'dash.chart.delta.up': '+{n} band so với kỳ trước',
+    'dash.chart.delta.down': '{n} band so với kỳ trước',
+    'dash.chart.delta.same': 'Bằng kỳ trước',
+
+    // Empty-state illustration
+    'dash.empty.step1': 'Chọn chủ đề',
+    'dash.empty.step2': 'Nói với AI',
+    'dash.empty.step3': 'Xem Band IELTS',
+
+    // Voice agent — history sidebar
+    'va.history.title': 'Phiên đã qua',
+    'va.history.empty': 'Chưa có phiên nào. Hoàn thành phiên đầu tiên đi!',
+    'va.history.open': 'Mở lịch sử',
+    'va.history.close': 'Đóng lịch sử',
+    'va.history.viewSummary': 'Xem tóm tắt',
+    'va.history.delete': 'Xóa',
+    'va.history.confirmDelete': 'Xóa phiên này?',
+    'va.history.deleted': 'Đã xóa phiên.',
+    'va.history.minutes': '{n} phút',
+    'va.history.sentences': '{n} câu',
+    'va.history.count': '{n} phiên',
+    'va.history.loading': 'Đang tải hội thoại...',
+
+    // Voice agent — conversation sidebar (left)
+    'va.sidebar.newChat': 'Chat mới',
+    'va.sidebar.today': 'Hôm nay',
+    'va.sidebar.yesterday': 'Hôm qua',
+    'va.sidebar.thisWeek': '7 ngày qua',
+    'va.sidebar.older': 'Cũ hơn',
+    'va.sidebar.empty': 'Chưa có cuộc hội thoại nào.',
+    'va.sidebar.delete': 'Xóa',
+    'va.sidebar.confirmDelete': 'Xóa cuộc hội thoại này?',
+    'va.sidebar.confirmDeleteTitle': 'Xác nhận xóa',
+    'va.sidebar.deleted': 'Đã xóa.',
+    'va.sidebar.deleteFailed': 'Không thể xóa cuộc hội thoại.',
+    'va.sidebar.close': 'Đóng thanh bên',
+    'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
+    'va.sidebar.limitWarningAlert': 'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
+    'va.sidebar.limitBadge': '5/5',
+    'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
+    'va.sidebar.emptyTopic': 'Chưa có hội thoại nào cho topic này.',
+    'va.sidebar.topicCount': '{count}/5 phiên',
+    'va.sidebar.uncategorized': 'Chưa có topic',
+
+    // Onboarding tip (first time)
+    'onboarding.title': 'Chào mừng đến Voice Trainer 👋',
+    'onboarding.body':
+      'Chọn một chủ đề bên dưới để bắt đầu phiên luyện nói tiếng Anh có hướng dẫn. AI sẽ nghe, chấm điểm phát âm và phản hồi tức thời. Bấm ? bất cứ lúc nào để xem các phím tắt.',
+    'onboarding.cta': 'Đã hiểu, bắt đầu thôi',
+
     // Topic categories
     'category.IELTS Speaking.name': 'IELTS Speaking',
     'category.IELTS Speaking.desc': 'Luyện các dạng nói chính thức theo phong cách IELTS.',
+    'category.ielts.name': 'IELTS Speaking',
+    'category.ielts.desc': 'Luyện các dạng nói chính thức theo phong cách IELTS.',
     'category.Business & Career.name': 'Công việc & Sự nghiệp',
     'category.Business & Career.desc': 'Tiếng Anh nơi làm việc và giao tiếp chuyên nghiệp.',
+    'category.business.name': 'Công việc & Sự nghiệp',
+    'category.business.desc': 'Tiếng Anh nơi làm việc và giao tiếp chuyên nghiệp.',
     'category.Daily Life.name': 'Đời sống hàng ngày',
     'category.Daily Life.desc': 'Các tình huống quen thuộc bạn gặp mỗi ngày.',
+    'category.daily.name': 'Đời sống hàng ngày',
+    'category.daily.desc': 'Các tình huống quen thuộc bạn gặp mỗi ngày.',
     'category.Travel & Culture.name': 'Du lịch & Văn hóa',
     'category.Travel & Culture.desc': 'Từ đặt vé máy bay đến trò chuyện liên văn hóa.',
 
@@ -371,6 +628,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.Negotiation.desc': 'Mặc cả lịch sự, đề xuất điều khoản, đạt thỏa thuận.',
     'topic.Email & Phone.title': 'Điện thoại & Email',
     'topic.Email & Phone.desc': 'Cuộc gọi và phản hồi chuyên nghiệp.',
+    'topic.Travel English.title': 'Tiếng Anh Du lịch',
+    'topic.Travel English.desc': 'Đặt chỗ, hỏi đường, sân bay, kể chuyện đi chơi.',
+    'topic.Business Meeting.title': 'Họp kinh doanh',
+    'topic.Business Meeting.desc': 'Cuộc họp, đàm phán, thuyết trình.',
     'topic.Daily Conversation.title': 'Giao tiếp hàng ngày',
     'topic.Daily Conversation.desc': 'Sở thích, gia đình, kế hoạch cuối tuần, thời tiết.',
     'topic.Shopping.title': 'Mua sắm',
@@ -423,11 +684,35 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.left.scoreBreakdown': 'Phân tích điểm',
     'va.left.errors': 'Lỗi',
     'va.left.errorsCount': 'Lỗi ({n})',
+    'va.left.combinedTitle': 'Phát âm & Ngữ pháp',
+    'va.left.combinedSummary': 'Bạn có {pronunciation} lỗi phát âm và {grammar} lỗi ngữ pháp.',
+    'va.left.pronunciationCardTitle': 'Lỗi phát âm',
+    'va.left.pronunciationSummary': 'Phát hiện {pronunciation} lỗi phát âm.',
+    'va.left.grammarCardTitle': 'Lỗi ngữ pháp',
+    'va.left.grammarSummary': 'Phát hiện {grammar} lỗi ngữ pháp.',
+    'va.left.perfectPronunciation': 'Phát âm hoàn hảo.',
+    'va.left.correctGrammar': 'Ngữ pháp chính xác.',
+    'va.left.clickDetails': 'Bấm để xem chi tiết →',
     'va.left.noIssues': 'Tuyệt vời! Không phát hiện lỗi nào trong câu này.',
+    'va.left.checkingGrammar': 'Đang kiểm tra ngữ pháp...',
     'va.left.feedbackEmptyConnected':
       'Gửi tin nhắn để xem phản hồi cho câu mới nhất của bạn ở đây.',
     'va.left.assessing': 'Đang chấm...',
     'va.left.feedbackEmptyDisconnected': 'Kết nối để xem chỉnh sửa tiếng Anh theo thời gian thực',
+
+    // VoiceAgent — combined feedback modal
+    'va.modal.pronunciationIssues': 'Lỗi phát âm',
+    'va.modal.grammarIssues': 'Lỗi ngữ pháp',
+    'va.modal.original': 'Câu gốc',
+    'va.modal.corrected': 'Câu đúng',
+    'va.modal.correctedSentence': 'Câu đã sửa',
+    'va.modal.targetSentence': 'Câu mục tiêu',
+    'va.modal.explanation': 'Giải thích',
+    'va.modal.noExplanation': 'Chưa có giải thích bổ sung.',
+    'va.tip.title': 'Gợi ý phát âm',
+    'va.tip.phoneme': 'Âm vị',
+    'va.tip.accuracy': 'Độ chính xác',
+    'va.tip.noTip': 'Chưa có gợi ý cho âm vị này.',
 
     // VoiceAgent — score labels
     'va.score.overall': 'Tổng quát',
@@ -458,8 +743,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.input.connectHint': 'Kết nối để bắt đầu trò chuyện',
     'va.input.listening': 'Đang nghe giọng nói...',
     'va.input.agentTyping': 'Trợ lý đang gõ...',
-    'va.input.placeholder': 'Nhập tin nhắn... (Enter để gửi)',
-    'va.input.statusHint': '{n} tin nhắn • Enter để gửi, Shift+Enter để xuống dòng',
+    'va.input.placeholder': 'Nhập tin nhắn...',
+    'va.input.statusHint': '{n} tin nhắn',
 
     // VoiceAgent — settings overlay
     'va.settings.title': 'Chủ đề luyện tập',
