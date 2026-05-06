@@ -1,4 +1,5 @@
 export { default as AiFeedbackPanel } from './AiFeedbackPanel';
+export { default as ConfirmModal } from '../ui/ConfirmModal';
 export { default as ChatInputBar } from './ChatInputBar';
 export { default as DeviceSelect } from './DeviceSelect';
 export { default as LeftAudioPanel } from './LeftAudioPanel';

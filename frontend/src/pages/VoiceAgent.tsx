@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
-import { fetchConversations, fetchMessagesWithScores } from '../api/conversations';
+import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
   AiFeedbackPanel,
@@ -192,6 +192,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [isTopicLimitReached, setIsTopicLimitReached] = useState(false);
   const [convsLoading, setConvsLoading] = useState(false);
   // True while fetching message history for an existing conversation (soft load,
   // no full page reload). Drives the inline spinner inside the messages area.
@@ -497,8 +498,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // Topic limit check — only for brand-new sessions (no existing conversation)
       const isNewSession = !conversationIdRef.current;
       if (isNewSession && topic) {
-        const count = conversations.filter((c) => c.topic_code === topic).length;
-        if (count >= 5) {
+        if (isTopicLimitReached) {
           toast.error(t('va.sidebar.limitReached'));
           return;
         }
@@ -528,7 +528,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     }
   }, [
     clearTimers,
-    conversations,
+    isTopicLimitReached,
     persistSession,
     setConvsRefreshKey,
     setStatusSync,
@@ -560,17 +560,37 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDbTopics]);
 
-  // Fetch all conversations from DB for the sidebar; re-runs whenever
-  // convsRefreshKey is bumped (e.g. after delete or new-session events).
+  // Fetch topic conversations from DB for the sidebar; re-runs whenever
+  // convsRefreshKey is bumped or selected topic changes.
   useEffect(() => {
     const session = getAuthSession();
     if (!session?.token) return;
+    if (!topic) {
+      setConversations([]);
+      setIsTopicLimitReached(false);
+      return;
+    }
+
     setConvsLoading(true);
-    fetchConversations(session.token)
-      .then(setConversations)
+    fetchForTopic(session.token, topic)
+      .then((data) => {
+        setConversations(
+          data.conversations.map((c) => ({
+            id: c.id,
+            title: c.title,
+            status: c.status,
+            started_at: c.started_at,
+            ended_at: null,
+            topic_id: null,
+            topic_code: data.topic_code,
+            cleared_at: null,
+          })),
+        );
+        setIsTopicLimitReached(Boolean(data.limit_reached));
+      })
       .catch(() => {})
       .finally(() => setConvsLoading(false));
-  }, [convsRefreshKey]);
+  }, [convsRefreshKey, topic]);
 
   // If a DB conversation_id was supplied via ?session=<uuid>, load its messages
   // from the backend on mount. The conversation is set to read-only view
@@ -946,6 +966,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           token={getAuthSession()?.token ?? null}
           topicCategories={topicCategories}
           conversations={conversations}
+          isTopicLimitReached={isTopicLimitReached}
           loading={convsLoading || topicsLoading}
           activeConversationId={conversationIdRef.current}
           currentTopicCode={topic}
@@ -972,6 +993,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           }}
           onConversationDeleted={(id) => {
             setConversations((prev) => prev.filter((c) => c.id !== id));
+            setIsTopicLimitReached(false);
           }}
           onToggleSidebar={() => setShowSidebar((v) => !v)}
         />

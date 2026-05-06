@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
@@ -10,11 +11,13 @@ import {
 } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
+// Reminder: ensure <Toaster /> from sonner is mounted at app root (e.g. App.tsx/main.tsx).
 import { toast } from 'sonner';
 
 import { deleteConversation, type ConversationSummary } from '../../api/conversations';
 import type { ApiCategory } from '../../api/topics';
 import { useT } from '../../i18n/useLanguage';
+import ConfirmModal from '../ui/ConfirmModal';
 
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -28,8 +31,6 @@ function relativeTime(dateStr: string): string {
   if (d < 7) return `${d}d ago`;
   return new Date(dateStr).toLocaleDateString();
 }
-
-const MAX_PER_TOPIC = 5;
 
 function ConvRow({
   c,
@@ -79,6 +80,7 @@ type Props = {
   token: string | null;
   topicCategories: ApiCategory[];
   conversations: ConversationSummary[];
+  isTopicLimitReached: boolean;
   loading: boolean;
   activeConversationId: string | null;
   currentTopicCode: string | null;
@@ -95,6 +97,7 @@ export default function ConversationSidebar({
   token,
   topicCategories,
   conversations,
+  isTopicLimitReached,
   loading,
   activeConversationId,
   currentTopicCode,
@@ -107,6 +110,7 @@ export default function ConversationSidebar({
   const t = useT();
   const [isOpen, setIsOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const [activeTopicView, setActiveTopicView] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     () => new Set(topicCategories.map((c) => c.code)),
@@ -133,19 +137,23 @@ export default function ConversationSidebar({
     setActiveTopicView(code);
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const requestDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!token) return;
-    if (!window.confirm(t('va.sidebar.confirmDelete'))) return;
-    setDeletingId(id);
+    setConversationToDelete(id);
+  };
+
+  const handleDelete = async () => {
+    if (!token || !conversationToDelete) return;
+    setDeletingId(conversationToDelete);
     try {
-      await deleteConversation(token, id);
-      onConversationDeleted(id);
+      await deleteConversation(token, conversationToDelete);
+      onConversationDeleted(conversationToDelete);
       toast.success(t('va.sidebar.deleted'));
     } catch {
-      toast.error('Could not delete conversation');
+      toast.error(t('va.sidebar.deleteFailed'));
     } finally {
       setDeletingId(null);
+      setConversationToDelete(null);
     }
   };
 
@@ -182,7 +190,7 @@ export default function ConversationSidebar({
                   {cat.topics.map((tp) => {
                     const count = conversations.filter((c) => c.topic_code === tp.code).length;
                     const isActive = currentTopicCode === tp.code;
-                    const limitReached = count >= MAX_PER_TOPIC;
+                    const shouldHighlightLimit = isTopicLimitReached && isActive;
                     return (
                       <button
                         key={tp.code}
@@ -200,9 +208,9 @@ export default function ConversationSidebar({
                         </span>
                         {count > 0 && (
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${limitReached ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${shouldHighlightLimit ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}
                           >
-                            {count}/{MAX_PER_TOPIC}
+                            {count}/5
                           </span>
                         )}
                       </button>
@@ -223,7 +231,6 @@ export default function ConversationSidebar({
     const topicConvs = conversations
       .filter((c) => c.topic_code === topicCode)
       .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
-    const limitReached = topicConvs.length >= MAX_PER_TOPIC;
 
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -247,13 +254,19 @@ export default function ConversationSidebar({
           <button
             type="button"
             onClick={() => {
-              if (!limitReached) onNewChat(topicCode);
+              if (isTopicLimitReached) {
+                toast.warning(
+                  'Session limit reached. Please delete an existing session to create a new one.',
+                );
+                return;
+              }
+              onNewChat(topicCode);
             }}
-            disabled={limitReached}
-            title={limitReached ? t('va.sidebar.limitReached') : t('va.sidebar.newChat')}
+            aria-disabled={isTopicLimitReached}
+            title={isTopicLimitReached ? t('va.sidebar.limitReached') : t('va.sidebar.newChat')}
             className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              limitReached
-                ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed'
+              isTopicLimitReached
+                ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed opacity-60'
                 : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
           >
@@ -261,6 +274,14 @@ export default function ConversationSidebar({
             {t('va.sidebar.newChat')}
           </button>
         </div>
+
+        {/* Inline limit warning banner */}
+        {isTopicLimitReached && (
+          <div className="mx-3 mb-1 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{t('va.sidebar.limitWarningAlert')}</span>
+          </div>
+        )}
 
         {/* Conversation list */}
         <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
@@ -279,7 +300,7 @@ export default function ConversationSidebar({
                   onSelectConversation(c.id, c.topic_code ?? null);
                   onClose();
                 }}
-                onDelete={(e) => void handleDelete(e, c.id)}
+                onDelete={(e) => requestDelete(e, c.id)}
                 deleteLabel={t('va.sidebar.delete')}
               />
             ))
@@ -361,6 +382,18 @@ export default function ConversationSidebar({
           {activeTopicView ? renderTopicView(activeTopicView) : renderMainMenu()}
         </div>
       </aside>
+
+      <ConfirmModal
+        isOpen={!!conversationToDelete}
+        onClose={() => setConversationToDelete(null)}
+        onConfirm={() => void handleDelete()}
+        title={t('va.sidebar.confirmDeleteTitle')}
+        description={t('va.sidebar.confirmDelete')}
+        confirmText={t('va.sidebar.delete')}
+        cancelText={t('common.cancel')}
+        isDestructive
+        isLoading={!!deletingId}
+      />
     </>
   );
 }
