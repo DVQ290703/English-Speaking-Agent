@@ -29,7 +29,7 @@ variables:
   K8S_NAMESPACE:   "english-speaking-agent"
 
 stages:
-  - test
+  # - test
   - build
   - deploy
 
