@@ -18,10 +18,8 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    if (typeof console !== 'undefined') {
-      console.error('[ErrorBoundary]', error, info.componentStack);
-    }
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Intentionally quiet in production; integrate a remote reporting service here.
   }
 
   reset = () => {
@@ -49,7 +47,7 @@ function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () =>
         </h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">{t('error.body')}</p>
         {error?.message && (
-          <pre className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-500/10 rounded-lg p-3 mb-6 overflow-auto text-left whitespace-pre-wrap break-words">
+          <pre className="text-xs text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-500/10 rounded-lg p-3 mb-6 overflow-auto text-left whitespace-pre-wrap-break-words">
             {error.message}
           </pre>
         )}

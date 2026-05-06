@@ -1,9 +1,8 @@
 import { useCallback, type MutableRefObject } from 'react';
-import { assessPronunciation, chatRespond } from '../api/chat';
+import { assessPronunciation, chatRespond, fetchGrammarFeedback } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
 import {
   LANGUAGE_CODES,
-  type FeedbackItem,
   type Gender,
   type Language,
 } from '../components/voice-agent/constants';
@@ -12,13 +11,13 @@ import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
 export interface UseSendChatMessageParams {
   messages: Message[];
   topic: string | null;
+  category: string | null;
   subOption: string | null;
   gender: Gender;
   language: Language;
   agentTyping: boolean;
   conversationIdRef: MutableRefObject<string | null>;
   msgCounterRef: MutableRefObject<number>;
-  feedbackCounterRef: MutableRefObject<number>;
   timersRef: MutableRefObject<ReturnType<typeof setTimeout>[]>;
   localAudioUrlsRef: MutableRefObject<string[]>;
   audioBlobsRef: MutableRefObject<Record<number, Blob>>;
@@ -26,7 +25,9 @@ export interface UseSendChatMessageParams {
   trimLocalAudioUrls: () => void;
   playAgentAudio: (text: string, audioUrl?: string) => string | undefined;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  setFeedbacks: React.Dispatch<React.SetStateAction<FeedbackItem[]>>;
+  setGrammarErrors: React.Dispatch<React.SetStateAction<Mistake[]>>;
+  setGrammarCorrectedSentence: React.Dispatch<React.SetStateAction<string>>;
+  setIsGrammarLoading: React.Dispatch<React.SetStateAction<boolean>>;
   setExpandedMsgId: (next: number | null) => void;
   setChatInput: (next: string) => void;
   setAgentTyping: (next: boolean) => void;
@@ -51,13 +52,13 @@ export interface UseSendChatMessageParams {
 export default function useSendChatMessage({
   messages,
   topic,
+  category,
   subOption,
   gender,
   language,
   agentTyping,
   conversationIdRef,
   msgCounterRef,
-  feedbackCounterRef,
   timersRef: _timersRef,
   localAudioUrlsRef,
   audioBlobsRef,
@@ -65,7 +66,9 @@ export default function useSendChatMessage({
   trimLocalAudioUrls,
   playAgentAudio,
   setMessages,
-  setFeedbacks,
+  setGrammarErrors,
+  setGrammarCorrectedSentence,
+  setIsGrammarLoading,
   setExpandedMsgId,
   setChatInput,
   setAgentTyping,
@@ -133,6 +136,7 @@ export default function useSendChatMessage({
             audioBlob,
             history: historyPayload,
             topic: topic ?? undefined,
+            category: category ?? undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
             conversationId: conversationIdRef.current ?? undefined,
@@ -141,6 +145,72 @@ export default function useSendChatMessage({
             conversationIdRef.current = data.conversation_id;
           }
           userMessageId = data.user_message_id ?? null;
+
+          if (userMessageId) {
+            setIsGrammarLoading(true);
+            void fetchGrammarFeedback(session.token, userMessageId)
+              .then((data) => {
+                const items = data.errors || [];
+                setGrammarCorrectedSentence(data.corrected_sentence ?? '');
+                const grammarMistakes = items.reduce<Mistake[]>((acc, item) => {
+                    const raw = item as Record<string, unknown>;
+                    const wrong = String(
+                      item.wrong ??
+                        item.original_text ??
+                        item.original ??
+                        raw.original ??
+                        raw.text ??
+                        raw.error_text ??
+                        raw.incorrect ??
+                        '',
+                    ).trim();
+                    const correct = String(
+                      item.correct ??
+                        item.corrected_text ??
+                        item.corrected ??
+                        raw.corrected ??
+                        raw.suggestion ??
+                        raw.fix ??
+                        '',
+                    ).trim();
+                    const note = String(
+                      item.note ??
+                        item.explanation ??
+                        raw.reason ??
+                        raw.detail ??
+                        raw.message ??
+                        '',
+                    ).trim();
+                    acc.push({
+                      wrong: wrong || '—',
+                      correct: correct || '—',
+                      type: 'Grammar' as const,
+                      note: note || undefined,
+                    });
+                    return acc;
+                  }, []);
+
+                setGrammarErrors(grammarMistakes);
+                setMessages((prev) =>
+                  prev.map((message) => {
+                    if (message.id !== userId) return message;
+                    const existing = message.mistakes ?? [];
+                    const nonGrammar = existing.filter((m) => m.type !== 'Grammar');
+                    return {
+                      ...message,
+                      mistakes: [...nonGrammar, ...grammarMistakes],
+                    };
+                  }),
+                );
+              })
+              .catch(() => {
+                setGrammarErrors([]);
+                setGrammarCorrectedSentence('');
+              })
+              .finally(() => {
+                setIsGrammarLoading(false);
+              });
+          }
 
           const responseText = String(data.response_text || '').trim();
 
@@ -175,6 +245,7 @@ export default function useSendChatMessage({
                 message.id === userId
                   ? {
                       ...message,
+                      backendMessageId: userMessageId ?? message.backendMessageId,
                       // Keep the local blob URL (created before the API call).
                       // MinIO presigned URLs use the internal Docker hostname and
                       // are unreachable from the browser.
@@ -290,7 +361,10 @@ export default function useSendChatMessage({
                   ? {
                       ...message,
                       scoreDetails,
-                      mistakes,
+                      mistakes: [
+                        ...mistakes,
+                        ...((message.mistakes ?? []).filter((m) => m.type === 'Grammar') ?? []),
+                      ],
                       score: overall,
                       assessmentStatus: 'available',
                     }
@@ -298,19 +372,6 @@ export default function useSendChatMessage({
               ),
             );
 
-            const newFb: FeedbackItem = {
-              id: feedbackCounterRef.current++,
-              type: 'pronunciation',
-              original: trimmed,
-              corrected: '',
-              explanation: `Overall ${overall} — pronunciation ${pron}${
-                scoreDetails.completeness != null
-                  ? ` — completeness ${scoreDetails.completeness}`
-                  : ''
-              }`,
-              timestamp: new Date(),
-            };
-            setFeedbacks((prev) => [newFb, ...prev]);
             setExpandedMsgId(null);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -355,10 +416,11 @@ export default function useSendChatMessage({
       localAudioUrlsRef,
       audioBlobsRef,
       msgCounterRef,
-      feedbackCounterRef,
       inputRef,
       setMessages,
-      setFeedbacks,
+      setGrammarErrors,
+      setGrammarCorrectedSentence,
+      setIsGrammarLoading,
       setExpandedMsgId,
       setChatInput,
       setAgentTyping,

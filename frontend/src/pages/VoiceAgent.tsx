@@ -13,13 +13,13 @@ import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
+import { fetchGrammarFeedback } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
   AiFeedbackPanel,
   ChatInputBar,
   ConversationSidebar,
-  HistorySidebar,
   LeftAudioPanel,
   LogoutConfirmModal,
   MessageBubble,
@@ -33,7 +33,6 @@ import {
   MODELS,
   type AuthUser,
   type ConnectionStatus,
-  type FeedbackItem,
   type Gender,
   type Language,
   type Model,
@@ -53,6 +52,101 @@ import { useDarkMode } from '../theme/useDarkMode';
 interface VoiceAgentProps {
   currentUser?: AuthUser | null;
   onLogout?: () => void;
+}
+
+function areMistakesEqual(a: Mistake[], b: Mistake[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.wrong !== y.wrong ||
+      x.correct !== y.correct ||
+      x.type !== y.type ||
+      (x.note ?? '') !== (y.note ?? '')
+    ) {
+      return false;
+    }
+    const xp = x.phonemes ?? [];
+    const yp = y.phonemes ?? [];
+    if (xp.length !== yp.length) return false;
+    for (let j = 0; j < xp.length; j++) {
+      if (
+        xp[j].phoneme !== yp[j].phoneme ||
+        xp[j].accuracy_score !== yp[j].accuracy_score
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
+  const isAgent = m.role === 'assistant';
+  const mistakes: Mistake[] | undefined = m.score?.words.length
+    ? m.score.words.flatMap((w) => {
+        const err = w.error_type;
+        const acc = Math.round(w.accuracy_score ?? 0);
+        const phonemes = (w.phonemes ?? []).map((p) => ({
+          phoneme: p.phoneme,
+          accuracy_score: Math.round(p.accuracy_score ?? 0),
+        }));
+        const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+        const phonemeNote =
+          lowPhonemes.length > 0
+            ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+            : '';
+        if (err && err !== 'None') {
+          const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+          return [
+            {
+              wrong: w.word,
+              correct: w.word,
+              type: type as Mistake['type'],
+              note: `Accuracy ${acc}%${phonemeNote}`,
+              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+            },
+          ];
+        }
+        if (acc < 90 || lowPhonemes.length > 0) {
+          return [
+            {
+              wrong: w.word,
+              correct: w.word,
+              type: 'Pronunciation' as Mistake['type'],
+              note: `Accuracy ${acc}%${phonemeNote}`,
+              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+            },
+          ];
+        }
+        return [];
+      })
+    : undefined;
+
+  return {
+    id: idx + 1,
+    backendMessageId: m.id,
+    role: isAgent ? 'agent' : 'user',
+    text: m.text_content ?? '',
+    timestamp: new Date(m.created_at),
+    userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
+    minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
+    assessmentStatus: m.score ? 'available' : 'unavailable',
+    scoreDetails: m.score
+      ? {
+          overall: Math.round(m.score.overall_score ?? 0),
+          pronunciation: Math.round(m.score.overall_score ?? 0),
+          fluency: Math.round(m.score.fluency_score ?? 0),
+          accuracy: Math.round(m.score.accuracy_score ?? 0),
+          completeness:
+            m.score.completeness_score != null
+              ? Math.round(m.score.completeness_score)
+              : undefined,
+        }
+      : undefined,
+    mistakes,
+  };
 }
 
 export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
@@ -185,10 +279,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     !summaryDismissed;
   const [chatInput, setChatInput] = useState('');
   const [agentTyping, setAgentTyping] = useState(false);
-  const [, setFeedbacks] = useState<FeedbackItem[]>([]);
+  const [grammarErrors, setGrammarErrors] = useState<Mistake[]>([]);
+  const [grammarCorrectedSentence, setGrammarCorrectedSentence] = useState('');
+  const [isGrammarLoading, setIsGrammarLoading] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -208,7 +303,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // overwrite the current status / typing state.
   const sessionVersionRef = useRef(0);
   const msgCounterRef = useRef(initialState.nextMsgId);
-  const feedbackCounterRef = useRef(200);
   // Tracks the DB conversation_id returned by the backend on each chat turn.
   // Sent back with every subsequent message so all turns belong to one conversation.
   const conversationIdRef = useRef<string | null>(initialState.conversationId ?? null);
@@ -219,6 +313,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // Prevents the "auto-load latest conversation" effect from re-firing after the
   // initial load (e.g. after New Chat or after the first navigation has happened).
   const hasAutoLoadedRef = useRef(false);
+  const grammarSyncReqRef = useRef(0);
+  const grammarAbortRef = useRef<AbortController | null>(null);
   const sessionStartRef = useRef<number | null>(null);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
@@ -346,27 +442,18 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     timersRef.current = [];
   }, []);
 
-  // Global promise rejection logger to help diagnose audio playback errors in
-  // the wild. This is intentionally non-fatal and only logs extra context.
-  useEffect(() => {
-    const handler = (e: PromiseRejectionEvent) => {
-      // eslint-disable-next-line no-console
-      console.warn('Unhandled promise rejection:', e.reason, e);
-    };
-    window.addEventListener('unhandledrejection', handler);
-    return () => window.removeEventListener('unhandledrejection', handler);
-  }, []);
+  const category = new URLSearchParams(window.location.search).get('categories');
 
   const { sendChatMessage } = useSendChatMessage({
     messages,
     topic,
+    category,
     subOption,
     gender,
     language,
     agentTyping,
     conversationIdRef,
     msgCounterRef,
-    feedbackCounterRef,
     timersRef,
     localAudioUrlsRef,
     audioBlobsRef,
@@ -374,7 +461,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     trimLocalAudioUrls,
     playAgentAudio,
     setMessages,
-    setFeedbacks,
+    setGrammarErrors,
+    setGrammarCorrectedSentence,
+    setIsGrammarLoading,
     setExpandedMsgId,
     setChatInput,
     setAgentTyping,
@@ -445,7 +534,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setExpandedMsgId(null);
       setSummaryDismissed(false);
       clearLocalAudioUrls();
-      setFeedbacks([]);
+      setGrammarErrors([]);
+      setGrammarCorrectedSentence('');
+      setIsGrammarLoading(false);
       sessionStartRef.current = Date.now();
       sessionIdRef.current = null;
       conversationIdRef.current = null;
@@ -601,74 +692,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     const session = getAuthSession();
     if (!session?.token) return;
 
-    function dbMsgToFrontend(m: MessageWithScoreOut, idx: number): Message {
-      const isAgent = m.role === 'assistant';
-      const mistakes: Mistake[] | undefined = m.score?.words.length
-        ? m.score.words.flatMap((w) => {
-            const err = w.error_type;
-            const acc = Math.round(w.accuracy_score ?? 0);
-            const phonemes = (w.phonemes ?? []).map((p) => ({
-              phoneme: p.phoneme,
-              accuracy_score: Math.round(p.accuracy_score ?? 0),
-            }));
-            const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-            const phonemeNote =
-              lowPhonemes.length > 0
-                ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-                : '';
-            if (err && err !== 'None') {
-              const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-              return [
-                {
-                  wrong: w.word,
-                  correct: w.word,
-                  type: type as Mistake['type'],
-                  note: `Accuracy ${acc}%${phonemeNote}`,
-                  phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-                },
-              ];
-            }
-            if (acc < 90 || lowPhonemes.length > 0) {
-              return [
-                {
-                  wrong: w.word,
-                  correct: w.word,
-                  type: 'Pronunciation' as Mistake['type'],
-                  note: `Accuracy ${acc}%${phonemeNote}`,
-                  phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-                },
-              ];
-            }
-            return [];
-          })
-        : undefined;
-      return {
-        id: idx + 1,
-        role: isAgent ? 'agent' : 'user',
-        text: m.text_content ?? '',
-        timestamp: new Date(m.created_at),
-        userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
-        minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
-        assessmentStatus: m.score ? 'available' : 'unavailable',
-        scoreDetails: m.score
-          ? {
-              overall: Math.round(m.score.overall_score ?? 0),
-              pronunciation: Math.round(m.score.overall_score ?? 0),
-              fluency: Math.round(m.score.fluency_score ?? 0),
-              accuracy: Math.round(m.score.accuracy_score ?? 0),
-              completeness:
-                m.score.completeness_score != null
-                  ? Math.round(m.score.completeness_score)
-                  : undefined,
-            }
-          : undefined,
-        mistakes,
-      };
-    }
-
     fetchMessagesWithScores(session.token, convId)
       .then((dbMessages) => {
-        const loaded = dbMessages.map((m, idx) => dbMsgToFrontend(m, idx));
+        const loaded = dbMessages.map((m, idx) => mapDbMessageToFrontend(m, idx));
         if (loaded.length > 0) {
           msgCounterRef.current = loaded.length + 101;
           setMessages(loaded);
@@ -736,70 +762,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setHistoryLoading(true);
       fetchMessagesWithScores(authSession.token, convId)
         .then((dbMessages) => {
-          const loaded = dbMessages.map((m, idx): Message => {
-            const isAgent = m.role === 'assistant';
-            const mistakes: Mistake[] | undefined = m.score?.words.length
-              ? m.score.words.flatMap((w) => {
-                  const err = w.error_type;
-                  const acc = Math.round(w.accuracy_score ?? 0);
-                  const phonemes = (w.phonemes ?? []).map((p) => ({
-                    phoneme: p.phoneme,
-                    accuracy_score: Math.round(p.accuracy_score ?? 0),
-                  }));
-                  const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-                  const phonemeNote =
-                    lowPhonemes.length > 0
-                      ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-                      : '';
-                  if (err && err !== 'None') {
-                    const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-                    return [
-                      {
-                        wrong: w.word,
-                        correct: w.word,
-                        type: type as Mistake['type'],
-                        note: `Accuracy ${acc}%${phonemeNote}`,
-                        phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-                      },
-                    ];
-                  }
-                  if (acc < 90 || lowPhonemes.length > 0) {
-                    return [
-                      {
-                        wrong: w.word,
-                        correct: w.word,
-                        type: 'Pronunciation' as Mistake['type'],
-                        note: `Accuracy ${acc}%${phonemeNote}`,
-                        phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-                      },
-                    ];
-                  }
-                  return [];
-                })
-              : undefined;
-            return {
-              id: idx + 1,
-              role: isAgent ? 'agent' : 'user',
-              text: m.text_content ?? '',
-              timestamp: new Date(m.created_at),
-              userAudioUrl: !isAgent ? (m.audio_url ?? undefined) : undefined,
-              minioUrl: isAgent ? (m.assistant_audio_url ?? undefined) : undefined,
-              assessmentStatus: m.score ? 'available' : 'unavailable',
-              scoreDetails: m.score
-                ? {
-                    overall: Math.round(m.score.overall_score ?? 0),
-                    pronunciation: Math.round(m.score.overall_score ?? 0),
-                    fluency: Math.round(m.score.fluency_score ?? 0),
-                    accuracy: Math.round(m.score.accuracy_score ?? 0),
-                    completeness:
-                      m.score.completeness_score != null
-                        ? Math.round(m.score.completeness_score)
-                        : undefined,
-                  }
-                : undefined,
-              mistakes,
-            };
-          });
+          const loaded = dbMessages.map((m, idx): Message => mapDbMessageToFrontend(m, idx));
           if (loaded.length > 0) {
             msgCounterRef.current = loaded.length + 101;
             setMessages(loaded);
@@ -863,6 +826,79 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     },
     [conversations, loadConversationInPlace, startNewSession, setTopic],
   );
+
+  // Keep grammar feedback bound to the currently selected sentence.
+  // On sentence change: use local grammar mistakes immediately, then refresh
+  // from Grammar API via message_id to stay accurate with DB-stored data.
+  useEffect(() => {
+    grammarAbortRef.current?.abort();
+
+    if (!displayMsg || displayMsg.role !== 'user') {
+      setIsGrammarLoading(false);
+      return;
+    }
+
+    const localGrammar = (displayMsg.mistakes ?? []).filter((m) => m.type === 'Grammar');
+    if (localGrammar.length > 0) {
+      setGrammarErrors(localGrammar);
+    }
+
+    const backendId = displayMsg.backendMessageId;
+    const session = getAuthSession();
+    if (!backendId || !session?.token) {
+      setIsGrammarLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    grammarAbortRef.current = controller;
+    const reqId = ++grammarSyncReqRef.current;
+    setIsGrammarLoading(true);
+    void fetchGrammarFeedback(session.token, backendId, controller.signal)
+      .then((data) => {
+        if (reqId !== grammarSyncReqRef.current) return;
+
+        const mapped = (data.errors ?? []).map((item) => ({
+          wrong: (item.original ?? item.original_text ?? item.wrong ?? '—').trim() || '—',
+          correct: (item.corrected ?? item.corrected_text ?? item.correct ?? '—').trim() || '—',
+          type: 'Grammar' as const,
+          note: (item.explanation ?? item.note ?? '').trim() || undefined,
+        }));
+
+        setGrammarErrors((prev) => (areMistakesEqual(prev, mapped) ? prev : mapped));
+        setGrammarCorrectedSentence((prev) =>
+          prev === (data.corrected_sentence ?? '') ? prev : (data.corrected_sentence ?? ''),
+        );
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== displayMsg.id) return msg;
+            const nonGrammar = (msg.mistakes ?? []).filter((m) => m.type !== 'Grammar');
+            const nextMistakes = [...nonGrammar, ...mapped];
+            const currentMistakes = msg.mistakes ?? [];
+            if (areMistakesEqual(currentMistakes, nextMistakes)) {
+              return msg;
+            }
+            return {
+              ...msg,
+              mistakes: nextMistakes,
+            };
+          }),
+        );
+      })
+      .catch((err) => {
+        if (reqId !== grammarSyncReqRef.current) return;
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        // Keep the currently shown grammar results to avoid flicker.
+      })
+      .finally(() => {
+        if (reqId !== grammarSyncReqRef.current) return;
+        setIsGrammarLoading(false);
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [displayMsg, setMessages]);
 
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
@@ -1033,6 +1069,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               selectedMsg={selectedMsg}
               isAutoLatest={isAutoLatest}
               isConnected={isConnected}
+              grammarErrors={grammarErrors}
+              grammarCorrectedSentence={grammarCorrectedSentence}
+              isGrammarLoading={isGrammarLoading}
+              isPronunciationLoading={displayMsg?.assessmentStatus === 'pending'}
               onShowLatest={() => setExpandedMsgId(null)}
               onPlayAudio={(id) => void playMessageAudio(id)}
             />
@@ -1179,19 +1219,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         </div>
       </div>
       {/* end body row */}
-
-      {showHistory && (
-        <HistorySidebar
-          open={showHistory}
-          onClose={() => setShowHistory(false)}
-          token={getAuthSession()?.token ?? null}
-          onSelectSession={(id) => {
-            setShowHistory(false);
-            const topicCode = conversations.find((c) => c.id === id)?.topic_code ?? null;
-            loadConversationInPlace(id, topicCode);
-          }}
-        />
-      )}
 
       {showLogoutConfirm && (
         <LogoutConfirmModal onCancel={() => setShowLogoutConfirm(false)} onConfirm={handleLogout} />

@@ -214,7 +214,7 @@ function CategoryTabsRow({ categories, onStart }) {
             key={t.key}
             topic={t}
             accent={active.accent}
-            onStart={() => onStart(t.key, active.name)}
+            onStart={() => onStart(t.key, active.displayName ?? active.name)}
           />
         ))}
       </div>
@@ -709,11 +709,10 @@ export default function DashboardPage() {
   };
 
   const startSession = (topicKey, categoryName) => {
-    // Navigate to VoiceAgent with the topic and category codes. VoiceAgent will
-    // automatically load the most recent DB conversation for this topic (if any exists).
-    const params = new URLSearchParams();
+    // Navigate to VoiceAgent with the full category title and topic code.
+    // URLSearchParams handles encoding (spaces → +, special chars → %XX) automatically.
+    const params = new URLSearchParams({ topic: topicKey });
     if (categoryName) params.set('categories', categoryName);
-    params.set('topic', topicKey);
     navigate(`/VoiceAgent?${params.toString()}`);
   };
 
