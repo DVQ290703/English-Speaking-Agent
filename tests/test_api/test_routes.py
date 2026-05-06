@@ -299,10 +299,9 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data")),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None)),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
-            patch("app.api.chat.get_presigned_url", return_value="http://minio/audio.mp3"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -323,10 +322,9 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata")),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None)),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
-            patch("app.api.chat.get_presigned_url", return_value="http://minio/url"),
         ):
             with _client(fresh_conn) as (c, _):
                 r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
@@ -337,10 +335,9 @@ class TestChatRespond:
         with (
             _client(self._new_conv_conn()) as (c, _),
             patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3")),
+            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None)),
             patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
             patch("app.api.chat._upload"),
-            patch("app.api.chat.get_presigned_url", return_value="http://minio/url"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -386,7 +383,7 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"")),
+            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None)),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -438,7 +435,7 @@ class TestListConversations:
 
 
 # ===========================================================================
-# GET /api/conversations/{id}/messages
+# GET /api/conversations/{id}/messages-with-scores
 # ===========================================================================
 
 class TestGetConversationMessages:
@@ -455,12 +452,12 @@ class TestGetConversationMessages:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id, "user", "text", "Hello AI", now, None),
-                (_new_uuid(), "assistant", "text", "Hello human!", now, None),
+                (self._msg_id, "user", "text", "Hello AI", now, None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         body = r.json()
         assert body["conversation_id"] == self._conv_id
@@ -470,56 +467,50 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, "audio/key/path.mp3")],
+            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, "audio/key/path.mp3", None, None, None, None, None, None, None)],
         )
-        with (
-            _client(conn) as (c, _),
-            patch("app.api.conversations.get_presigned_url", return_value="http://minio/presigned"),
-        ):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
-        assert r.json()["messages"][0]["audio_url"] == "http://minio/presigned"
+        assert r.json()["messages"][0]["audio_url"] == "/api/audio/audio/key/path.mp3"
 
     def test_get_messages_no_audio_url_when_storage_key_is_null(self):
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         assert r.json()["messages"][0]["audio_url"] is None
 
-    def test_get_messages_presign_failure_does_not_propagate(self):
+    def test_get_messages_assistant_audio_url_generated_when_storage_key_present(self):
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "text", now, "bad/key")],
+            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, None, "assistant/key.mp3", None, None, None, None, None, None)],
         )
-        with (
-            _client(conn) as (c, _),
-            patch("app.api.conversations.get_presigned_url", side_effect=RuntimeError("MinIO down")),
-        ):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
-        assert r.json()["messages"][0]["audio_url"] is None
+        assert r.json()["messages"][0]["assistant_audio_url"] == "/api/audio/assistant/key.mp3"
 
     def test_get_messages_no_auth_returns_401(self):
         """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages")
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores")
         assert r.status_code in (401, 403)
 
     def test_get_messages_invalid_uuid_returns_400(self):
         with _client() as (c, _):
-            r = c.get("/api/conversations/not-a-uuid/messages", headers=self._headers())
+            r = c.get("/api/conversations/not-a-uuid/messages-with-scores", headers=self._headers())
         assert r.status_code == 400
 
     def test_get_messages_conversation_not_found_returns_404(self):
         conn = _make_conn(fetchone_side_effect=[None])
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 404
 
 

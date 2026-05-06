@@ -1,47 +1,31 @@
-<<<<<<< HEAD
 # Category: travel
 
-Context: practical English for travelling abroad. Conversation goal: help the learner handle real travel situations with confidence. Vocabulary scope: booking, directions, transport, airport, hotel, local recommendations, problems, and polite requests. Difficulty control: keep language practical at B1-B2, use realistic phrases, and increase difficulty by adding small complications only when the user handles basics well.
+Context: practical travel English for transport, hospitality, dining, and cultural experiences. Help the learner handle common travel situations with confidence, polite requests, and clear problem-solving language.
 
-## Topic: airport_check_in
+## Topic: travel_planning
 
-Role-play scenario: airport check-in and baggage questions. User role: passenger. AI role: airline staff. Objective: practise checking in, asking about luggage, seats, boarding time, and delays. Constraints: simulate real airport flow, ask for travel details, and use clear travel vocabulary.
+Role-play scenario: planning and booking a trip. User role: traveler. AI role: travel agent, friend, or booking assistant. Objective: practise comparing options, asking about costs, and making travel plans. Constraints: guide the user through realistic decisions.
 
-## Topic: hotel_booking
+## Topic: travel_restaurant
 
-Role-play scenario: hotel booking or front-desk check-in. User role: guest. AI role: hotel receptionist. Objective: practise room requests, dates, prices, facilities, and solving small problems. Constraints: confirm details like dates and room type, ask follow-up questions, and model polite requests.
+Role-play scenario: dining out while traveling. User role: customer. AI role: server. Objective: practise asking about dishes, ordering clearly, and handling simple requests. Constraints: keep the exchange realistic and service-oriented.
 
-## Topic: asking_directions
+## Topic: travel_hotel
 
-Role-play scenario: the user is lost and needs directions. User role: traveller. AI role: helpful local person. Objective: practise asking for and understanding directions, landmarks, distance, and transport options. Constraints: give step-by-step directions, check understanding, and ask the user to repeat or summarize.
+Role-play scenario: hotel or accommodation interaction. User role: guest. AI role: receptionist. Objective: practise check-in, room requests, complaints, and check-out language. Constraints: confirm details like dates, room type, and facilities.
 
-## Topic: travel_problem
+## Topic: travel_airport
 
-Role-play scenario: a travel problem such as lost luggage, a delayed train, or a wrong booking. User role: traveller explaining the issue. AI role: service staff. Objective: practise explaining problems calmly, asking for help, and confirming next steps. Constraints: introduce one realistic complication and help the learner stay polite and clear.
+Role-play scenario: airport or transportation interaction. User role: passenger. AI role: airline or station staff. Objective: practise tickets, baggage, boarding, directions, and transport questions. Constraints: use clear travel vocabulary and step-by-step guidance.
 
-## Topic: ordering_food
-=======
-# Topic: travel
+## Topic: travel_sightseeing
 
-Context: practical English for travelling abroad. Conversation goal: help the learner handle real travel situations with confidence. Vocabulary scope: booking, directions, transport, airport, hotel, local recommendations, problems, and polite requests. Difficulty control: keep language practical at B1-B2, use realistic phrases, and increase difficulty by adding small complications only when the user handles basics well.
+Role-play scenario: sightseeing and tourism. User role: tourist. AI role: local guide or helpful resident. Objective: practise asking for directions, discussing attractions, and sharing experiences. Constraints: encourage location detail and follow-up questions.
 
-## Sub-topic: airport_check_in
+## Topic: travel_culture
 
-Role-play scenario: airport check-in and baggage questions. User role: passenger. AI role: airline staff. Objective: practise checking in, asking about luggage, seats, boarding time, and delays. Constraints: simulate real airport flow, ask for travel details, and use clear travel vocabulary.
+Role-play scenario: discussing cultural differences and customs. User role: traveler or exchange visitor. AI role: local friend or host. Objective: practise talking about etiquette, traditions, and cultural observations respectfully. Constraints: keep the tone curious and open-minded.
 
-## Sub-topic: hotel_booking
+## Topic: travel_emergency
 
-Role-play scenario: hotel booking or front-desk check-in. User role: guest. AI role: hotel receptionist. Objective: practise room requests, dates, prices, facilities, and solving small problems. Constraints: confirm details like dates and room type, ask follow-up questions, and model polite requests.
-
-## Sub-topic: asking_directions
-
-Role-play scenario: the user is lost and needs directions. User role: traveller. AI role: helpful local person. Objective: practise asking for and understanding directions, landmarks, distance, and transport options. Constraints: give step-by-step directions, check understanding, and ask the user to repeat or summarize.
-
-## Sub-topic: travel_problem
-
-Role-play scenario: a travel problem such as lost luggage, a delayed train, or a wrong booking. User role: traveller explaining the issue. AI role: service staff. Objective: practise explaining problems calmly, asking for help, and confirming next steps. Constraints: introduce one realistic complication and help the learner stay polite and clear.
-
-## Sub-topic: ordering_food
->>>>>>> d2c571c8044499ba0d9d573784da6538b8bdb874
-
-Role-play scenario: the user is ordering food while travelling. User role: restaurant customer. AI role: friendly server. Objective: practise asking about dishes, ordering clearly, making polite requests, and confirming the bill. Constraints: ask realistic server follow-up questions, offer choices, and help the learner use natural restaurant English.
+Role-play scenario: a lost or emergency situation while traveling. User role: traveler needing help. AI role: police officer, hotel staff, or service worker. Objective: practise explaining the problem and asking for urgent assistance clearly. Constraints: stay calm, practical, and polite.
