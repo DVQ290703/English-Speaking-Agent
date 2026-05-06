@@ -1,36 +1,44 @@
-import { CheckCircle2, Volume2 } from 'lucide-react';
+import { CheckCircle2, Lightbulb, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { useT } from '../../i18n/useLanguage';
-import { FEEDBACK_ICON, type FeedbackType } from './constants';
 import { type Message, type Mistake } from './MessageBubble';
-import PronunciationDetailModal from './PronunciationDetailModal';
+import CombinedFeedbackModal from './CombinedFeedbackModal';
 
 interface AiFeedbackPanelProps {
   displayMsg: Message | null;
   selectedMsg: Message | null;
   isAutoLatest: boolean;
   isConnected: boolean;
+  grammarErrors: Mistake[];
+  grammarCorrectedSentence: string;
+  isGrammarLoading: boolean;
+  isPronunciationLoading: boolean;
   onShowLatest: () => void;
   onPlayAudio: (id: number) => void;
 }
-
-const MISTAKE_TYPE_TO_FEEDBACK: Record<Mistake['type'], FeedbackType> = {
-  Pronunciation: 'pronunciation',
-  Grammar: 'grammar',
-  'Word choice': 'vocabulary',
-  Fluency: 'fluency',
-};
 
 export default function AiFeedbackPanel({
   displayMsg,
   selectedMsg,
   isAutoLatest,
   isConnected,
+  grammarErrors,
+  grammarCorrectedSentence,
+  isGrammarLoading,
+  isPronunciationLoading,
   onShowLatest,
   onPlayAudio,
 }: AiFeedbackPanelProps) {
   const t = useT();
-  const [activeMistake, setActiveMistake] = useState<Mistake | null>(null);
+  const [showCombinedModal, setShowCombinedModal] = useState(false);
+  const [activeModalType, setActiveModalType] = useState<'pronunciation' | 'grammar'>(
+    'pronunciation',
+  );
+  const mistakes = displayMsg?.mistakes ?? [];
+  const pronunciationErrors: Mistake[] = mistakes.filter((m) => m.type === 'Pronunciation');
+  const effectiveGrammarErrors = grammarErrors;
+  const hasCombinedErrors = pronunciationErrors.length > 0 || effectiveGrammarErrors.length > 0;
+  const canShowGreatJob = !isPronunciationLoading && !isGrammarLoading && !hasCombinedErrors;
   return (
     <div className="px-2 mt-3 flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-2">
@@ -125,84 +133,96 @@ export default function AiFeedbackPanel({
             )}
 
             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block px-1">
-              {displayMsg.mistakes && displayMsg.mistakes.length > 0
+              {hasCombinedErrors
                 ? t('va.left.errorsCount', {
-                    n: displayMsg.mistakes.length,
+                    n: pronunciationErrors.length + effectiveGrammarErrors.length,
                   })
                 : t('va.left.errors')}
             </span>
 
-            {!displayMsg.mistakes || displayMsg.mistakes.length === 0 ? (
-              <div className="rounded-md border border-green-200 bg-green-50 p-2 flex items-start gap-1.5 animate-fadeIn">
-                <CheckCircle2 className="w-3 h-3 text-green-600 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-green-700 leading-snug">{t('va.left.noIssues')}</p>
-              </div>
-            ) : (
-              displayMsg.mistakes.map((m, i) => {
-                const meta = FEEDBACK_ICON[MISTAKE_TYPE_TO_FEEDBACK[m.type]];
-                const Icon = meta.icon;
-                const isPronunciation =
-                  m.type === 'Pronunciation' && m.phonemes && m.phonemes.length > 0;
-                const cardCls = `rounded-md border p-2 ${meta.bg} animate-fadeIn ${
-                  isPronunciation
-                    ? 'cursor-pointer hover:shadow-md hover:-translate-y-px transition-all text-left w-full'
-                    : ''
-                }`;
-                const inner = (
-                  <>
+            <div className="relative min-h-29.5">
+              {canShowGreatJob ? (
+                <div className="space-y-2 animate-fadeIn transition-all duration-200 ease-in-out">
+                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                    <p className="text-[10px] text-emerald-700 leading-snug">
+                      {t('va.left.perfectPronunciation')}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-teal-200 bg-teal-50 p-2 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3 text-teal-600 shrink-0" />
+                    <p className="text-[10px] text-teal-700 leading-snug">
+                      {t('va.left.correctGrammar')}
+                    </p>
+                  </div>
+                </div>
+              ) : hasCombinedErrors ? (
+                <div className="space-y-2 animate-fadeIn transition-all duration-200 ease-in-out">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModalType('pronunciation');
+                      setShowCombinedModal(true);
+                    }}
+                    className="w-full rounded-md border border-violet-200 bg-violet-50 p-2 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all text-left"
+                  >
                     <div className="flex items-center justify-between gap-1.5 mb-1">
                       <div className="flex items-center gap-1.5">
-                        <Icon className={`w-3 h-3 shrink-0 ${meta.color}`} />
-                        <span
-                          className={`text-[9px] font-bold uppercase tracking-wider ${meta.color}`}
-                        >
-                          {t(`va.mistake.${m.type}`)}
+                        <Lightbulb className="w-3 h-3 shrink-0 text-violet-700" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-violet-700">
+                          {t('va.left.pronunciationCardTitle')}
                         </span>
                       </div>
-                      {isPronunciation && (
-                        <span
-                          className={`text-[8.5px] font-semibold ${meta.color} opacity-70 italic`}
-                        >
-                          Bấm để xem chi tiết →
-                        </span>
-                      )}
+                      <span className="text-[8.5px] font-semibold text-violet-700 opacity-70 italic">
+                        {t('va.left.clickDetails')}
+                      </span>
                     </div>
-                    {m.wrong !== '—' && (
-                      <p className="text-[10px] text-red-500 opacity-80 line-through mb-0.5 leading-snug">
-                        {m.wrong}
-                      </p>
-                    )}
-                    {m.correct !== '—' && (
-                      <p className="text-[10px] text-green-600 font-medium mb-1 leading-snug">
-                        {m.correct}
-                      </p>
-                    )}
-                    {m.note && !isPronunciation && (
-                      <p className="text-[9px] text-gray-700 dark:text-gray-300 leading-relaxed">
-                        {m.note}
-                      </p>
-                    )}
-                  </>
-                );
-                if (isPronunciation) {
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setActiveMistake(m)}
-                      className={cardCls}
-                    >
-                      {inner}
-                    </button>
-                  );
-                }
-                return (
-                  <div key={i} className={cardCls}>
-                    {inner}
+                    <p className="text-[10px] text-gray-700 dark:text-slate-200 leading-snug">
+                      {t('va.left.pronunciationSummary', {
+                        pronunciation: pronunciationErrors.length,
+                      })}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModalType('grammar');
+                      setShowCombinedModal(true);
+                    }}
+                    className="w-full rounded-md border border-fuchsia-200 bg-fuchsia-50 dark:border-fuchsia-700/40 dark:bg-fuchsia-950/20 p-2 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all text-left"
+                  >
+                    <div className="flex items-center justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <Lightbulb className="w-3 h-3 shrink-0 text-fuchsia-700 dark:text-fuchsia-300" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-fuchsia-700 dark:text-fuchsia-300">
+                          {t('va.left.grammarCardTitle')}
+                        </span>
+                      </div>
+                      <span className="text-[8.5px] font-semibold text-fuchsia-700 dark:text-fuchsia-300 opacity-70 italic">
+                        {t('va.left.clickDetails')}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-700 dark:text-slate-200 leading-snug">
+                      {t('va.left.grammarSummary', {
+                        grammar: effectiveGrammarErrors.length,
+                      })}
+                    </p>
+                  </button>
+                </div>
+              ) : null}
+
+              {isGrammarLoading && (
+                <div className="absolute inset-0 rounded-md border border-amber-200/70 bg-amber-50/85 backdrop-blur-[1px] p-2 flex items-center gap-2 pointer-events-none">
+                  <div className="w-full space-y-1.5">
+                    <div className="h-2.5 w-2/5 rounded bg-amber-200/70 animate-pulse" />
+                    <div className="h-2 w-full rounded bg-amber-200/60 animate-pulse" />
+                    <div className="h-2 w-4/5 rounded bg-amber-200/60 animate-pulse" />
+                    <div className="h-2 w-3/5 rounded bg-amber-200/60 animate-pulse" />
                   </div>
-                );
-              })
-            )}
+                </div>
+              )}
+            </div>
           </>
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-2 text-center py-8">
@@ -215,13 +235,13 @@ export default function AiFeedbackPanel({
           </div>
         )}
       </div>
-      {activeMistake && (
-        <PronunciationDetailModal
-          word={activeMistake.wrong}
-          correct={activeMistake.correct}
-          phonemes={activeMistake.phonemes}
-          note={activeMistake.note}
-          onClose={() => setActiveMistake(null)}
+      {showCombinedModal && (
+        <CombinedFeedbackModal
+          type={activeModalType}
+          pronunciationErrors={pronunciationErrors}
+          grammarErrors={effectiveGrammarErrors}
+          grammarCorrectedSentence={grammarCorrectedSentence}
+          onClose={() => setShowCombinedModal(false)}
         />
       )}
     </div>

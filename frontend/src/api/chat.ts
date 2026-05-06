@@ -6,6 +6,7 @@ export interface ChatRespondParams {
   audioBlob?: Blob;
   history?: Array<{ role: string; text: string }>;
   topic?: string;
+  category?: string;
   subOption?: string;
   voiceGender?: 'Male' | 'Female' | string;
   conversationId?: string | null;
@@ -22,12 +23,32 @@ export interface ChatRespondResult {
   user_message_id?: string;
 }
 
+export interface GrammarFeedbackItem {
+  original_text?: string;
+  corrected_text?: string;
+  explanation?: string;
+  original?: string;
+  corrected?: string;
+  wrong?: string;
+  correct?: string;
+  note?: string;
+}
+
+export interface GrammarFeedbackPayload {
+  message_id?: string;
+  user_input?: string;
+  errors?: GrammarFeedbackItem[];
+  corrected_sentence?: string;
+  overall_score?: number;
+}
+
 export async function chatRespond({
   token,
   text,
   audioBlob,
   history = [],
   topic = '',
+  category = '',
   subOption = '',
   voiceGender = '',
   conversationId = null,
@@ -44,6 +65,10 @@ export async function chatRespond({
 
   if (topic && topic.trim()) {
     formData.append('topic', topic.trim());
+  }
+
+  if (category && category.trim()) {
+    formData.append('category', category.trim());
   }
 
   if (subOption && subOption.trim()) {
@@ -77,6 +102,40 @@ export async function chatRespond({
   }
 
   return data as ChatRespondResult;
+}
+
+// Placeholder: ready for the upcoming grammar endpoint contract.
+// Keep this signature stable so callers can integrate now and swap response mapping later.
+export async function fetchGrammarFeedback(
+  token: string,
+  messageId: string,
+  signal?: AbortSignal,
+): Promise<GrammarFeedbackPayload> {
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.grammar.detailFeedback(messageId)}`, {
+    method: 'GET',
+    signal,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data as { detail?: string }).detail || 'Grammar feedback request failed');
+  }
+
+  if (Array.isArray(data)) {
+    return { message_id: messageId, errors: data as GrammarFeedbackItem[] };
+  }
+
+  const payload = data as GrammarFeedbackPayload;
+  return {
+    message_id: payload.message_id ?? messageId,
+    user_input: payload.user_input,
+    errors: Array.isArray(payload.errors) ? payload.errors : [],
+    corrected_sentence: payload.corrected_sentence,
+    overall_score: payload.overall_score,
+  };
 }
 
 function writeString(view: DataView, offset: number, str: string): void {

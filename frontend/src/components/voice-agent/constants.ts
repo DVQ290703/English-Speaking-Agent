@@ -1,54 +1,12 @@
-import { AlertCircle, BookOpen, Volume2, Zap } from 'lucide-react';
-
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type Gender = 'Male' | 'Female';
 export type Language = 'English' | 'Vietnamese';
 export type Model = 'OpenAI GPT 5' | 'OpenAI GPT 4o' | 'Claude 3.5 Sonnet' | 'Gemini 1.5 Pro';
-export type FeedbackType = 'grammar' | 'vocabulary' | 'pronunciation' | 'fluency';
 
 export interface AuthUser {
   display_name: string;
   email?: string;
 }
-
-export interface FeedbackItem {
-  id: number;
-  type: FeedbackType;
-  original: string;
-  corrected: string;
-  explanation: string;
-  timestamp: Date;
-}
-
-export const FEEDBACK_ICON: Record<
-  FeedbackType,
-  { icon: typeof AlertCircle; color: string; bg: string; label: string }
-> = {
-  grammar: {
-    icon: AlertCircle,
-    color: 'text-red-500',
-    bg: 'bg-red-50 border-red-200',
-    label: 'Grammar',
-  },
-  vocabulary: {
-    icon: BookOpen,
-    color: 'text-yellow-500',
-    bg: 'bg-yellow-50 border-yellow-200',
-    label: 'Vocabulary',
-  },
-  pronunciation: {
-    icon: Volume2,
-    color: 'text-purple-600',
-    bg: 'bg-violet-50 border-purple-500/25',
-    label: 'Pronunciation',
-  },
-  fluency: {
-    icon: Zap,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50 border-blue-200',
-    label: 'Fluency',
-  },
-};
 
 export const LANGUAGES: Language[] = ['English', 'Vietnamese'];
 export const MODELS: Model[] = [
@@ -58,20 +16,12 @@ export const MODELS: Model[] = [
   'Gemini 1.5 Pro',
 ];
 export const GENDERS: Gender[] = ['Male', 'Female'];
-
-export const TOPICS = [
-  { id: 'daily_conversation', label: 'Daily Conversation', desc: 'Everyday English practice' },
-  { id: 'travel', label: 'Travel English', desc: 'Travel, tourism, directions' },
-  { id: 'job_interview', label: 'Job Interview', desc: 'Interview questions and answers' },
-  {
-    id: 'business_meeting',
-    label: 'Business Meeting',
-    desc: 'Meetings, negotiations, presentations',
-  },
-  { id: 'academic', label: 'Academic Discussion', desc: 'IELTS-style opinions and analysis' },
-] as const;
-
-export type TopicId = (typeof TOPICS)[number]['id'];
+export type TopicId =
+  | 'daily_conversation'
+  | 'travel'
+  | 'job_interview'
+  | 'business_meeting'
+  | 'academic';
 
 export const LANGUAGE_CODES: Record<Language, string> = {
   English: 'en-US',
@@ -132,15 +82,6 @@ export const DASHBOARD_TO_TOPIC_ID: Record<string, TopicId> = {
   ielts_part1: 'academic',
   ielts_part2: 'academic',
   ielts_part3: 'academic',
-};
-
-/** Maps a frontend TopicId to the DB topic codes used in conversations.topic_code */
-export const TOPIC_ID_TO_DB_CODES: Partial<Record<TopicId, string[]>> = {
-  daily_conversation: ['daily_conversation'],
-  travel: ['travel'],
-  job_interview: ['job_interview'],
-  business_meeting: ['business_meeting'],
-  academic: ['academic'],
 };
 
 export const DASHBOARD_TO_SUB_OPTION: Record<string, string> = {

@@ -19,6 +19,7 @@ export interface ScoreDetails {
 
 export interface Message {
   id: number;
+  backendMessageId?: string;
   role: 'agent' | 'user';
   text: string;
   timestamp: Date;

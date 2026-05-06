@@ -138,7 +138,6 @@ export default function useSpeechRecognition({
           return true;
         } catch (err) {
           const name = (err as { name?: string })?.name || '';
-          console.error('[VoiceAgent] getUserMedia failed:', err);
           if (name === 'NotAllowedError' || name === 'SecurityError') {
             alert(t('va.alert.micBlockedPreview'));
           } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
@@ -205,7 +204,6 @@ export default function useSpeechRecognition({
 
       recognition.onerror = (event: Event) => {
         const err = (event as { error?: string }).error || '';
-        console.warn('[VoiceAgent] SpeechRecognition error:', err);
         if (err === 'not-allowed' || err === 'service-not-allowed') {
           stopped = true;
           setMicEnabled(false);
@@ -230,7 +228,6 @@ export default function useSpeechRecognition({
         if (consecutiveErrors >= 4) {
           stopped = true;
           setMicEnabled(false);
-          console.error('[VoiceAgent] giving up after repeated SpeechRecognition errors');
           alert(t('va.alert.recogGivingUp'));
           return;
         }
@@ -243,7 +240,7 @@ export default function useSpeechRecognition({
       try {
         recognition.start();
       } catch (err) {
-        console.warn('[VoiceAgent] recognition.start() threw:', err);
+        void err;
       }
     }
 

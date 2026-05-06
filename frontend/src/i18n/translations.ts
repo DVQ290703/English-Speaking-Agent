@@ -175,6 +175,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.minutes': '{n} min',
     'va.history.sentences': '{n} sentences',
     'va.history.count': '{n} session(s)',
+    'va.history.loading': 'Loading conversation...',
 
     // Voice agent — conversation sidebar (left)
     'va.sidebar.newChat': 'New Chat',
@@ -185,9 +186,14 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.empty': 'No conversations yet.',
     'va.sidebar.delete': 'Delete',
     'va.sidebar.confirmDelete': 'Delete this conversation?',
+    'va.sidebar.confirmDeleteTitle': 'Confirm Deletion',
     'va.sidebar.deleted': 'Deleted.',
+    'va.sidebar.deleteFailed': 'Could not delete conversation.',
+    'va.sidebar.close': 'Close sidebar',
     'va.sidebar.limitReached':
       'This topic has reached the 5-session limit. Delete an old session to start a new one.',
+    'va.sidebar.limitWarningAlert':
+      'Session limit reached (5/5). Delete an older session to start a new one.',
     'va.sidebar.limitBadge': '5/5',
     'va.sidebar.noTopicSelected': 'Select a topic first to see conversation history.',
     'va.sidebar.emptyTopic': 'No conversations for this topic yet.',
@@ -293,11 +299,36 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.left.scoreBreakdown': 'Score breakdown',
     'va.left.errors': 'Errors',
     'va.left.errorsCount': 'Errors ({n})',
+    'va.left.combinedTitle': 'Pronunciation & Grammar',
+    'va.left.combinedSummary':
+      'You have {pronunciation} pronunciation issues and {grammar} grammar issues.',
+    'va.left.pronunciationCardTitle': 'Pronunciation Issues',
+    'va.left.pronunciationSummary': 'Detected {pronunciation} pronunciation issues.',
+    'va.left.grammarCardTitle': 'Grammar Issues',
+    'va.left.grammarSummary': 'Detected {grammar} grammar issues.',
+    'va.left.perfectPronunciation': 'Perfect pronunciation.',
+    'va.left.correctGrammar': 'Correct grammar.',
+    'va.left.clickDetails': 'Bấm để xem chi tiết →',
     'va.left.noIssues': 'Great job! No issues detected in this sentence.',
+    'va.left.checkingGrammar': 'Checking grammar...',
     'va.left.feedbackEmptyConnected':
       'Send a message to see feedback for your latest sentence here.',
     'va.left.assessing': 'Assessing...',
     'va.left.feedbackEmptyDisconnected': 'Connect to see real-time English corrections',
+
+    // VoiceAgent — combined feedback modal
+    'va.modal.pronunciationIssues': 'Pronunciation Issues',
+    'va.modal.grammarIssues': 'Grammar Issues',
+    'va.modal.original': 'Original',
+    'va.modal.corrected': 'Corrected',
+    'va.modal.correctedSentence': 'Corrected sentence',
+    'va.modal.targetSentence': 'Target sentence',
+    'va.modal.explanation': 'Explanation',
+    'va.modal.noExplanation': 'No additional explanation provided.',
+    'va.tip.title': 'Phoneme tip',
+    'va.tip.phoneme': 'Phoneme',
+    'va.tip.accuracy': 'Accuracy',
+    'va.tip.noTip': 'No tip available for this phoneme yet.',
 
     // VoiceAgent — score labels
     'va.score.overall': 'Overall',
@@ -531,6 +562,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.history.minutes': '{n} phút',
     'va.history.sentences': '{n} câu',
     'va.history.count': '{n} phiên',
+    'va.history.loading': 'Đang tải hội thoại...',
 
     // Voice agent — conversation sidebar (left)
     'va.sidebar.newChat': 'Chat mới',
@@ -541,8 +573,12 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.empty': 'Chưa có cuộc hội thoại nào.',
     'va.sidebar.delete': 'Xóa',
     'va.sidebar.confirmDelete': 'Xóa cuộc hội thoại này?',
+    'va.sidebar.confirmDeleteTitle': 'Xác nhận xóa',
     'va.sidebar.deleted': 'Đã xóa.',
+    'va.sidebar.deleteFailed': 'Không thể xóa cuộc hội thoại.',
+    'va.sidebar.close': 'Đóng thanh bên',
     'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
+    'va.sidebar.limitWarningAlert': 'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
     'va.sidebar.limitBadge': '5/5',
     'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
     'va.sidebar.emptyTopic': 'Chưa có hội thoại nào cho topic này.',
@@ -648,11 +684,35 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.left.scoreBreakdown': 'Phân tích điểm',
     'va.left.errors': 'Lỗi',
     'va.left.errorsCount': 'Lỗi ({n})',
+    'va.left.combinedTitle': 'Phát âm & Ngữ pháp',
+    'va.left.combinedSummary': 'Bạn có {pronunciation} lỗi phát âm và {grammar} lỗi ngữ pháp.',
+    'va.left.pronunciationCardTitle': 'Lỗi phát âm',
+    'va.left.pronunciationSummary': 'Phát hiện {pronunciation} lỗi phát âm.',
+    'va.left.grammarCardTitle': 'Lỗi ngữ pháp',
+    'va.left.grammarSummary': 'Phát hiện {grammar} lỗi ngữ pháp.',
+    'va.left.perfectPronunciation': 'Phát âm hoàn hảo.',
+    'va.left.correctGrammar': 'Ngữ pháp chính xác.',
+    'va.left.clickDetails': 'Bấm để xem chi tiết →',
     'va.left.noIssues': 'Tuyệt vời! Không phát hiện lỗi nào trong câu này.',
+    'va.left.checkingGrammar': 'Đang kiểm tra ngữ pháp...',
     'va.left.feedbackEmptyConnected':
       'Gửi tin nhắn để xem phản hồi cho câu mới nhất của bạn ở đây.',
     'va.left.assessing': 'Đang chấm...',
     'va.left.feedbackEmptyDisconnected': 'Kết nối để xem chỉnh sửa tiếng Anh theo thời gian thực',
+
+    // VoiceAgent — combined feedback modal
+    'va.modal.pronunciationIssues': 'Lỗi phát âm',
+    'va.modal.grammarIssues': 'Lỗi ngữ pháp',
+    'va.modal.original': 'Câu gốc',
+    'va.modal.corrected': 'Câu đúng',
+    'va.modal.correctedSentence': 'Câu đã sửa',
+    'va.modal.targetSentence': 'Câu mục tiêu',
+    'va.modal.explanation': 'Giải thích',
+    'va.modal.noExplanation': 'Chưa có giải thích bổ sung.',
+    'va.tip.title': 'Gợi ý phát âm',
+    'va.tip.phoneme': 'Âm vị',
+    'va.tip.accuracy': 'Độ chính xác',
+    'va.tip.noTip': 'Chưa có gợi ý cho âm vị này.',
 
     // VoiceAgent — score labels
     'va.score.overall': 'Tổng quát',

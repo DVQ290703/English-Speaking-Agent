@@ -22,6 +22,16 @@ interface LeftAudioPanelProps {
   currentUser: AuthUser | null;
 }
 
+function InactiveDots({ dotClass }: { dotClass: string }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 14 }).map((_, i) => (
+        <div key={i} className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+      ))}
+    </div>
+  );
+}
+
 export default function LeftAudioPanel({
   gender,
   onChangeGender,
@@ -62,11 +72,7 @@ export default function LeftAudioPanel({
             {isConnected || isConnecting ? (
               <AgentWaveform active={agentSpeaking} />
             ) : (
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 14 }).map((_, i) => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-500/30" />
-                ))}
-              </div>
+              <InactiveDots dotClass="bg-blue-500/30" />
             )}
           </div>
         </div>
@@ -115,11 +121,7 @@ export default function LeftAudioPanel({
             {isConnected || isConnecting ? (
               <MicWaveform active={micEnabled && isConnected} speaking={isSpeaking} />
             ) : (
-              <div className="flex items-center gap-0.5">
-                {Array.from({ length: 14 }).map((_, i) => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-500/30" />
-                ))}
-              </div>
+              <InactiveDots dotClass="bg-violet-500/30" />
             )}
           </div>
         </div>
