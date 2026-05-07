@@ -134,6 +134,39 @@ services:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
       - "5601:5601"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  elasticsearch-init:
+    image: curlimages/curl:8
+    container_name: voice_agent_elasticsearch_init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      sh -c "
+        echo 'Creating ILM policy...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_ilm/policy/voice-agent-logs-policy
+          -H 'Content-Type: application/json'
+          -d '{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_primary_shard_size\":\"10gb\",\"max_age\":\"7d\"}}},\"delete\":{\"min_age\":\"30d\",\"actions\":{\"delete\":{}}}}}}'
+        &&
+        echo 'Creating component template...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_component_template/voice-agent-logs-mappings
+          -H 'Content-Type: application/json'
+          -d '{\"template\":{\"mappings\":{\"dynamic\":\"false\",\"properties\":{\"@timestamp\":{\"type\":\"date\"},\"log_type\":{\"type\":\"keyword\"},\"trace_id\":{\"type\":\"keyword\"},\"session_id\":{\"type\":\"keyword\"},\"user_id\":{\"type\":\"keyword\"},\"span_name\":{\"type\":\"keyword\"},\"span_kind\":{\"type\":\"keyword\"},\"duration_ms\":{\"type\":\"float\"},\"status\":{\"type\":\"keyword\"},\"event_type\":{\"type\":\"keyword\"},\"raw_message\":{\"type\":\"text\"},\"source_file\":{\"type\":\"keyword\"},\"environment\":{\"type\":\"keyword\"},\"model\":{\"type\":\"keyword\"},\"prompt_tokens\":{\"type\":\"integer\"},\"completion_tokens\":{\"type\":\"integer\"},\"total_tokens\":{\"type\":\"integer\"},\"estimated_cost_usd\":{\"type\":\"float\"}}}}}'
+        &&
+        echo 'Creating index template...' &&
+        curl -f -s -X PUT http://elasticsearch:9200/_index_template/voice-agent-logs
+          -H 'Content-Type: application/json'
+          -d '{\"index_patterns\":[\"logs-voice_agent.*-*\"],\"data_stream\":{},\"composed_of\":[\"voice-agent-logs-mappings\"],\"template\":{\"settings\":{\"index.lifecycle.name\":\"voice-agent-logs-policy\",\"number_of_shards\":1,\"number_of_replicas\":0}},\"priority\":200}'
+        &&
+        echo 'Elasticsearch bootstrap complete.'
+      "
 
   vector:
     image: timberio/vector:0.38.0-alpine
