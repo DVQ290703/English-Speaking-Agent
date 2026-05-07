@@ -1,4 +1,4 @@
-"""Unit tests for GET /api/topics/categories"""
+"""Unit tests for GET /api/topics/get_categories_topics"""
 import os
 import sys
 import types
@@ -54,7 +54,7 @@ def test_get_categories_returns_grouped_structure():
     ]
     mock_conn = make_mock_conn(db_rows)
     with patch("app.api.topics.get_connection", return_value=mock_conn):
-        resp = client.get("/api/topics/categories")
+        resp = client.get("/api/topics/get_categories_topics")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -76,7 +76,7 @@ def test_get_categories_two_categories():
     ]
     mock_conn = make_mock_conn(db_rows)
     with patch("app.api.topics.get_connection", return_value=mock_conn):
-        resp = client.get("/api/topics/categories")
+        resp = client.get("/api/topics/get_categories_topics")
 
     assert resp.status_code == 200
     data = resp.json()
@@ -89,7 +89,7 @@ def test_get_categories_empty_db():
     """Empty DB returns an empty list (not an error)."""
     mock_conn = make_mock_conn([])
     with patch("app.api.topics.get_connection", return_value=mock_conn):
-        resp = client.get("/api/topics/categories")
+        resp = client.get("/api/topics/get_categories_topics")
 
     assert resp.status_code == 200
     assert resp.json() == []
@@ -99,5 +99,5 @@ def test_get_categories_no_auth_required():
     """Endpoint must be accessible without an Authorization header."""
     mock_conn = make_mock_conn([])
     with patch("app.api.topics.get_connection", return_value=mock_conn):
-        resp = client.get("/api/topics/categories")
+        resp = client.get("/api/topics/get_categories_topics")
     assert resp.status_code == 200

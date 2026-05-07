@@ -228,10 +228,9 @@ def test_chat_respond_returns_409_when_5_conversations_exist():
     )
     with (
         _patch("app.api.chat.get_connection", return_value=conn),
-        _patch("app.api.chat.run_langraph_agent", return_value=("Hello", b"")),
+        _patch("app.api.chat.run_langraph_agent", return_value=("Hello", b"", None)),
         _patch("app.api.chat._synthesize_audio_bytes", return_value=b""),
         _patch("app.api.chat.store_user_audio", return_value=(None, "audio/webm")),
-        _patch("app.api.chat.get_presigned_url", return_value=None),
         _patch("app.api.chat._upload"),
     ):
         with TestClient(app) as client:
@@ -268,10 +267,9 @@ def test_chat_respond_creates_conversation_with_session_title():
     )
     with (
         _patch("app.api.chat.get_connection", return_value=conn),
-        _patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"")),
+        _patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"", None)),
         _patch("app.api.chat._synthesize_audio_bytes", return_value=b""),
         _patch("app.api.chat.store_user_audio", return_value=(None, "audio/webm")),
-        _patch("app.api.chat.get_presigned_url", return_value=None),
         _patch("app.api.chat._upload"),
     ):
         with TestClient(app) as client:
