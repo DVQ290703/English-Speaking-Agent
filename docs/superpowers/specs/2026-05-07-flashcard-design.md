@@ -131,7 +131,7 @@ All endpoints are under `/api/flashcards`, require JWT authentication, and exclu
 | `GET` | `/api/flashcards/cards/{card_id}` | `get_card` | Get a single card with media |
 | `PATCH` | `/api/flashcards/cards/{card_id}` | `update_card` | Update front/back/tags |
 | `DELETE` | `/api/flashcards/cards/{card_id}` | `delete_card` | Soft delete a card |
-| `GET` | `/api/flashcards/cards/search` | `search_cards` | Search by `q` (keyword) and/or `tag`, optional `deck_id` |
+| `GET` | `/api/flashcards/cards/search` | `search_cards` | Search by `q` (ILIKE on front/back text) and/or `tag`, optional `deck_id` |
 
 ### Media
 
@@ -258,6 +258,6 @@ tests/
 
 - SM-2 correctness is the top priority — all scheduling logic lives in `flashcard_service.py`, not in the API layer
 - All endpoints are stateless and JWT-auth-ready
-- Agent tools are idempotent where possible (`submit_card_review`, `create_card`)
+- Agent tools are idempotent where possible (`submit_card_review`)
 - Soft deletes only — no hard deletes on decks or cards
 - Media storage follows the existing `audio_assets` pattern
