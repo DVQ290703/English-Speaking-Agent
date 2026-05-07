@@ -148,25 +148,17 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: "no"
-    command: >
-      sh -c "
+    command:
+      - sh
+      - -c
+      - |
         echo 'Creating ILM policy...' &&
-        curl -f -s -X PUT http://elasticsearch:9200/_ilm/policy/voice-agent-logs-policy
-          -H 'Content-Type: application/json'
-          -d '{\"policy\":{\"phases\":{\"hot\":{\"actions\":{\"rollover\":{\"max_primary_shard_size\":\"10gb\",\"max_age\":\"7d\"}}},\"delete\":{\"min_age\":\"30d\",\"actions\":{\"delete\":{}}}}}}'
-        &&
+        curl -f -s -X PUT http://elasticsearch:9200/_ilm/policy/voice-agent-logs-policy -H 'Content-Type: application/json' -d '{"policy":{"phases":{"hot":{"actions":{"rollover":{"max_primary_shard_size":"10gb","max_age":"7d"}}},"delete":{"min_age":"30d","actions":{"delete":{}}}}}}' &&
         echo 'Creating component template...' &&
-        curl -f -s -X PUT http://elasticsearch:9200/_component_template/voice-agent-logs-mappings
-          -H 'Content-Type: application/json'
-          -d '{\"template\":{\"mappings\":{\"dynamic\":\"false\",\"properties\":{\"@timestamp\":{\"type\":\"date\"},\"log_type\":{\"type\":\"keyword\"},\"trace_id\":{\"type\":\"keyword\"},\"session_id\":{\"type\":\"keyword\"},\"user_id\":{\"type\":\"keyword\"},\"span_name\":{\"type\":\"keyword\"},\"span_kind\":{\"type\":\"keyword\"},\"duration_ms\":{\"type\":\"float\"},\"status\":{\"type\":\"keyword\"},\"event_type\":{\"type\":\"keyword\"},\"raw_message\":{\"type\":\"text\"},\"source_file\":{\"type\":\"keyword\"},\"environment\":{\"type\":\"keyword\"},\"model\":{\"type\":\"keyword\"},\"prompt_tokens\":{\"type\":\"integer\"},\"completion_tokens\":{\"type\":\"integer\"},\"total_tokens\":{\"type\":\"integer\"},\"estimated_cost_usd\":{\"type\":\"float\"}}}}}'
-        &&
+        curl -f -s -X PUT http://elasticsearch:9200/_component_template/voice-agent-logs-mappings -H 'Content-Type: application/json' -d '{"template":{"mappings":{"dynamic":"false","properties":{"@timestamp":{"type":"date"},"log_type":{"type":"keyword"},"trace_id":{"type":"keyword"},"session_id":{"type":"keyword"},"user_id":{"type":"keyword"},"span_name":{"type":"keyword"},"span_kind":{"type":"keyword"},"duration_ms":{"type":"float"},"status":{"type":"keyword"},"event_type":{"type":"keyword"},"raw_message":{"type":"text"},"source_file":{"type":"keyword"},"environment":{"type":"keyword"},"model":{"type":"keyword"},"prompt_tokens":{"type":"integer"},"completion_tokens":{"type":"integer"},"total_tokens":{"type":"integer"},"estimated_cost_usd":{"type":"float"}}}}}' &&
         echo 'Creating index template...' &&
-        curl -f -s -X PUT http://elasticsearch:9200/_index_template/voice-agent-logs
-          -H 'Content-Type: application/json'
-          -d '{\"index_patterns\":[\"logs-voice_agent.*-*\"],\"data_stream\":{},\"composed_of\":[\"voice-agent-logs-mappings\"],\"template\":{\"settings\":{\"index.lifecycle.name\":\"voice-agent-logs-policy\",\"number_of_shards\":1,\"number_of_replicas\":0}},\"priority\":200}'
-        &&
+        curl -f -s -X PUT http://elasticsearch:9200/_index_template/voice-agent-logs -H 'Content-Type: application/json' -d '{"index_patterns":["logs-voice_agent.*-*"],"data_stream":{},"composed_of":["voice-agent-logs-mappings"],"template":{"settings":{"index.lifecycle.name":"voice-agent-logs-policy","number_of_shards":1,"number_of_replicas":0}},"priority":200}' &&
         echo 'Elasticsearch bootstrap complete.'
-      "
 
   kibana-init:
     image: curlimages/curl:latest
@@ -175,28 +167,20 @@ services:
       kibana:
         condition: service_healthy
     restart: "no"
-    command: >
-      sh -c "
+    command:
+      - sh
+      - -c
+      - |
         echo 'Creating Spans data view...' &&
-        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
-          -H 'kbn-xsrf: true'
-          -H 'Content-Type: application/json'
-          -d '{\"data_view\":{\"title\":\"logs-voice_agent.spans-*\",\"name\":\"Voice Agent — Spans\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Spans view failed: $$status\" && exit 1; }; } &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.spans-*","name":"Voice Agent - Spans","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Spans view failed: $$status" && exit 1; }; } &&
         echo 'Creating Audit data view...' &&
-        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
-          -H 'kbn-xsrf: true'
-          -H 'Content-Type: application/json'
-          -d '{\"data_view\":{\"title\":\"logs-voice_agent.audit-*\",\"name\":\"Voice Agent — Audit\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Audit view failed: $$status\" && exit 1; }; } &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.audit-*","name":"Voice Agent - Audit","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Audit view failed: $$status" && exit 1; }; } &&
         echo 'Creating Plain data view...' &&
-        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
-          -H 'kbn-xsrf: true'
-          -H 'Content-Type: application/json'
-          -d '{\"data_view\":{\"title\":\"logs-voice_agent.plain-*\",\"name\":\"Voice Agent — Plain\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Plain view failed: $$status\" && exit 1; }; } &&
+        status=$$(curl -s -o /dev/null -w "%{http_code}" -X POST http://kibana:5601/api/data_views/data_view -H 'kbn-xsrf: true' -H 'Content-Type: application/json' -d '{"data_view":{"title":"logs-voice_agent.plain-*","name":"Voice Agent - Plain","timeFieldName":"@timestamp"}}') &&
+        { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Plain view failed: $$status" && exit 1; }; } &&
         echo 'Kibana data views created.'
-      "
 
   vector:
     image: timberio/vector:0.38.0-alpine
