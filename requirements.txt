@@ -16,3 +16,5 @@ langsmith[claude-agent-sdk]
 minio
 azure-cognitiveservices-speech
 redis>=5.0,<6
+prometheus-client
+prometheus-fastapi-instrumentator
