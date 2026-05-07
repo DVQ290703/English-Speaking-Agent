@@ -12,6 +12,7 @@ import { useDarkMode } from './theme/useDarkMode';
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const VoiceAgent = lazy(() => import('./pages/VoiceAgent'));
+const FlashcardPage = lazy(() => import('./pages/FlashcardPage'));
 
 function PageFallback() {
   return (
@@ -80,6 +81,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flashcards"
+            element={
+              <ProtectedRoute>
+                <FlashcardPage />
               </ProtectedRoute>
             }
           />
