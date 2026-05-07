@@ -230,6 +230,107 @@ def list_cards(
 
 
 @router.post(
+    "/decks/{deck_id}/cards/with-media",
+    response_model=CardOut,
+    status_code=status.HTTP_201_CREATED,
+    name="create_card_with_media",
+)
+async def create_card_with_media(
+    deck_id: str,
+    front_text: str = Form(...),
+    back_text: str = Form(...),
+    tags: list[str] = Form(default=[]),
+    files: list[UploadFile] = File(default=[]),
+    sides: list[str] = Form(default=[]),
+    media_types: list[str] = Form(default=[]),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Create a card with optional media attachments in a single request.
+
+    Send as multipart/form-data:
+    - front_text, back_text, tags[] — card fields
+    - files[], sides[], media_types[] — parallel arrays, one entry per file
+      - sides[i]: "front" | "back"
+      - media_types[i]: "image" | "audio"
+    """
+    if len(files) != len(sides) or len(files) != len(media_types):
+        raise HTTPException(
+            status_code=422,
+            detail="files, sides, and media_types must have the same length",
+        )
+    for i, (side, mtype) in enumerate(zip(sides, media_types)):
+        if side not in ("front", "back"):
+            raise HTTPException(status_code=422, detail=f"sides[{i}] must be 'front' or 'back'")
+        if mtype not in ("image", "audio"):
+            raise HTTPException(status_code=422, detail=f"media_types[{i}] must be 'image' or 'audio'")
+
+    # Read all file bytes up front (before opening DB connection)
+    file_contents: list[tuple[bytes, str, str]] = []  # (content, mime, filename)
+    for i, f in enumerate(files):
+        content = await f.read()
+        if len(content) > _MAX_MEDIA_BYTES:
+            raise HTTPException(status_code=413, detail=f"files[{i}] exceeds 10 MB limit")
+        mime = f.content_type or ""
+        allowed = _ALLOWED_IMAGE_TYPES if media_types[i] == "image" else _ALLOWED_AUDIO_TYPES
+        if mime not in allowed:
+            raise HTTPException(status_code=415, detail=f"files[{i}] unsupported type: {mime}")
+        file_contents.append((content, mime, f.filename or ""))
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM flashcard_decks WHERE id = %s AND user_id = %s AND is_active = TRUE",
+                (deck_id, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Deck not found")
+
+            cur.execute(
+                """
+                INSERT INTO flashcards (deck_id, user_id, front_text, back_text, tags)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id::text, deck_id::text, front_text, back_text, tags, created_at
+                """,
+                (deck_id, user_id, front_text, back_text, tags),
+            )
+            row = cur.fetchone()
+            card_id = row[0]
+
+            cur.execute(
+                """
+                INSERT INTO flashcard_reviews (card_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT (card_id, user_id) DO NOTHING
+                """,
+                (card_id, user_id),
+            )
+
+            media_out: list[MediaOut] = []
+            for (content, mime, filename), side, mtype in zip(file_contents, sides, media_types):
+                ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+                media_id = str(uuid.uuid4())
+                storage_key = f"flashcards/{card_id}/{media_id}.{ext}"
+                _upload(object_key=storage_key, content=content, content_type=mime)
+                cur.execute(
+                    """
+                    INSERT INTO flashcard_media
+                        (id, card_id, side, media_type, storage_provider, storage_key, mime_type, size_bytes)
+                    VALUES (%s, %s, %s, %s, 'minio', %s, %s, %s)
+                    RETURNING id::text, side, media_type, public_url, mime_type
+                    """,
+                    (media_id, card_id, side, mtype, storage_key, mime, len(content)),
+                )
+                mr = cur.fetchone()
+                media_out.append(MediaOut(id=mr[0], side=mr[1], media_type=mr[2], public_url=mr[3], mime_type=mr[4]))
+
+    logger.info("create_card_with_media card_id=%s media_count=%d", card_id, len(media_out))
+    return CardOut(
+        id=row[0], deck_id=row[1], front_text=row[2],
+        back_text=row[3], tags=row[4] or [], created_at=row[5], media=media_out,
+    )
+
+
+@router.post(
     "/decks/{deck_id}/cards",
     response_model=CardOut,
     status_code=status.HTTP_201_CREATED,
