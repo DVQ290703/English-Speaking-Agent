@@ -9,6 +9,7 @@ import uuid
 from app.core import settings
 from app.core.database import get_connection
 from app.core.logger import logger as _app_logger
+from app.core.telemetry import get_trace_context
 
 
 class AuditLogger:
@@ -26,9 +27,12 @@ class AuditLogger:
         start_time: float,
     ) -> None:
         latency_ms = int((time.time() - start_time) * 1000)
+        ctx = get_trace_context()
         event = {
             "event_id": str(uuid.uuid4()),
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "trace_id": ctx["trace_id"],
+            "session_id": ctx["session_id"],
             "user_id": user_id,
             "conversation_id": conversation_id,
             "user_input_length": len(user_input),
