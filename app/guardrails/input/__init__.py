@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core import settings
+from app.core.telemetry import span_context
 from app.guardrails.input.injection import InjectionDetector
 from app.guardrails.input.rate_limiter import RateLimiter
 from app.guardrails.input.topic_filter import TopicFilter
@@ -26,8 +27,9 @@ class InputGuardrails:
 
     def check(self, text: str, user_id: str) -> str:
         """Return normalized text or raise GuardrailException. Order: cheapest first."""
-        text = self._validator.check(text)
-        self._rate_limiter.check(user_id)
-        self._injection_detector.check(text)
-        self._topic_filter.check(text)
-        return text
+        with span_context("guardrail.input", kind="guardrail"):
+            text = self._validator.check(text)
+            self._rate_limiter.check(user_id)
+            self._injection_detector.check(text)
+            self._topic_filter.check(text)
+            return text
