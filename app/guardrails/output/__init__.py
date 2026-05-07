@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from app.core.telemetry import span_context
 from app.guardrails.output.content_filter import ContentFilter
 
 
@@ -20,5 +21,6 @@ class OutputGuardrails:
 
     def check(self, text: str) -> OutputGuardrailsResult:
         """Return PII-redacted text and flags. Never raises."""
-        cf_result = self._content_filter.check(text)
-        return OutputGuardrailsResult(text=cf_result.text, flags=cf_result.flags)
+        with span_context("guardrail.output", kind="guardrail"):
+            cf_result = self._content_filter.check(text)
+            return OutputGuardrailsResult(text=cf_result.text, flags=cf_result.flags)
