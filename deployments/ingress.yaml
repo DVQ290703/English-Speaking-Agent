@@ -69,6 +69,14 @@ spec:
                 name: backend-agent-service
                 port:
                   number: 8000
+          # MinIO object storage — presigned URLs use this public path
+          - path: /storage/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: minio-service
+                port:
+                  number: 9000
           # Frontend — catch-all for React SPA routing
           - path: /*
             pathType: ImplementationSpecific
