@@ -168,6 +168,36 @@ services:
         echo 'Elasticsearch bootstrap complete.'
       "
 
+  kibana-init:
+    image: curlimages/curl:8
+    container_name: voice_agent_kibana_init
+    depends_on:
+      kibana:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      sh -c "
+        echo 'Creating Spans data view...' &&
+        curl -f -s -X POST http://kibana:5601/api/data_views/data_view
+          -H 'kbn-xsrf: true'
+          -H 'Content-Type: application/json'
+          -d '{\"data_view\":{\"title\":\"logs-voice_agent.spans-*\",\"name\":\"Voice Agent — Spans\",\"timeFieldName\":\"@timestamp\"}}'
+        &&
+        echo 'Creating Audit data view...' &&
+        curl -f -s -X POST http://kibana:5601/api/data_views/data_view
+          -H 'kbn-xsrf: true'
+          -H 'Content-Type: application/json'
+          -d '{\"data_view\":{\"title\":\"logs-voice_agent.audit-*\",\"name\":\"Voice Agent — Audit\",\"timeFieldName\":\"@timestamp\"}}'
+        &&
+        echo 'Creating Plain data view...' &&
+        curl -f -s -X POST http://kibana:5601/api/data_views/data_view
+          -H 'kbn-xsrf: true'
+          -H 'Content-Type: application/json'
+          -d '{\"data_view\":{\"title\":\"logs-voice_agent.plain-*\",\"name\":\"Voice Agent — Plain\",\"timeFieldName\":\"@timestamp\"}}'
+        &&
+        echo 'Kibana data views created.'
+      "
+
   vector:
     image: timberio/vector:0.38.0-alpine
     container_name: voice_agent_vector
