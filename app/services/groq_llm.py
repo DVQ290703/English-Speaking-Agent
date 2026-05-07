@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 from app.core.logger import logger
+from app.core.telemetry import span_context
 from app.prompts.prompt_builder import build_system_prompt
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md"
@@ -74,11 +75,20 @@ class GroqLLMService:
         messages.append(HumanMessage(content=user_input))
         logger.debug("GroqLLM sending %d messages to API", len(messages))
 
-        response = self.client.invoke(messages)
-        if isinstance(response, AIMessage):
-            result = response.content
-        else:
-            result = str(response)
+        with span_context("llm.generate_response", kind="llm") as span:
+            response = self.client.invoke(messages)
+            if isinstance(response, AIMessage):
+                result = response.content
+                usage = getattr(response, "usage_metadata", {}) or {}
+                span.set(
+                    model=self.model_name,
+                    prompt_tokens=usage.get("input_tokens", 0),
+                    completion_tokens=usage.get("output_tokens", 0),
+                    total_tokens=usage.get("total_tokens", 0),
+                )
+            else:
+                result = str(response)
+                span.set(model=self.model_name)
 
         logger.info("GroqLLM response_length=%d", len(result))
         return result
@@ -115,9 +125,18 @@ class GroqLLMService:
         messages.append(HumanMessage(content=user_input))
 
         try:
-            json_client = self.client.bind(response_format={"type": "json_object"})
-            response = json_client.invoke(messages)
-            raw = response.content if isinstance(response, AIMessage) else str(response)
+            with span_context("llm.generate_response_with_grammar", kind="llm") as span:
+                json_client = self.client.bind(response_format={"type": "json_object"})
+                response = json_client.invoke(messages)
+                raw = response.content if isinstance(response, AIMessage) else str(response)
+
+                usage = getattr(response, "usage_metadata", {}) or {}
+                span.set(
+                    model=self.model_name,
+                    prompt_tokens=usage.get("input_tokens", 0),
+                    completion_tokens=usage.get("output_tokens", 0),
+                    total_tokens=usage.get("total_tokens", 0),
+                )
 
             data = json.loads(raw)
             response_text = data.get("response_text", "").strip()
