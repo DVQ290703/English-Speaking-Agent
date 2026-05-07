@@ -270,3 +270,85 @@ class GrammarDetailResponse(BaseModel):
     errors: list[GrammarErrorDetail]
     corrected_sentence: str | None
     overall_score: int
+
+
+# ── Flashcard schemas ──────────────────────────────────────────────────────────
+
+from datetime import date as _date
+
+
+class DeckCreate(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class DeckUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class DeckOut(BaseModel):
+    id: str
+    name: str
+    description: str | None
+    card_count: int
+    due_count: int
+    created_at: datetime
+
+
+class MediaOut(BaseModel):
+    id: str
+    side: str
+    media_type: str
+    public_url: str | None
+    mime_type: str | None
+
+
+class CardCreate(BaseModel):
+    front_text: str
+    back_text: str
+    tags: list[str] = []
+
+
+class CardUpdate(BaseModel):
+    front_text: str | None = None
+    back_text: str | None = None
+    tags: list[str] | None = None
+
+
+class CardOut(BaseModel):
+    id: str
+    deck_id: str
+    front_text: str
+    back_text: str
+    tags: list[str]
+    created_at: datetime
+    media: list[MediaOut] = []
+
+
+class ReviewSubmit(BaseModel):
+    rating: Literal["again", "hard", "good", "easy"]
+
+
+class ReviewStateOut(BaseModel):
+    card_id: str
+    due_date: _date
+    interval_days: int
+    ease_factor: float
+    repetitions: int
+
+
+class DueCardOut(BaseModel):
+    id: str
+    front_text: str
+    back_text: str
+    deck_name: str
+    due_date: _date
+    media: list[MediaOut] = []
+
+
+class DeckStatsOut(BaseModel):
+    total_cards: int
+    due_today: int
+    learned: int
+    retention_rate: float
