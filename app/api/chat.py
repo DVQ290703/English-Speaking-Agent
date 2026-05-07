@@ -26,6 +26,7 @@ from app.core.logger import logger
 from app.core.security import get_current_user_id
 from app.core.storage import _upload, build_object_key, store_user_audio
 from app.guardrails.audit.logger import AuditLogger
+from app.core.telemetry import update_session_id
 from app.guardrails.exceptions import GuardrailException
 from app.guardrails.input import InputGuardrails
 from app.guardrails.output import OutputGuardrails
@@ -263,6 +264,9 @@ def chat_respond(
 
             # Server-side history — replaces client-owned history field
             conversation_history = _fetch_visible_history(cur, conv_id)
+
+    # Enrich trace context with the resolved conversation ID as session_id
+    update_session_id(conv_id)
 
     user_object_key: str | None = None
     user_mime_type = "audio/webm"
