@@ -4,6 +4,7 @@ import os
 from groq import Groq
 
 from app.core.logger import logger
+from app.core.telemetry import span_context
 
 
 class GroqSTTService:
@@ -29,12 +30,14 @@ class GroqSTTService:
         file_obj = io.BytesIO(audio_bytes)
         file_obj.name = filename
 
-        transcription = self.client.audio.transcriptions.create(
-            file=file_obj,
-            model=self.model_name,
-            response_format="verbose_json",
-            temperature=0.0,
-        )
+        with span_context("stt.transcribe", kind="stt") as span:
+            transcription = self.client.audio.transcriptions.create(
+                file=file_obj,
+                model=self.model_name,
+                response_format="verbose_json",
+                temperature=0.0,
+            )
+            span.set(model=self.model_name, audio_bytes=len(audio_bytes))
 
         if hasattr(transcription, "text"):
             result = transcription.text.strip()
