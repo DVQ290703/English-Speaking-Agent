@@ -22,6 +22,7 @@ router = APIRouter(prefix="/flashcards", tags=["flashcards"])
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _fetch_media(cur, card_id: str) -> list[MediaOut]:
+    """Fetch all media for a card, generating presigned URLs for MinIO-backed items."""
     cur.execute(
         """
         SELECT id::text, side, media_type, storage_key, public_url, mime_type
@@ -32,13 +33,16 @@ def _fetch_media(cur, card_id: str) -> list[MediaOut]:
         (card_id,),
     )
     rows = cur.fetchall()
+    logger.debug("_fetch_media card_id=%s found=%d", card_id, len(rows))
     result = []
     for mid, side, mtype, storage_key, public_url, mime_type in rows:
         url = public_url
         if storage_key and not url:
             try:
                 url = get_presigned_url(storage_key, expires=timedelta(hours=1))
+                logger.debug("_fetch_media presigned url generated key=%s", storage_key)
             except Exception:
+                logger.warning("_fetch_media presigned url failed key=%s", storage_key)
                 url = None
         result.append(MediaOut(id=mid, side=side, media_type=mtype, public_url=url, mime_type=mime_type))
     return result
@@ -48,6 +52,8 @@ def _fetch_media(cur, card_id: str) -> list[MediaOut]:
 
 @router.get("/decks", response_model=list[DeckOut], name="list_decks")
 def list_decks(user_id: str = Depends(get_current_user_id)):
+    """Return all active decks for the current user with card count and due count."""
+    logger.debug("list_decks user_id=%s", user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -69,6 +75,7 @@ def list_decks(user_id: str = Depends(get_current_user_id)):
                 (user_id, user_id),
             )
             rows = cur.fetchall()
+    logger.debug("list_decks user_id=%s returned=%d", user_id, len(rows))
     return [
         DeckOut(id=r[0], name=r[1], description=r[2], card_count=r[3] or 0, due_count=r[4] or 0, created_at=r[5])
         for r in rows
@@ -77,6 +84,8 @@ def list_decks(user_id: str = Depends(get_current_user_id)):
 
 @router.post("/decks", response_model=DeckOut, status_code=status.HTTP_201_CREATED, name="create_deck")
 def create_deck(payload: DeckCreate, user_id: str = Depends(get_current_user_id)):
+    """Create a new flashcard deck for the current user."""
+    logger.debug("create_deck user_id=%s name=%r", user_id, payload.name)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -88,11 +97,14 @@ def create_deck(payload: DeckCreate, user_id: str = Depends(get_current_user_id)
                 (user_id, payload.name, payload.description),
             )
             row = cur.fetchone()
+    logger.info("create_deck done deck_id=%s name=%r user_id=%s", row[0], row[1], user_id)
     return DeckOut(id=row[0], name=row[1], description=row[2], card_count=0, due_count=0, created_at=row[3])
 
 
 @router.get("/decks/{deck_id}", response_model=DeckOut, name="get_deck")
 def get_deck(deck_id: str, user_id: str = Depends(get_current_user_id)):
+    """Fetch a single deck by ID with live card and due counts."""
+    logger.debug("get_deck deck_id=%s user_id=%s", deck_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -112,12 +124,15 @@ def get_deck(deck_id: str, user_id: str = Depends(get_current_user_id)):
             )
             row = cur.fetchone()
     if not row:
+        logger.debug("get_deck not found deck_id=%s user_id=%s", deck_id, user_id)
         raise HTTPException(status_code=404, detail="Deck not found")
     return DeckOut(id=row[0], name=row[1], description=row[2], card_count=row[3] or 0, due_count=row[4] or 0, created_at=row[5])
 
 
 @router.patch("/decks/{deck_id}", response_model=DeckOut, name="update_deck")
 def update_deck(deck_id: str, payload: DeckUpdate, user_id: str = Depends(get_current_user_id)):
+    """Partially update a deck's name or description. Omitted fields are unchanged."""
+    logger.debug("update_deck deck_id=%s user_id=%s fields=%s", deck_id, user_id, payload.model_fields_set)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -132,12 +147,16 @@ def update_deck(deck_id: str, payload: DeckUpdate, user_id: str = Depends(get_cu
             )
             row = cur.fetchone()
     if not row:
+        logger.debug("update_deck not found deck_id=%s user_id=%s", deck_id, user_id)
         raise HTTPException(status_code=404, detail="Deck not found")
+    logger.info("update_deck done deck_id=%s", deck_id)
     return DeckOut(id=row[0], name=row[1], description=row[2], card_count=0, due_count=0, created_at=row[3])
 
 
 @router.delete("/decks/{deck_id}", status_code=status.HTTP_204_NO_CONTENT, name="delete_deck")
 def delete_deck(deck_id: str, user_id: str = Depends(get_current_user_id)):
+    """Soft-delete a deck. All its cards are effectively hidden but not purged."""
+    logger.debug("delete_deck deck_id=%s user_id=%s", deck_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -148,7 +167,9 @@ def delete_deck(deck_id: str, user_id: str = Depends(get_current_user_id)):
                 (deck_id, user_id),
             )
             if cur.rowcount == 0:
+                logger.debug("delete_deck not found deck_id=%s user_id=%s", deck_id, user_id)
                 raise HTTPException(status_code=404, detail="Deck not found")
+    logger.info("delete_deck done deck_id=%s user_id=%s", deck_id, user_id)
 
 
 # ── Cards ─────────────────────────────────────────────────────────────────────
@@ -161,6 +182,8 @@ def search_cards(
     deck_id: str | None = None,
     user_id: str = Depends(get_current_user_id),
 ):
+    """Search cards by keyword (ILIKE on front/back text) and/or tag. Returns up to 50 results."""
+    logger.debug("search_cards user_id=%s q=%r tag=%r deck_id=%s", user_id, q, tag, deck_id)
     conditions = ["c.user_id = %s", "c.is_active = TRUE"]
     params: list = [user_id]
 
@@ -189,6 +212,7 @@ def search_cards(
                 params,
             )
             rows = cur.fetchall()
+            logger.debug("search_cards found=%d user_id=%s", len(rows), user_id)
             cards = []
             for row in rows:
                 media = _fetch_media(cur, row[0])
@@ -206,6 +230,8 @@ def list_cards(
     offset: int = 0,
     user_id: str = Depends(get_current_user_id),
 ):
+    """List active cards in a deck, ordered by creation date descending. Supports pagination."""
+    logger.debug("list_cards deck_id=%s user_id=%s limit=%d offset=%d", deck_id, user_id, limit, offset)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -219,6 +245,7 @@ def list_cards(
                 (deck_id, user_id, limit, offset),
             )
             rows = cur.fetchall()
+            logger.debug("list_cards deck_id=%s returned=%d", deck_id, len(rows))
             cards = []
             for row in rows:
                 media = _fetch_media(cur, row[0])
@@ -245,14 +272,21 @@ async def create_card_with_media(
     media_types: list[str] = Form(default=[]),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Create a card with optional media attachments in a single request.
+    """Create a card with optional media attachments in a single multipart request.
 
     Send as multipart/form-data:
     - front_text, back_text, tags[] — card fields
     - files[], sides[], media_types[] — parallel arrays, one entry per file
       - sides[i]: "front" | "back"
       - media_types[i]: "image" | "audio"
+
+    File bytes are validated and read before the DB transaction opens to avoid
+    holding a connection during slow I/O. All inserts (card + media) are atomic.
     """
+    logger.debug(
+        "create_card_with_media deck_id=%s user_id=%s media_count=%d",
+        deck_id, user_id, len(files),
+    )
     if len(files) != len(sides) or len(files) != len(media_types):
         raise HTTPException(
             status_code=422,
@@ -268,6 +302,7 @@ async def create_card_with_media(
     file_contents: list[tuple[bytes, str, str]] = []  # (content, mime, filename)
     for i, f in enumerate(files):
         content = await f.read()
+        logger.debug("create_card_with_media file[%d] filename=%r size=%d mime=%s", i, f.filename, len(content), f.content_type)
         if len(content) > _MAX_MEDIA_BYTES:
             raise HTTPException(status_code=413, detail=f"files[{i}] exceeds 10 MB limit")
         mime = f.content_type or ""
@@ -295,6 +330,7 @@ async def create_card_with_media(
             )
             row = cur.fetchone()
             card_id = row[0]
+            logger.debug("create_card_with_media card inserted card_id=%s", card_id)
 
             cur.execute(
                 """
@@ -310,6 +346,7 @@ async def create_card_with_media(
                 ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
                 media_id = str(uuid.uuid4())
                 storage_key = f"flashcards/{card_id}/{media_id}.{ext}"
+                logger.debug("create_card_with_media uploading key=%s size=%d", storage_key, len(content))
                 _upload(object_key=storage_key, content=content, content_type=mime)
                 cur.execute(
                     """
@@ -323,7 +360,7 @@ async def create_card_with_media(
                 mr = cur.fetchone()
                 media_out.append(MediaOut(id=mr[0], side=mr[1], media_type=mr[2], public_url=mr[3], mime_type=mr[4]))
 
-    logger.info("create_card_with_media card_id=%s media_count=%d", card_id, len(media_out))
+    logger.info("create_card_with_media done card_id=%s media_count=%d", card_id, len(media_out))
     return CardOut(
         id=row[0], deck_id=row[1], front_text=row[2],
         back_text=row[3], tags=row[4] or [], created_at=row[5], media=media_out,
@@ -341,6 +378,8 @@ def create_card(
     payload: CardCreate,
     user_id: str = Depends(get_current_user_id),
 ):
+    """Create a card with text fields only. Use create_card_with_media to attach files."""
+    logger.debug("create_card deck_id=%s user_id=%s front=%r", deck_id, user_id, payload.front_text)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -369,6 +408,7 @@ def create_card(
                 """,
                 (card_id, user_id),
             )
+    logger.info("create_card done card_id=%s deck_id=%s", card_id, deck_id)
     return CardOut(
         id=row[0], deck_id=row[1], front_text=row[2],
         back_text=row[3], tags=row[4] or [], created_at=row[5], media=[],
@@ -377,6 +417,8 @@ def create_card(
 
 @router.get("/cards/{card_id}", response_model=CardOut, name="get_card")
 def get_card(card_id: str, user_id: str = Depends(get_current_user_id)):
+    """Fetch a single card by ID, including all attached media with presigned URLs."""
+    logger.debug("get_card card_id=%s user_id=%s", card_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -389,6 +431,7 @@ def get_card(card_id: str, user_id: str = Depends(get_current_user_id)):
             )
             row = cur.fetchone()
             if not row:
+                logger.debug("get_card not found card_id=%s user_id=%s", card_id, user_id)
                 raise HTTPException(status_code=404, detail="Card not found")
             media = _fetch_media(cur, card_id)
     return CardOut(
@@ -399,6 +442,8 @@ def get_card(card_id: str, user_id: str = Depends(get_current_user_id)):
 
 @router.patch("/cards/{card_id}", response_model=CardOut, name="update_card")
 def update_card(card_id: str, payload: CardUpdate, user_id: str = Depends(get_current_user_id)):
+    """Partially update a card's front text, back text, or tags. Omitted fields are unchanged."""
+    logger.debug("update_card card_id=%s user_id=%s fields=%s", card_id, user_id, payload.model_fields_set)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -414,8 +459,10 @@ def update_card(card_id: str, payload: CardUpdate, user_id: str = Depends(get_cu
             )
             row = cur.fetchone()
             if not row:
+                logger.debug("update_card not found card_id=%s user_id=%s", card_id, user_id)
                 raise HTTPException(status_code=404, detail="Card not found")
             media = _fetch_media(cur, card_id)
+    logger.info("update_card done card_id=%s", card_id)
     return CardOut(
         id=row[0], deck_id=row[1], front_text=row[2],
         back_text=row[3], tags=row[4] or [], created_at=row[5], media=media,
@@ -424,6 +471,8 @@ def update_card(card_id: str, payload: CardUpdate, user_id: str = Depends(get_cu
 
 @router.delete("/cards/{card_id}", status_code=status.HTTP_204_NO_CONTENT, name="delete_card")
 def delete_card(card_id: str, user_id: str = Depends(get_current_user_id)):
+    """Soft-delete a card. Its review schedule is preserved but the card is excluded from all queries."""
+    logger.debug("delete_card card_id=%s user_id=%s", card_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -434,7 +483,9 @@ def delete_card(card_id: str, user_id: str = Depends(get_current_user_id)):
                 (card_id, user_id),
             )
             if cur.rowcount == 0:
+                logger.debug("delete_card not found card_id=%s user_id=%s", card_id, user_id)
                 raise HTTPException(status_code=404, detail="Card not found")
+    logger.info("delete_card done card_id=%s user_id=%s", card_id, user_id)
 
 
 # ── Reviews ───────────────────────────────────────────────────────────────────
@@ -445,6 +496,8 @@ def get_due_cards(
     limit: int = 20,
     user_id: str = Depends(get_current_user_id),
 ):
+    """Return cards due for review today, ordered by due date ascending. Optionally filtered by deck."""
+    logger.debug("get_due_cards user_id=%s deck_id=%s limit=%d", user_id, deck_id, limit)
     conditions = ["r.user_id = %s", "r.due_date <= CURRENT_DATE", "c.is_active = TRUE"]
     params: list = [user_id]
 
@@ -470,6 +523,7 @@ def get_due_cards(
                 params,
             )
             rows = cur.fetchall()
+            logger.debug("get_due_cards user_id=%s found=%d", user_id, len(rows))
             cards = []
             for row in rows:
                 media = _fetch_media(cur, row[0])
@@ -486,6 +540,11 @@ def submit_review(
     payload: ReviewSubmit,
     user_id: str = Depends(get_current_user_id),
 ):
+    """Submit a review rating for a card. Applies the SM-2 algorithm and persists the new schedule.
+
+    Idempotent: re-submitting on the same day overwrites the previous rating.
+    """
+    logger.debug("submit_review card_id=%s user_id=%s rating=%s", card_id, user_id, payload.rating)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -499,10 +558,21 @@ def submit_review(
             )
             row = cur.fetchone()
             if not row:
+                logger.debug("submit_review card not found card_id=%s user_id=%s", card_id, user_id)
                 raise HTTPException(status_code=404, detail="Card not found or not scheduled")
 
+            prev_rep, prev_ef, prev_interval = int(row[2]), float(row[3]), int(row[4])
+            logger.debug(
+                "submit_review prev state card_id=%s rep=%d ef=%.2f interval=%d",
+                card_id, prev_rep, prev_ef, prev_interval,
+            )
+
             new_rep, new_ef, new_interval, due_date = calculate_sm2(
-                payload.rating, int(row[2]), float(row[3]), int(row[4])
+                payload.rating, prev_rep, prev_ef, prev_interval
+            )
+            logger.debug(
+                "submit_review new state card_id=%s rep=%d ef=%.2f interval=%d due=%s",
+                card_id, new_rep, new_ef, new_interval, due_date,
             )
 
             cur.execute(
@@ -519,7 +589,7 @@ def submit_review(
                 (new_rep, new_ef, new_interval, due_date, payload.rating, card_id, user_id),
             )
 
-    logger.info("submit_review card_id=%s rating=%s new_interval=%d due=%s", card_id, payload.rating, new_interval, due_date)
+    logger.info("submit_review done card_id=%s rating=%s new_interval=%d due=%s", card_id, payload.rating, new_interval, due_date)
     return ReviewStateOut(
         card_id=card_id,
         due_date=due_date,
@@ -531,6 +601,8 @@ def submit_review(
 
 @router.get("/decks/{deck_id}/stats", response_model=DeckStatsOut, name="get_deck_stats")
 def get_deck_stats(deck_id: str, user_id: str = Depends(get_current_user_id)):
+    """Return aggregate stats for a deck: total cards, due today, learned, and 30-day retention rate."""
+    logger.debug("get_deck_stats deck_id=%s user_id=%s", deck_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -558,7 +630,12 @@ def get_deck_stats(deck_id: str, user_id: str = Depends(get_current_user_id)):
             )
             row = cur.fetchone()
     if not row or row[0] is None:
+        logger.debug("get_deck_stats deck not found deck_id=%s user_id=%s", deck_id, user_id)
         raise HTTPException(status_code=404, detail="Deck not found")
+    logger.debug(
+        "get_deck_stats deck_id=%s total=%d due=%d learned=%d retention=%.2f",
+        deck_id, row[0] or 0, row[1] or 0, row[2] or 0, row[3] or 0,
+    )
     return DeckStatsOut(
         total_cards=row[0] or 0,
         due_today=row[1] or 0,
@@ -587,12 +664,15 @@ async def upload_card_media(
     file: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
 ):
+    """Upload a single image or audio file and attach it to a card side (front or back)."""
+    logger.debug("upload_card_media card_id=%s user_id=%s side=%s type=%s", card_id, user_id, side, media_type)
     if side not in ("front", "back"):
         raise HTTPException(status_code=422, detail="side must be 'front' or 'back'")
     if media_type not in ("image", "audio"):
         raise HTTPException(status_code=422, detail="media_type must be 'image' or 'audio'")
 
     content = await file.read()
+    logger.debug("upload_card_media file read filename=%r size=%d mime=%s", file.filename, len(content), file.content_type)
     if len(content) > _MAX_MEDIA_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
 
@@ -614,6 +694,7 @@ async def upload_card_media(
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Card not found")
 
+            logger.debug("upload_card_media uploading key=%s", storage_key)
             _upload(object_key=storage_key, content=content, content_type=mime)
 
             cur.execute(
@@ -627,11 +708,14 @@ async def upload_card_media(
             )
             row = cur.fetchone()
 
+    logger.info("upload_card_media done media_id=%s card_id=%s key=%s", media_id, card_id, storage_key)
     return MediaOut(id=row[0], side=row[1], media_type=row[2], public_url=row[3], mime_type=row[4])
 
 
 @router.delete("/media/{media_id}", status_code=status.HTTP_204_NO_CONTENT, name="delete_card_media")
 def delete_card_media(media_id: str, user_id: str = Depends(get_current_user_id)):
+    """Delete a media item and remove its file from storage. Verifies ownership via the parent card."""
+    logger.debug("delete_card_media media_id=%s user_id=%s", media_id, user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -645,9 +729,12 @@ def delete_card_media(media_id: str, user_id: str = Depends(get_current_user_id)
             )
             row = cur.fetchone()
             if not row:
+                logger.debug("delete_card_media not found media_id=%s user_id=%s", media_id, user_id)
                 raise HTTPException(status_code=404, detail="Media not found")
 
             storage_key = row[0]
             cur.execute("DELETE FROM flashcard_media WHERE id = %s", (media_id,))
 
+    logger.debug("delete_card_media removing from storage key=%s", storage_key)
     delete_object(storage_key)
+    logger.info("delete_card_media done media_id=%s key=%s", media_id, storage_key)
