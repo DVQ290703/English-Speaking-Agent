@@ -31,6 +31,7 @@ class AuditLogger:
         event = {
             "event_id": str(uuid.uuid4()),
             "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "event_type": "audit_event",
             "trace_id": ctx["trace_id"],
             "session_id": ctx["session_id"],
             "user_id": user_id,
@@ -43,7 +44,7 @@ class AuditLogger:
             "flags": flags,
             "latency_ms": latency_ms,
         }
-        _app_logger.info("audit_event %s", json.dumps(event))
+        _app_logger.info(json.dumps(event))
 
         if settings.AUDIT_DB_ENABLED:
             self._write_to_db(event)

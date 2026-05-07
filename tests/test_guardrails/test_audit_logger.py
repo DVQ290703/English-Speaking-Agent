@@ -92,3 +92,30 @@ def test_db_write_error_is_caught_and_logged(monkeypatch, caplog):
         with caplog.at_level(logging.ERROR):
             _call_log(AuditLogger())  # must not raise
     assert any("audit_log DB write failed" in r.message for r in caplog.records)
+
+
+def test_audit_log_emits_pure_json():
+    """AuditLogger.log() must emit a single JSON string, no prefix."""
+    logger = AuditLogger()
+    with patch("app.guardrails.audit.logger._app_logger") as mock_log:
+        _call_log(logger)
+        assert mock_log.info.call_count == 1
+        args, _ = mock_log.info.call_args
+        # Must be called with exactly one positional arg (the JSON string)
+        assert len(args) == 1, "Expected single JSON string arg, not a format string"
+        payload = json.loads(args[0])
+        assert payload["event_type"] == "audit_event"
+        assert "trace_id" in payload
+        assert "session_id" in payload
+        assert "user_id" in payload
+        assert payload["user_id"] == "user-1"
+        assert payload["conversation_id"] == "conv-1"
+
+
+def test_audit_log_payload_has_no_prefix():
+    """The emitted message must start with '{', not 'audit_event '."""
+    logger = AuditLogger()
+    with patch("app.guardrails.audit.logger._app_logger") as mock_log:
+        _call_log(logger, flags=["flagged"])
+        args, _ = mock_log.info.call_args
+        assert args[0].startswith("{"), "Log message must start with '{' (pure JSON)"
