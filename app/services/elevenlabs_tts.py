@@ -9,6 +9,7 @@ from contextlib import closing
 import requests
 
 from app.core.logger import logger
+from app.core.telemetry import span_context
 
 _ENV_API_KEY = "ELEVENLABS_API_KEY"
 _ENV_MODEL_ID = "ELEVENLABS_MODEL_ID"
@@ -89,30 +90,32 @@ class ElevenLabsTTS:
         }
         payload = {"text": text, "model_id": model_id}
 
-        try:
-            with closing(
-                requests.post(
-                    url,
-                    headers=headers,
-                    json=payload,
-                    timeout=_REQUEST_TIMEOUT_SECONDS,
-                    stream=True,
-                )
-            ) as response:
-                if response.status_code != 200:
-                    logger.error(
-                        "ElevenLabs: API returned HTTP %d voice_id=%s model_id=%s - %s",
-                        response.status_code,
-                        voice_id,
-                        model_id,
-                        response.text[:200],
+        with span_context("tts.synthesize", kind="tts") as span:
+            span.set(model=model_id, voice_id=voice_id, text_length=len(text))
+            try:
+                with closing(
+                    requests.post(
+                        url,
+                        headers=headers,
+                        json=payload,
+                        timeout=_REQUEST_TIMEOUT_SECONDS,
+                        stream=True,
                     )
-                    return b""
+                ) as response:
+                    if response.status_code != 200:
+                        logger.error(
+                            "ElevenLabs: API returned HTTP %d voice_id=%s model_id=%s - %s",
+                            response.status_code,
+                            voice_id,
+                            model_id,
+                            response.text[:200],
+                        )
+                        return b""
 
-                audio_bytes = self._read_audio_response(response)
-        except requests.RequestException as exc:
-            logger.error("ElevenLabs: HTTP request failed: %s", exc)
-            return b""
+                    audio_bytes = self._read_audio_response(response)
+            except requests.RequestException as exc:
+                logger.error("ElevenLabs: HTTP request failed: %s", exc)
+                return b""
 
         if not audio_bytes:
             logger.error("ElevenLabs: API returned empty audio body voice_id=%s model_id=%s", voice_id, model_id)
