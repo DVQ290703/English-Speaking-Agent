@@ -1,0 +1,50 @@
+# Vector configuration — tails app log files, parses JSON spans, ships to Elasticsearch
+
+sources:
+  app_logs:
+    type: file
+    include:
+      - /logs/*.log
+    read_from: beginning
+
+transforms:
+  parse_json_logs:
+    type: remap
+    inputs:
+      - app_logs
+    source: |
+      # Log line format: "2026-05-07 10:23:45 INFO     [AI-Lab-Agent]: <message>"
+      # Try to extract the payload after the logger prefix
+      parsed, err = parse_regex(.message, r'^\S+ \S+ \S+\s+\[\S+\]:\s+(?P<payload>.+)$')
+      if err == null {
+        json_payload, json_err = parse_json(parsed.payload)
+        if json_err == null {
+          # Structured span or audit log — promote all fields to top level
+          . = merge(., json_payload)
+          .log_type = "span"
+        } else {
+          # Plain text log line
+          .log_type = "plain"
+          .raw_message = parsed.payload
+        }
+      } else {
+        .log_type = "plain"
+        .raw_message = .message
+      }
+      .source_file = .file
+
+sinks:
+  elasticsearch:
+    type: elasticsearch
+    inputs:
+      - parse_json_logs
+    endpoints:
+      - http://elasticsearch:9200
+    index: voice-agent-logs-%Y.%m.%d
+    bulk:
+      action: index
+    encoding:
+      except_fields:
+        - file
+        - host
+        - source_type
