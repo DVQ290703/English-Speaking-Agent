@@ -142,7 +142,7 @@ services:
       start_period: 60s
 
   elasticsearch-init:
-    image: curlimages/curl:8
+    image: curlimages/curl:latest
     container_name: voice_agent_elasticsearch_init
     depends_on:
       elasticsearch:
@@ -169,7 +169,7 @@ services:
       "
 
   kibana-init:
-    image: curlimages/curl:8
+    image: curlimages/curl:latest
     container_name: voice_agent_kibana_init
     depends_on:
       kibana:
@@ -178,23 +178,23 @@ services:
     command: >
       sh -c "
         echo 'Creating Spans data view...' &&
-        status=$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
+        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
           -H 'kbn-xsrf: true'
           -H 'Content-Type: application/json'
           -d '{\"data_view\":{\"title\":\"logs-voice_agent.spans-*\",\"name\":\"Voice Agent — Spans\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$status\" = \"200\" ] || [ \"$status\" = \"409\" ] || { echo \"Spans view failed: $status\" && exit 1; }; } &&
+        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Spans view failed: $$status\" && exit 1; }; } &&
         echo 'Creating Audit data view...' &&
-        status=$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
+        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
           -H 'kbn-xsrf: true'
           -H 'Content-Type: application/json'
           -d '{\"data_view\":{\"title\":\"logs-voice_agent.audit-*\",\"name\":\"Voice Agent — Audit\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$status\" = \"200\" ] || [ \"$status\" = \"409\" ] || { echo \"Audit view failed: $status\" && exit 1; }; } &&
+        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Audit view failed: $$status\" && exit 1; }; } &&
         echo 'Creating Plain data view...' &&
-        status=$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
+        status=$$(curl -s -o /dev/null -w \"%{http_code}\" -X POST http://kibana:5601/api/data_views/data_view
           -H 'kbn-xsrf: true'
           -H 'Content-Type: application/json'
           -d '{\"data_view\":{\"title\":\"logs-voice_agent.plain-*\",\"name\":\"Voice Agent — Plain\",\"timeFieldName\":\"@timestamp\"}}') &&
-        { [ \"$status\" = \"200\" ] || [ \"$status\" = \"409\" ] || { echo \"Plain view failed: $status\" && exit 1; }; } &&
+        { [ \"$$status\" = \"200\" ] || [ \"$$status\" = \"409\" ] || { echo \"Plain view failed: $$status\" && exit 1; }; } &&
         echo 'Kibana data views created.'
       "
 
