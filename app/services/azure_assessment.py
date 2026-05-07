@@ -7,6 +7,7 @@ import os
 
 from app.core.logger import logger
 from app.core.settings import AZURE_SPEECH_KEY, AZURE_SERVICE_REGION
+from app.core.telemetry import span_context
 
 try:
     import azure.cognitiveservices.speech as speechsdk
@@ -108,12 +109,14 @@ class AzureAssessmentService:
             )
             pronunciation_config.apply_to(recognizer)
 
-            try:
-                result = recognizer.recognize_once()
-            finally:
-                del recognizer
-                del audio_config
-                del speech_config
+            with span_context("azure.assess", kind="api") as span:
+                span.set(model="azure-pronunciation", mode=mode, locale=locale, audio_bytes=len(audio_bytes))
+                try:
+                    result = recognizer.recognize_once()
+                finally:
+                    del recognizer
+                    del audio_config
+                    del speech_config
         finally:
             del stream
 
