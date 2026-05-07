@@ -26,4 +26,14 @@ export const ENDPOINTS = {
   grammar: {
     detailFeedback: (messageId: string) => `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
   },
+  flashcards: {
+    decks: '/api/flashcards/decks',
+    deck: (id: string) => `/api/flashcards/decks/${id}`,
+    deckStats: (id: string) => `/api/flashcards/decks/${id}/stats`,
+    cards: (deckId: string) => `/api/flashcards/decks/${deckId}/cards`,
+    cardsWithMedia: (deckId: string) => `/api/flashcards/decks/${deckId}/cards/with-media`,
+    card: (id: string) => `/api/flashcards/cards/${id}`,
+    due: '/api/flashcards/reviews/due',
+    review: (cardId: string) => `/api/flashcards/reviews/${cardId}`,
+  },
 } as const;

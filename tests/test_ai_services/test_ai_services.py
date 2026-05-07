@@ -32,24 +32,24 @@ class TestNormalizeHistory:
         result = self._call(None, category=None)
         assert result == []
 
-    def test_normalize_history_topic_only_returns_topic_line(self):
+    def test_normalize_history_topic_only_returns_empty(self):
         result = self._call(None, category="IELTS Part 1")
-        assert result == ["Category: IELTS Part 1"]
+        assert result == []
 
-    def test_normalize_history_topic_whitespace_stripped(self):
+    def test_normalize_history_topic_whitespace_is_ignored(self):
         result = self._call(None, category="  Daily  ")
-        assert result == ["Category: Daily"]
+        assert result == []
 
     def test_normalize_history_blank_topic_not_added(self):
         result = self._call(None, category="   ")
         assert result == []
 
-    def test_normalize_history_includes_topic_after_category(self):
+    def test_normalize_history_ignores_category_and_topic_metadata(self):
         from app.core.ai_services import normalize_history
 
         result = normalize_history(history_raw=None, category="Travel", topic="Airport Check-in")
 
-        assert result == ["Category: Travel", "Topic: Airport Check-in"]
+        assert result == []
 
     def test_normalize_history_valid_json_list_of_dicts(self):
         history = json.dumps([
@@ -60,19 +60,18 @@ class TestNormalizeHistory:
         assert "User: Hello" in result
         assert "Assistant: Hi there" in result
 
-    def test_normalize_history_prepends_topic_before_messages(self):
+    def test_normalize_history_does_not_prepend_topic_before_messages(self):
         history = json.dumps([{"role": "user", "text": "Hello"}])
         result = self._call(history, category="Travel")
-        assert result[0] == "Category: Travel"
-        assert "User: Hello" in result
+        assert result == ["User: Hello"]
 
-    def test_normalize_history_invalid_json_returns_topic_only(self):
+    def test_normalize_history_invalid_json_returns_empty(self):
         result = self._call("not valid json {{", category="Travel")
-        assert result == ["Category: Travel"]
+        assert result == []
 
-    def test_normalize_history_non_list_json_returns_topic_only(self):
+    def test_normalize_history_non_list_json_returns_empty(self):
         result = self._call(json.dumps({"key": "value"}), category="Travel")
-        assert result == ["Category: Travel"]
+        assert result == []
 
     def test_normalize_history_limits_to_last_10_items(self):
         items = [{"role": "user", "text": f"msg {i}"} for i in range(20)]
@@ -203,10 +202,11 @@ class TestRunLangraphAgent:
 
         with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("Tell me about IELTS", history=[])
+            text, audio, grammar = run_langraph_agent("Tell me about IELTS", history=[])
 
         assert text == "Great answer!"
         assert audio == b"mp3data"
+        assert grammar is None
 
     def test_run_langraph_agent_passes_history(self):
         mock_pipeline = self._mock_pipeline()
@@ -217,7 +217,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Next question", history=history)
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Next question", history=history, voice_gender=None
+            user_input="Next question", history=history, voice_gender=None, category=None, topic=None
         )
 
     def test_run_langraph_agent_none_history_defaults_to_empty(self):
@@ -227,7 +227,7 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             run_langraph_agent("Hello", history=None)
 
-        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None)
+        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, category=None, topic=None)
 
     def test_run_langraph_agent_empty_response_text_returns_fallback(self):
         mock_pipeline = MagicMock()
@@ -241,10 +241,11 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback-audio"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("test")
+            text, audio, grammar = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback-audio"
+        assert grammar is None
 
     def test_run_langraph_agent_pipeline_exception_returns_fallback(self):
         mock_pipeline = MagicMock()
@@ -255,10 +256,11 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("test")
+            text, audio, grammar = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback"
+        assert grammar is None
 
     def test_run_langraph_agent_text_no_audio_retries_tts(self):
         """When pipeline returns text but empty audio, _synthesize_audio_bytes is called."""
@@ -270,11 +272,12 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"retry-audio") as mock_synth,
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("question")
+            text, audio, grammar = run_langraph_agent("question")
 
         mock_synth.assert_called_once_with("Nice job!", voice_gender=None)
         assert text == "Nice job!"
         assert audio == b"retry-audio"
+        assert grammar is None
 
     def test_run_langraph_agent_passes_voice_gender(self):
         mock_pipeline = self._mock_pipeline()
@@ -284,7 +287,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Hello", history=[], voice_gender="Female")
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Hello", history=[], voice_gender="Female"
+            user_input="Hello", history=[], voice_gender="Female", category=None, topic=None
         )
 
 
@@ -296,19 +299,19 @@ class TestPromptArchitecture:
     def test_build_system_prompt_layers_base_category_and_topic(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(category="travel", topic="airport_check_in")
+        prompt = build_system_prompt(category="travel", topic="travel_airport")
 
         assert "AI English-speaking coach" in prompt
         assert "## Category: travel" in prompt
-        assert "## Topic: airport_check_in" in prompt
-        assert "airport check-in" in prompt.lower()
+        assert "## Topic: travel_airport" in prompt
+        assert "airport" in prompt.lower()
 
     def test_build_system_prompt_uses_unknown_topic_fallback(self):
         from app.prompts.prompt_builder import build_system_prompt
 
-        prompt = build_system_prompt(category="daily_conversation", topic="Meeting a neighbor")
+        prompt = build_system_prompt(category="daily", topic="Meeting a neighbor")
 
-        assert "## Category: daily_conversation" in prompt
+        assert "## Category: daily" in prompt
         assert "Meeting a neighbor" in prompt
 
 

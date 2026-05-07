@@ -8,6 +8,7 @@ from app.core.logger import logger
 
 _SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
 _TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
+_PROMPTS_ROOT = Path(__file__).resolve().parent
 
 _BASE_FALLBACK = (
     "You are an AI English-speaking coach. Keep replies short, natural, "
@@ -18,7 +19,7 @@ _BASE_FALLBACK = (
 GRAMMAR_INSTRUCTION = """\
 ---
 
-RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
+RESPONSE FORMAT (strict JSON only - no markdown, no code fences):
 {
   "response_text": "<your conversational reply>",
   "tagged_input": "<copy the user's latest message exactly, wrapping each grammar error in angle brackets>",
@@ -40,16 +41,18 @@ RESPONSE FORMAT (strict JSON only — no markdown, no code fences):
 Rules:
 - Assess ONLY the latest user message, not conversation history.
 - tagged_input: copy the user's message verbatim, wrapping each error in < > angle brackets.
-  Example — user says "I go to store yesterday" → tagged_input: "I <go> to <store> yesterday"
+  Example - user says "I go to store yesterday" -> tagged_input: "I <go> to <store> yesterday"
 - grammar_errors: one entry per < > span in tagged_input, listed in the same order.
 - original must match exactly the text inside the < > brackets.
 - If there are no errors, tagged_input equals the original message unchanged and grammar_errors is [].
-- overall_score: 100 minus (major_count×15 + moderate_count×8 + minor_count×3), minimum 0.\
+- overall_score: 100 minus (major_count*15 + moderate_count*8 + minor_count*3), minimum 0.\
 """
 
 _CACHE: dict[str, Any] = {
-    "base_mtime": None, "base": None,
-    "topics_mtime": None, "topics": None,
+    "base_mtime": None,
+    "base": None,
+    "topics_signature": None,
+    "topics": None,
 }
 
 
@@ -68,7 +71,11 @@ def _load_base_prompt() -> str:
         return _BASE_FALLBACK
 
     if _CACHE["base_mtime"] == mtime and isinstance(_CACHE["base"], str):
-        logger.debug("prompt_builder base prompt cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["base"]))
+        logger.debug(
+            "prompt_builder base prompt cache HIT mtime=%.3f chars=%d",
+            mtime,
+            len(_CACHE["base"]),
+        )
         return _CACHE["base"]
 
     try:
@@ -79,21 +86,77 @@ def _load_base_prompt() -> str:
 
     _CACHE["base_mtime"] = mtime
     _CACHE["base"] = text
-    logger.debug("prompt_builder base prompt cache MISS — reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
+    logger.debug(
+        "prompt_builder base prompt cache MISS - reloaded from disk chars=%d mtime=%.3f",
+        len(text),
+        mtime,
+    )
     return text
+
+
+def _resolve_include_path(include_target: str, base_path: Path) -> Path:
+    candidate = (base_path.parent / include_target.strip()).resolve()
+    try:
+        candidate.relative_to(_PROMPTS_ROOT)
+    except ValueError as exc:
+        raise ValueError(f"Include path escapes prompts directory: {include_target}") from exc
+    return candidate
+
+
+def _expand_includes(path: Path, visited: set[Path] | None = None) -> str:
+    visited = visited or set()
+    resolved = path.resolve()
+    if resolved in visited:
+        raise ValueError(f"Cyclic prompt include detected for {resolved}")
+    visited.add(resolved)
+
+    content = path.read_text(encoding="utf-8")
+    expanded_lines: list[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("!include "):
+            include_target = stripped[len("!include ") :].strip()
+            include_path = _resolve_include_path(include_target, path)
+            expanded_lines.append(_expand_includes(include_path, visited.copy()).strip())
+        else:
+            expanded_lines.append(line)
+    return "\n".join(expanded_lines).strip()
+
+
+def _collect_include_signature(
+    path: Path,
+    visited: set[Path] | None = None,
+) -> tuple[tuple[str, float], ...]:
+    visited = visited or set()
+    resolved = path.resolve()
+    if resolved in visited:
+        return ()
+    visited.add(resolved)
+
+    entries: list[tuple[str, float]] = [(str(resolved), path.stat().st_mtime)]
+    content = path.read_text(encoding="utf-8")
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("!include "):
+            include_target = stripped[len("!include ") :].strip()
+            include_path = _resolve_include_path(include_target, path)
+            entries.extend(_collect_include_signature(include_path, visited))
+    return tuple(entries)
 
 
 def _parse_topics(content: str) -> dict[str, Any]:
     topics: dict[str, Any] = {}
-    topic_re = re.compile(r"^# Topic:\s*(.+)$", re.MULTILINE)
-    subtopic_re = re.compile(r"^## Sub-topic:\s*(.+)$", re.MULTILINE)
+    topic_re = re.compile(r"^# Category:\s*(.+)$", re.MULTILINE)
+    subtopic_re = re.compile(r"^## Topic:\s*(.+)$", re.MULTILINE)
     sep_re = re.compile(r"^---\s*$", re.MULTILINE)
 
     topic_matches = list(topic_re.finditer(content))
-    for i, tm in enumerate(topic_matches):
-        topic_key = _normalize_key(tm.group(1))
-        block_start = tm.end()
-        block_end = topic_matches[i + 1].start() if i + 1 < len(topic_matches) else len(content)
+    for i, topic_match in enumerate(topic_matches):
+        topic_key = _normalize_key(topic_match.group(1))
+        block_start = topic_match.end()
+        block_end = (
+            topic_matches[i + 1].start() if i + 1 < len(topic_matches) else len(content)
+        )
         block = content[block_start:block_end]
 
         sub_matches = list(subtopic_re.finditer(block))
@@ -101,9 +164,9 @@ def _parse_topics(content: str) -> dict[str, Any]:
         topic_prompt = sep_re.sub("", topic_prompt_raw).strip()
 
         options: dict[str, str] = {}
-        for j, sm in enumerate(sub_matches):
-            sub_key = _normalize_key(sm.group(1))
-            sub_start = sm.end()
+        for j, sub_match in enumerate(sub_matches):
+            sub_key = _normalize_key(sub_match.group(1))
+            sub_start = sub_match.end()
             sub_end = sub_matches[j + 1].start() if j + 1 < len(sub_matches) else len(block)
             options[sub_key] = sep_re.sub("", block[sub_start:sub_end]).strip()
 
@@ -114,28 +177,38 @@ def _parse_topics(content: str) -> dict[str, Any]:
 
 def _load_topics() -> dict[str, Any]:
     try:
-        mtime = _TOPIC_PROMPTS_PATH.stat().st_mtime
+        signature = _collect_include_signature(_TOPIC_PROMPTS_PATH)
     except OSError:
         logger.exception("topic_prompts.md not found at %s", _TOPIC_PROMPTS_PATH)
         return {}
+    except ValueError:
+        logger.exception("Invalid include chain in topic prompts")
+        return {}
 
-    if _CACHE["topics_mtime"] == mtime and isinstance(_CACHE["topics"], dict):
-        logger.debug("prompt_builder topics cache HIT mtime=%.3f known_categories=%s", mtime, list(_CACHE["topics"].keys()))
+    if _CACHE["topics_signature"] == signature and isinstance(_CACHE["topics"], dict):
+        logger.debug(
+            "prompt_builder topics cache HIT files=%d known_categories=%s",
+            len(signature),
+            list(_CACHE["topics"].keys()),
+        )
         return _CACHE["topics"]
 
     try:
-        content = _TOPIC_PROMPTS_PATH.read_text(encoding="utf-8")
+        content = _expand_includes(_TOPIC_PROMPTS_PATH)
     except OSError:
         logger.exception("Failed to read topic_prompts.md")
         return {}
+    except ValueError:
+        logger.exception("Failed to expand topic prompt includes")
+        return {}
 
     topics = _parse_topics(content)
-    _CACHE["topics_mtime"] = mtime
+    _CACHE["topics_signature"] = signature
     _CACHE["topics"] = topics
     logger.debug(
-        "prompt_builder topics cache MISS — reloaded from disk mtime=%.3f categories=%s",
-        mtime,
-        {k: list(v.get("options", {}).keys()) for k, v in topics.items()},
+        "prompt_builder topics cache MISS - reloaded from %d files categories=%s",
+        len(signature),
+        {key: list(value.get("options", {}).keys()) for key, value in topics.items()},
     )
     return topics
 
@@ -157,7 +230,9 @@ def build_system_prompt(
     """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
     logger.debug(
         "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s",
-        category, topic, include_grammar,
+        category,
+        topic,
+        include_grammar,
     )
 
     prompt_parts = [_load_base_prompt()]
@@ -169,7 +244,9 @@ def build_system_prompt(
 
         logger.debug(
             "prompt_builder category lookup raw=%r normalized=%r found=%s",
-            category, category_key, category_data is not None,
+            category,
+            category_key,
+            category_data is not None,
         )
 
         if category_data:
@@ -186,7 +263,9 @@ def build_system_prompt(
 
                 logger.debug(
                     "prompt_builder topic lookup raw=%r normalized=%r found=%s available=%s",
-                    topic, topic_key, bool(option_prompt),
+                    topic,
+                    topic_key,
+                    bool(option_prompt),
                     list(category_data.get("options", {}).keys()),
                 )
 
@@ -199,12 +278,12 @@ def build_system_prompt(
                         "The learner selected this topic. "
                         "Adapt the conversation to it while keeping the same coaching style."
                     )
-                    logger.debug("prompt_builder layer=topic NOT found in options — using generic fallback")
+                    logger.debug("prompt_builder layer=topic NOT found in options - using generic fallback")
             else:
                 logger.debug("prompt_builder no topic provided, skipping topic layer")
         else:
             logger.debug(
-                "prompt_builder category NOT found in topics — using generic fallback available_categories=%s",
+                "prompt_builder category NOT found in topics - using generic fallback available_categories=%s",
                 list(topics.keys()),
             )
             prompt_parts.append(
@@ -220,7 +299,7 @@ def build_system_prompt(
                 )
                 logger.debug("prompt_builder layer=topic generic fallback injected (category was also missing)")
     else:
-        logger.debug("prompt_builder no category provided — base prompt only")
+        logger.debug("prompt_builder no category provided - base prompt only")
 
     if include_grammar:
         prompt_parts.append(GRAMMAR_INSTRUCTION)
@@ -229,6 +308,7 @@ def build_system_prompt(
     final_prompt = "\n\n".join(part for part in prompt_parts if part)
     logger.debug(
         "prompt_builder final prompt layers=%d total_chars=%d",
-        len(prompt_parts), len(final_prompt),
+        len(prompt_parts),
+        len(final_prompt),
     )
     return final_prompt

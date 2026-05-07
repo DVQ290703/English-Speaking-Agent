@@ -59,6 +59,13 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", os.getenv("MINIO_ROOT_USER", "m
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", os.getenv("MINIO_ROOT_PASSWORD", "minioadmin"))
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "voice-agent-audio")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes", "on"}
+# Public endpoint used only for presigned URL generation — must be reachable by browsers.
+# In K8s: set to the ingress domain (e.g. vinai-speaking-agent.duckdns.org/storage).
+# In local dev: set to localhost:9000 with MinIO port exposed.
+_raw_public_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT", MINIO_ENDPOINT)
+# minio-py expects bare host:port — strip any http:// or https:// prefix the user may have set
+MINIO_PUBLIC_ENDPOINT = _raw_public_endpoint.removeprefix("https://").removeprefix("http://")
+MINIO_PUBLIC_SECURE = os.getenv("MINIO_PUBLIC_SECURE", str(MINIO_SECURE)).lower() in {"1", "true", "yes", "on"}
 _warn_or_raise_for_secret(
     name="MINIO_SECRET_KEY",
     value=MINIO_SECRET_KEY,

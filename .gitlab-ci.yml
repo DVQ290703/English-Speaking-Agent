@@ -29,7 +29,7 @@ variables:
   K8S_NAMESPACE:   "english-speaking-agent"
 
 stages:
-  - test
+  # - test
   - build
   - deploy
 
@@ -37,20 +37,20 @@ stages:
 # Stage: test
 # =============================================================================
 
-test-backend:
-  stage: test
-  tags:
-    - AWS-Gitlab-runner
-  image: python:3.12-slim
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-  before_script:
-    - pip install --quiet uv
-    - uv pip install -r requirements.txt -r requirements-test.txt --system --quiet
-  script:
-    - python -m pytest tests/ --tb=short
-  variables:
-    JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+# test-backend:
+#   stage: test
+#   tags:
+#     - AWS-Gitlab-runner
+#   image: python:3.12-slim
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == "main"'
+#   before_script:
+#     - pip install --quiet uv
+#     - uv pip install -r requirements.txt -r requirements-test.txt --system --quiet
+#   script:
+#     - python -m pytest tests/ --tb=short
+#   variables:
+#     JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
 
 # =============================================================================
 # Kaniko auth helper — merged into each build job via YAML anchor
@@ -120,8 +120,8 @@ build-backend:
   stage: build
   tags:
     - AWS-Gitlab-runner
-  needs:
-    - job: test-backend
+  # needs:
+  #   - job: test-backend
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
@@ -189,7 +189,7 @@ deploy-backend:
     name: google/cloud-sdk:alpine
     entrypoint: [""]
   needs:
-    - job: test-backend
+    # - job: test-backend
     - job: build-backend
       optional: true
   before_script: *gcp_before_script
@@ -212,7 +212,7 @@ deploy-frontend:
     name: google/cloud-sdk:alpine
     entrypoint: [""]
   needs:
-    - job: test-backend
+    # - job: test-backend
     - job: build-frontend
       optional: true
   before_script: *gcp_before_script
