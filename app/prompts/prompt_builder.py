@@ -4,7 +4,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.core.logger import logger
+from app.core.logger import get_logger
+
+logger = get_logger("prompts")
 
 _SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
 _TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
