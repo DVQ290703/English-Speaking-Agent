@@ -28,10 +28,38 @@ transforms:
         .payload = .message
       }
 
+  parse_payload:
+    type: remap
+    inputs:
+      - extract_prefix
+    source: |
+      json_payload, json_err = parse_json(.payload)
+      if json_err == null && is_object(json_payload) {
+        merged, merge_err = merge(., json_payload)
+        if merge_err == null {
+          . = merged
+        } else {
+          .parse_error = true
+        }
+        .log_type = "span"
+        if exists(.timestamp) {
+          ts, ts_err = parse_timestamp(.timestamp, "%+")
+          if ts_err == null {
+            .@timestamp = ts
+          }
+          del(.timestamp)
+        }
+      } else {
+        .raw_message = .payload
+        .log_type = "plain"
+      }
+      del(.payload)
+      .source_file = .file
+
   route_by_category:
     type: route
     inputs:
-      - parse_json_logs
+      - parse_payload
     route:
       audit: exists(.event_type)
       span: .log_type == "span" && !exists(.event_type)
