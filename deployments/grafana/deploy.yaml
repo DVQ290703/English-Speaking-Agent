@@ -1,0 +1,417 @@
+# =============================================================================
+# Grafana Deployment — English Speaking Agent
+# Apply  : kubectl apply -f deployments/grafana/deploy.yaml
+# Status : kubectl get pods -l app=grafana -n english-speaking-agent
+#
+# Three ConfigMaps are provisioned at startup:
+#   1. grafana-datasources   — points at the in-cluster Prometheus service
+#   2. grafana-dashboard-provider — tells Grafana where to load dashboards from
+#   3. grafana-dashboards    — the Voice Agent observability dashboard JSON
+# =============================================================================
+
+# ── ConfigMap 1: Datasource ───────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    project: english-speaking-agent
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service.english-speaking-agent.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+
+---
+
+# ── ConfigMap 2: Dashboard provider ──────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    project: english-speaking-agent
+data:
+  dashboard.yaml: |
+    apiVersion: 1
+    providers:
+      - name: "voice-agent"
+        orgId: 1
+        folder: "Voice Agent"
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/provisioning/dashboards
+
+---
+
+# ── ConfigMap 3: Dashboard JSON ───────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    project: english-speaking-agent
+data:
+  voice_agent.json: |
+    {
+      "annotations": { "list": [] },
+      "description": "Voice Agent observability — LLM, STT, TTS, guardrails",
+      "editable": true,
+      "graphTooltip": 1,
+      "id": null,
+      "panels": [
+        {
+          "id": 1,
+          "title": "LLM Request Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(llm_requests_total[1m])) by (model, status)",
+              "legendFormat": "{{model}} / {{status}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        },
+        {
+          "id": 2,
+          "title": "LLM Error Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(llm_requests_total{status=\"error\"}[1m])) by (model) / sum(rate(llm_requests_total[1m])) by (model)",
+              "legendFormat": "{{model}} error %"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+        },
+        {
+          "id": 3,
+          "title": "LLM Latency (p50 / p95 / p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p50 {{model}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p95 {{model}}"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p99 {{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 4,
+          "title": "LLM Time-to-First-Token (p50 / p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "TTFT p50 {{model}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "TTFT p95 {{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 5,
+          "title": "LLM Token Usage (input / output)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(llm_tokens_total{token_type=\"input\"}[1m])) by (model)",
+              "legendFormat": "input {{model}}"
+            },
+            {
+              "expr": "sum(rate(llm_tokens_total{token_type=\"output\"}[1m])) by (model)",
+              "legendFormat": "output {{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 6,
+          "title": "Estimated LLM Cost (USD / min)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(llm_cost_usd_total[1m])) by (model)",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] }
+        },
+        {
+          "id": 7,
+          "title": "STT Latency (p50 / p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p50 {{model}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p95 {{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 8,
+          "title": "TTS Latency (p50 / p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p50 {{model}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
+              "legendFormat": "p95 {{model}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 9,
+          "title": "Guardrail Decisions",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(guardrail_decisions_total[1m])) by (check_name, decision)",
+              "legendFormat": "{{check_name}} / {{decision}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+        },
+        {
+          "id": 10,
+          "title": "HTTP Request Rate (FastAPI)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[1m])) by (handler, status_code)",
+              "legendFormat": "{{handler}} {{status_code}}"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "tags": ["voice-agent", "llm", "monitoring"],
+      "templating": {
+        "list": [
+          {
+            "hide": 0,
+            "includeAll": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "timezone": "browser",
+      "title": "Voice Agent — Observability",
+      "uid": "voice-agent-obs-v1",
+      "version": 1
+    }
+
+---
+
+# ── PersistentVolumeClaim ─────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    project: english-speaking-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    tier: monitoring
+    project: english-speaking-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+      tier: monitoring
+  template:
+    metadata:
+      labels:
+        app: grafana
+        tier: monitoring
+        project: english-speaking-agent
+    spec:
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      securityContext:
+        fsGroup: 472   # grafana GID
+
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.2
+
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-secret
+                  key: admin-password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_SERVER_ROOT_URL
+              value: "https://vinai-speaking-agent.duckdns.org/grafana"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards/voice_agent.json
+              subPath: voice_agent.json
+            - name: data
+              mountPath: /var/lib/grafana
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 472   # grafana user
+
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+
+---
+
+# ── Service ───────────────────────────────────────────────────────────────────
+# ClusterIP: ingress proxies /grafana/* to this service.
+# Create the admin password secret once with:
+#   kubectl create secret generic grafana-secret \
+#     --from-literal=admin-password=<strong-password> \
+#     -n english-speaking-agent
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    tier: monitoring
+    project: english-speaking-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: grafana
+    tier: monitoring
+  ports:
+    - name: http
+      protocol: TCP
+      port: 3000
+      targetPort: http
