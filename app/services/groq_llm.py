@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -76,19 +77,24 @@ class GroqLLMService:
         logger.debug("GroqLLM sending %d messages to API", len(messages))
 
         with span_context("llm.generate_response", kind="llm") as span:
-            response = self.client.invoke(messages)
-            if isinstance(response, AIMessage):
-                result = response.content
-                usage = getattr(response, "usage_metadata", {}) or {}
-                span.set(
-                    model=self.model_name,
-                    prompt_tokens=usage.get("input_tokens", 0),
-                    completion_tokens=usage.get("output_tokens", 0),
-                    total_tokens=usage.get("total_tokens", 0),
-                )
-            else:
-                result = str(response)
-                span.set(model=self.model_name)
+            chunks = []
+            ttft_ms: float | None = None
+            t_start = time.monotonic()
+            usage: dict = {}
+            for chunk in self.client.stream(messages):
+                if ttft_ms is None:
+                    ttft_ms = (time.monotonic() - t_start) * 1000.0
+                chunks.append(chunk.content or "")
+                if chunk.usage_metadata:
+                    usage = chunk.usage_metadata
+            result = "".join(chunks)
+            span.set(
+                model=self.model_name,
+                prompt_tokens=usage.get("input_tokens", 0),
+                completion_tokens=usage.get("output_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                ttft_ms=ttft_ms if ttft_ms is not None else 0.0,
+            )
 
         logger.info("GroqLLM response_length=%d", len(result))
         return result
