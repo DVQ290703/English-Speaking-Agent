@@ -4,30 +4,33 @@
 # Status : kubectl get pods -l app=grafana -n english-speaking-agent
 #
 # Three ConfigMaps are provisioned at startup:
-#   1. grafana-datasources   — points at the in-cluster Prometheus service
+#   1. grafana-datasource-config  — points at the in-cluster Prometheus service
 #   2. grafana-dashboard-provider — tells Grafana where to load dashboards from
-#   3. grafana-dashboards    — the Voice Agent observability dashboard JSON
+#   3. grafana-dashboard-voice-agent — the Voice Agent pipeline dashboard JSON
 # =============================================================================
 
 # ── ConfigMap 1: Datasource ───────────────────────────────────────────────────
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-datasources
+  name: grafana-datasource-config
   namespace: english-speaking-agent
   labels:
     app: grafana
+    tier: monitoring
     project: english-speaking-agent
 data:
-  prometheus.yaml: |
+  prometheus.yml: |
     apiVersion: 1
     datasources:
       - name: Prometheus
+        uid: prometheus
         type: prometheus
         access: proxy
-        url: http://prometheus-service.english-speaking-agent.svc.cluster.local:9090
+        url: http://prometheus-service:9090
         isDefault: true
-        editable: false
+        jsonData:
+          timeInterval: "15s"
 
 ---
 
@@ -39,19 +42,20 @@ metadata:
   namespace: english-speaking-agent
   labels:
     app: grafana
+    tier: monitoring
     project: english-speaking-agent
 data:
-  dashboard.yaml: |
+  dashboards.yml: |
     apiVersion: 1
     providers:
-      - name: "voice-agent"
+      - name: default
         orgId: 1
-        folder: "Voice Agent"
+        folder: ""
         type: file
         disableDeletion: false
         updateIntervalSeconds: 30
         options:
-          path: /etc/grafana/provisioning/dashboards
+          path: /var/lib/grafana/dashboards
 
 ---
 
@@ -59,225 +63,49 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-dashboards
+  name: grafana-dashboard-voice-agent
   namespace: english-speaking-agent
   labels:
     app: grafana
+    tier: monitoring
     project: english-speaking-agent
 data:
-  voice_agent.json: |
+  voice-agent-pipeline.json: |
     {
-      "annotations": { "list": [] },
-      "description": "Voice Agent observability — LLM, STT, TTS, guardrails",
+      "annotations": {"list": []},
+      "description": "Voice Agent pipeline: LLM, STT, TTS, guardrail metrics",
       "editable": true,
       "graphTooltip": 1,
-      "id": null,
+      "links": [],
       "panels": [
-        {
-          "id": 1,
-          "title": "LLM Request Rate",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(llm_requests_total[1m])) by (model, status)",
-              "legendFormat": "{{model}} / {{status}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
-        },
-        {
-          "id": 2,
-          "title": "LLM Error Rate",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(llm_requests_total{status=\"error\"}[1m])) by (model) / sum(rate(llm_requests_total[1m])) by (model)",
-              "legendFormat": "{{model}} error %"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
-        },
-        {
-          "id": 3,
-          "title": "LLM Latency (p50 / p95 / p99)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.50, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p50 {{model}}"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p95 {{model}}"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p99 {{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
-        },
-        {
-          "id": 4,
-          "title": "LLM Time-to-First-Token (p50 / p95)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.50, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "TTFT p50 {{model}}"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "TTFT p95 {{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
-        },
-        {
-          "id": 5,
-          "title": "LLM Token Usage (input / output)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(llm_tokens_total{token_type=\"input\"}[1m])) by (model)",
-              "legendFormat": "input {{model}}"
-            },
-            {
-              "expr": "sum(rate(llm_tokens_total{token_type=\"output\"}[1m])) by (model)",
-              "legendFormat": "output {{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
-        },
-        {
-          "id": 6,
-          "title": "Estimated LLM Cost (USD / min)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(llm_cost_usd_total[1m])) by (model)",
-              "legendFormat": "{{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] }
-        },
-        {
-          "id": 7,
-          "title": "STT Latency (p50 / p95)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.50, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p50 {{model}}"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p95 {{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
-        },
-        {
-          "id": 8,
-          "title": "TTS Latency (p50 / p95)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.50, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p50 {{model}}"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
-              "legendFormat": "p95 {{model}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
-        },
-        {
-          "id": 9,
-          "title": "Guardrail Decisions",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(guardrail_decisions_total[1m])) by (check_name, decision)",
-              "legendFormat": "{{check_name}} / {{decision}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
-        },
-        {
-          "id": 10,
-          "title": "HTTP Request Rate (FastAPI)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "targets": [
-            {
-              "expr": "sum(rate(http_requests_total[1m])) by (handler, status_code)",
-              "legendFormat": "{{handler}} {{status_code}}"
-            }
-          ],
-          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
-        }
+        {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "id": 100, "title": "LLM", "type": "row"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1}, "id": 1, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(llm_requests_total[5m]))", "legendFormat": "{{status}}"}], "title": "LLM Request Rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1}, "id": 2, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p50"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p95"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p99"}], "title": "LLM Latency (p50/p95/p99)", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1}, "id": 3, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p50"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p95"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p99"}], "title": "LLM TTFT (p50/p95/p99)", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 9}, "id": 4, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (token_type) (rate(llm_tokens_total[5m]))", "legendFormat": "{{token_type}}"}], "title": "Token Burn Rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 4}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 9}, "id": 5, "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value"}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_cost_usd_total[1h]))", "legendFormat": "Cost/hr"}], "title": "LLM Cost / hr", "type": "stat"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 9}, "id": 6, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(llm_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}], "title": "LLM Error Rate", "type": "timeseries"},
+        {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17}, "id": 101, "title": "STT", "type": "row"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 18}, "id": 7, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(stt_requests_total[5m]))", "legendFormat": "{{status}}"}], "title": "STT Request Rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 18}, "id": 8, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p50"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p95"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p99"}], "title": "STT Latency (p50/p95/p99)", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 18}, "id": 9, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(stt_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}], "title": "STT Error Rate", "type": "timeseries"},
+        {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26}, "id": 102, "title": "TTS", "type": "row"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 0, "y": 27}, "id": 10, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(tts_requests_total[5m]))", "legendFormat": "{{status}}"}], "title": "TTS Request Rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 8, "y": 27}, "id": 11, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p50"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p95"}, {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p99"}], "title": "TTS Latency (p50/p95/p99)", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 8, "x": 16, "y": 27}, "id": 12, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(tts_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}], "title": "TTS Error Rate", "type": "timeseries"},
+        {"collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 35}, "id": 103, "title": "Guardrails", "type": "row"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36}, "id": 13, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(guardrail_decisions_total{decision=\"blocked\"}[5m]))", "legendFormat": "blocked/s"}], "title": "Guardrail Block Rate", "type": "timeseries"},
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}, "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36}, "id": 14, "options": {"tooltip": {"mode": "multi"}}, "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (decision) (rate(guardrail_decisions_total[5m]))", "legendFormat": "{{decision}}"}], "title": "Allow vs Block Ratio", "type": "timeseries"}
       ],
       "refresh": "30s",
       "schemaVersion": 38,
-      "tags": ["voice-agent", "llm", "monitoring"],
-      "templating": {
-        "list": [
-          {
-            "hide": 0,
-            "includeAll": false,
-            "name": "DS_PROMETHEUS",
-            "options": [],
-            "query": "prometheus",
-            "refresh": 1,
-            "type": "datasource"
-          }
-        ]
-      },
-      "time": { "from": "now-1h", "to": "now" },
+      "tags": ["voice-agent", "ai"],
+      "time": {"from": "now-1h", "to": "now"},
       "timezone": "browser",
-      "title": "Voice Agent — Observability",
-      "uid": "voice-agent-obs-v1",
+      "title": "Voice Agent — Pipeline",
+      "uid": "voice-agent-pipeline",
       "version": 1
     }
-
----
-
-# ── PersistentVolumeClaim ─────────────────────────────────────────────────────
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: grafana-pvc
-  namespace: english-speaking-agent
-  labels:
-    app: grafana
-    project: english-speaking-agent
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
 
 ---
 
@@ -314,7 +142,7 @@ spec:
 
       containers:
         - name: grafana
-          image: grafana/grafana:10.4.2
+          image: grafana/grafana:10.4.0
 
           ports:
             - name: http
@@ -325,8 +153,9 @@ spec:
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: grafana-secret
-                  key: admin-password
+                  name: backend-secret
+                  key: GRAFANA_ADMIN_PASSWORD
+                  optional: true
             - name: GF_USERS_ALLOW_SIGN_UP
               value: "false"
             - name: GF_SERVER_ROOT_URL
@@ -340,8 +169,7 @@ spec:
             - name: dashboard-provider
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboards
-              mountPath: /etc/grafana/provisioning/dashboards/voice_agent.json
-              subPath: voice_agent.json
+              mountPath: /var/lib/grafana/dashboards
             - name: data
               mountPath: /var/lib/grafana
 
@@ -377,25 +205,24 @@ spec:
       volumes:
         - name: datasources
           configMap:
-            name: grafana-datasources
+            name: grafana-datasource-config
         - name: dashboard-provider
           configMap:
             name: grafana-dashboard-provider
         - name: dashboards
           configMap:
-            name: grafana-dashboards
+            name: grafana-dashboard-voice-agent
         - name: data
-          persistentVolumeClaim:
-            claimName: grafana-pvc
+          emptyDir: {}
 
 ---
 
 # ── Service ───────────────────────────────────────────────────────────────────
 # ClusterIP: ingress proxies /grafana/* to this service.
 # Create the admin password secret once with:
-#   kubectl create secret generic grafana-secret \
-#     --from-literal=admin-password=<strong-password> \
-#     -n english-speaking-agent
+#   kubectl patch secret backend-secret -n english-speaking-agent \
+#     --type='merge' \
+#     -p '{"stringData": {"GRAFANA_ADMIN_PASSWORD": "your-secure-password"}}'
 apiVersion: v1
 kind: Service
 metadata:

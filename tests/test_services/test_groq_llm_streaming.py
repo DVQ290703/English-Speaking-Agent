@@ -53,17 +53,18 @@ from app.services.groq_llm import GroqLLMService  # noqa: E402
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_chunk(content: str, input_tokens=None, output_tokens=None):
+def _make_service():
+    """Build a GroqLLMService with a mocked ChatGroq client."""
+    service = GroqLLMService.__new__(GroqLLMService)
+    service.model_name = "test-model"
+    service.client = MagicMock()
+    return service
+
+
+def _make_chunk(content: str, usage=None):
     chunk = MagicMock()
     chunk.content = content
-    if input_tokens is not None:
-        chunk.usage_metadata = {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": input_tokens + output_tokens,
-        }
-    else:
-        chunk.usage_metadata = None
+    chunk.usage_metadata = usage or {}
     return chunk
 
 
@@ -71,123 +72,115 @@ def _make_chunk(content: str, input_tokens=None, output_tokens=None):
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestGroqLLMStreaming:
-    """generate_response uses .stream() and records ttft_ms on span."""
-
-    def _make_service(self, mock_client):
-        """Create a GroqLLMService with the ChatGroq client already replaced."""
-        svc = GroqLLMService.__new__(GroqLLMService)
-        svc.model_name = "llama-3.3-70b-versatile"
-        svc.client = mock_client
-        return svc
-
-    def test_generate_response_uses_stream(self):
-        """generate_response calls .stream() not .invoke()."""
-        mock_client = MagicMock()
-        mock_client.stream.return_value = iter([
+class TestGenerateResponseStreaming:
+    def test_uses_stream_not_invoke(self):
+        service = _make_service()
+        service.client.stream.return_value = iter([
             _make_chunk("Hello"),
-            _make_chunk(" world", input_tokens=10, output_tokens=5),
+            _make_chunk(" world", {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8}),
         ])
-        svc = self._make_service(mock_client)
-        result = svc.generate_response("Hi")
 
-        mock_client.stream.assert_called_once()
+        result = service.generate_response("Hi")
+
         assert result == "Hello world"
+        service.client.stream.assert_called_once()
+        service.client.invoke.assert_not_called()
 
-    def test_generate_response_does_not_call_invoke(self):
-        """generate_response must not call .invoke()."""
-        mock_client = MagicMock()
-        mock_client.stream.return_value = iter([
-            _make_chunk("Hi there", input_tokens=8, output_tokens=3),
+    def test_concatenates_all_chunks(self):
+        service = _make_service()
+        service.client.stream.return_value = iter([
+            _make_chunk("One"),
+            _make_chunk(" two"),
+            _make_chunk(" three"),
         ])
-        svc = self._make_service(mock_client)
-        svc.generate_response("Hey")
 
-        mock_client.invoke.assert_not_called()
+        result = service.generate_response("count")
 
-    def test_generate_response_sets_ttft_ms_on_span(self):
-        """span.set receives ttft_ms as a non-negative float."""
-        mock_client = MagicMock()
-        mock_client.stream.return_value = iter([
-            _make_chunk("first"),
-            _make_chunk(" second", input_tokens=8, output_tokens=4),
+        assert result == "One two three"
+
+    def test_records_ttft_in_span_extra(self):
+        service = _make_service()
+        service.client.stream.return_value = iter([
+            _make_chunk("Hi"),
+            _make_chunk("!", {"input_tokens": 2, "output_tokens": 1, "total_tokens": 3}),
         ])
-        svc = self._make_service(mock_client)
 
-        captured_extra = {}
+        with patch("app.core.metrics.record_span_metrics") as mock_record:
+            service.generate_response("hello")
 
-        def fake_span_set(**kwargs):
-            captured_extra.update(kwargs)
+        assert mock_record.called
+        extra = mock_record.call_args[0][4]
+        assert "ttft_ms" in extra
+        assert extra["ttft_ms"] > 0
 
-        with patch.object(_groq_llm_mod, "span_context") as mock_ctx:
-            fake_span = MagicMock()
-            fake_span.set.side_effect = fake_span_set
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=fake_span)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-            svc.generate_response("Hello")
-
-        assert "ttft_ms" in captured_extra
-        assert isinstance(captured_extra["ttft_ms"], float)
-        assert captured_extra["ttft_ms"] >= 0.0
-
-    def test_generate_response_concatenates_all_chunks(self):
-        """All chunk contents are joined into the final response."""
-        mock_client = MagicMock()
-        mock_client.stream.return_value = iter([
-            _make_chunk("Part1 "),
-            _make_chunk("Part2 "),
-            _make_chunk("Part3", input_tokens=12, output_tokens=6),
+    def test_ttft_is_none_if_all_chunks_empty(self):
+        service = _make_service()
+        service.client.stream.return_value = iter([
+            _make_chunk(""),
+            _make_chunk("", {"input_tokens": 1, "output_tokens": 0, "total_tokens": 1}),
         ])
-        svc = self._make_service(mock_client)
-        result = svc.generate_response("Multi-part response please")
 
-        assert result == "Part1 Part2 Part3"
+        with patch("app.core.metrics.record_span_metrics") as mock_record:
+            service.generate_response("hello")
 
-    def test_generate_response_records_token_usage_from_last_chunk(self):
-        """Token counts from the last chunk's usage_metadata are passed to span.set."""
-        mock_client = MagicMock()
-        mock_client.stream.return_value = iter([
-            _make_chunk("hi"),
-            _make_chunk(" there", input_tokens=42, output_tokens=7),
+        extra = mock_record.call_args[0][4]
+        assert extra.get("ttft_ms") is None
+
+    def test_token_counts_read_from_last_chunk(self):
+        service = _make_service()
+        service.client.stream.return_value = iter([
+            _make_chunk("Hello"),
+            _make_chunk(" world", {"input_tokens": 10, "output_tokens": 7, "total_tokens": 17}),
         ])
-        svc = self._make_service(mock_client)
 
-        captured_extra = {}
+        with patch("app.core.metrics.record_span_metrics") as mock_record:
+            service.generate_response("hi")
 
-        def fake_span_set(**kwargs):
-            captured_extra.update(kwargs)
+        extra = mock_record.call_args[0][4]
+        assert extra.get("prompt_tokens") == 10
+        assert extra.get("completion_tokens") == 7
 
-        with patch.object(_groq_llm_mod, "span_context") as mock_ctx:
-            fake_span = MagicMock()
-            fake_span.set.side_effect = fake_span_set
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=fake_span)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-            svc.generate_response("test")
 
-        assert captured_extra.get("prompt_tokens") == 42
-        assert captured_extra.get("completion_tokens") == 7
+class TestGenerateResponseWithGrammarStreaming:
+    def test_uses_stream_not_invoke(self):
+        service = _make_service()
+        json_response = json.dumps({"response_text": "Nice job!", "grammar": {}})
+        service.client.bind.return_value.stream.return_value = iter([
+            _make_chunk(json_response),
+        ])
 
-    def test_generate_response_with_grammar_still_uses_invoke(self):
-        """generate_response_with_grammar keeps using .invoke() (JSON mode)."""
-        mock_client = MagicMock()
-        json_client = MagicMock()
-        mock_client.bind.return_value = json_client
+        result_text, raw = service.generate_response_with_grammar("How are you?")
 
-        # The response must be an instance of the AIMessage stub loaded in the module
-        AIMessage = sys.modules["langchain_core.messages"].AIMessage
-        fake_response = AIMessage(content=json.dumps({
-            "response_text": "Great job!",
-            "grammar": {},
-        }))
-        fake_response.usage_metadata = {
-            "input_tokens": 10,
-            "output_tokens": 5,
-            "total_tokens": 15,
-        }
-        json_client.invoke.return_value = fake_response
+        assert result_text == "Nice job!"
+        service.client.bind.return_value.stream.assert_called_once()
+        service.client.bind.return_value.invoke.assert_not_called()
 
-        svc = self._make_service(mock_client)
-        text, raw = svc.generate_response_with_grammar("Hello")
+    def test_records_ttft_in_span_extra(self):
+        service = _make_service()
+        json_response = json.dumps({"response_text": "Good!"})
+        service.client.bind.return_value.stream.return_value = iter([
+            _make_chunk(json_response),
+        ])
 
-        json_client.invoke.assert_called_once()
-        assert text == "Great job!"
+        with patch("app.core.metrics.record_span_metrics") as mock_record:
+            service.generate_response_with_grammar("test")
+
+        extra = mock_record.call_args[0][4]
+        assert "ttft_ms" in extra
+        assert extra["ttft_ms"] > 0
+
+    def test_falls_back_to_plain_on_invalid_json(self):
+        service = _make_service()
+        # Grammar call returns broken JSON
+        service.client.bind.return_value.stream.return_value = iter([
+            _make_chunk("{broken json"),
+        ])
+        # Fallback generate_response uses stream too
+        service.client.stream.return_value = iter([
+            _make_chunk("Fallback response"),
+        ])
+
+        result_text, raw = service.generate_response_with_grammar("test")
+
+        assert result_text == "Fallback response"
+        assert raw is None

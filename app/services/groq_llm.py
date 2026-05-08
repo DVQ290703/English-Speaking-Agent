@@ -77,23 +77,26 @@ class GroqLLMService:
         logger.debug("GroqLLM sending %d messages to API", len(messages))
 
         with span_context("llm.generate_response", kind="llm") as span:
-            chunks = []
+            result = ""
             ttft_ms: float | None = None
-            t_start = time.monotonic()
-            usage: dict = {}
+            t0 = time.perf_counter()
+            final_chunk = None
             for chunk in self.client.stream(messages):
-                if ttft_ms is None:
-                    ttft_ms = (time.monotonic() - t_start) * 1000.0
-                chunks.append(chunk.content or "")
-                if chunk.usage_metadata:
-                    usage = chunk.usage_metadata
-            result = "".join(chunks)
+                if ttft_ms is None and chunk.content:
+                    ttft_ms = (time.perf_counter() - t0) * 1000
+                result += chunk.content
+                final_chunk = chunk
+
+            usage: dict = {}
+            if final_chunk is not None:
+                usage = getattr(final_chunk, "usage_metadata", {}) or {}
+
             span.set(
                 model=self.model_name,
                 prompt_tokens=usage.get("input_tokens", 0),
                 completion_tokens=usage.get("output_tokens", 0),
                 total_tokens=usage.get("total_tokens", 0),
-                ttft_ms=ttft_ms if ttft_ms is not None else 0.0,
+                ttft_ms=ttft_ms,
             )
 
         logger.info("GroqLLM response_length=%d", len(result))
@@ -133,15 +136,26 @@ class GroqLLMService:
         try:
             with span_context("llm.generate_response_with_grammar", kind="llm") as span:
                 json_client = self.client.bind(response_format={"type": "json_object"})
-                response = json_client.invoke(messages)
-                raw = response.content if isinstance(response, AIMessage) else str(response)
+                raw = ""
+                ttft_ms = None
+                t0 = time.perf_counter()
+                final_chunk = None
+                for chunk in json_client.stream(messages):
+                    if ttft_ms is None and chunk.content:
+                        ttft_ms = (time.perf_counter() - t0) * 1000
+                    raw += chunk.content
+                    final_chunk = chunk
 
-                usage = getattr(response, "usage_metadata", {}) or {}
+                usage = {}
+                if final_chunk is not None:
+                    usage = getattr(final_chunk, "usage_metadata", {}) or {}
+
                 span.set(
                     model=self.model_name,
                     prompt_tokens=usage.get("input_tokens", 0),
                     completion_tokens=usage.get("output_tokens", 0),
                     total_tokens=usage.get("total_tokens", 0),
+                    ttft_ms=ttft_ms,
                 )
 
             data = json.loads(raw)

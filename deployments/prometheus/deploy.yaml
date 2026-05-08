@@ -5,7 +5,6 @@
 #
 # Scrapes the backend /metrics endpoint (prometheus_fastapi_instrumentator +
 # custom counters/histograms in app/core/metrics.py).
-# Retention: 15 days on a 2 Gi PVC.
 # =============================================================================
 
 # ── ConfigMap — scrape config ─────────────────────────────────────────────────
@@ -16,6 +15,7 @@ metadata:
   namespace: english-speaking-agent
   labels:
     app: prometheus
+    tier: monitoring
     project: english-speaking-agent
 data:
   prometheus.yml: |
@@ -24,28 +24,10 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
-      - job_name: "voice-agent-backend"
+      - job_name: voice_agent_backend
         static_configs:
-          - targets: ["backend-agent-service.english-speaking-agent.svc.cluster.local:8000"]
+          - targets: ["backend-agent-service:8000"]
         metrics_path: /metrics
-
----
-
-# ── PersistentVolumeClaim ─────────────────────────────────────────────────────
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: prometheus-pvc
-  namespace: english-speaking-agent
-  labels:
-    app: prometheus
-    project: english-speaking-agent
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
 
 ---
 
@@ -78,7 +60,7 @@ spec:
           effect: "NoSchedule"
 
       securityContext:
-        fsGroup: 65534   # nobody — required for Prometheus to write to the PVC
+        fsGroup: 65534   # nobody — required for Prometheus to write to the volume
 
       containers:
         - name: prometheus
@@ -86,9 +68,7 @@ spec:
           args:
             - "--config.file=/etc/prometheus/prometheus.yml"
             - "--storage.tsdb.path=/prometheus"
-            - "--storage.tsdb.retention.time=15d"
-            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
-            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--storage.tsdb.retention.time=30d"
 
           ports:
             - name: http
@@ -135,8 +115,7 @@ spec:
           configMap:
             name: prometheus-config
         - name: data
-          persistentVolumeClaim:
-            claimName: prometheus-pvc
+          emptyDir: {}
 
 ---
 
