@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
+from app.core.logger import get_logger
 from app.core.telemetry import span_context
 from app.guardrails.output.content_filter import ContentFilter
+
+_log = get_logger("guardrail")
 
 
 @dataclass
@@ -23,4 +27,13 @@ class OutputGuardrails:
         """Return PII-redacted text and flags. Never raises."""
         with span_context("guardrail.output", kind="guardrail"):
             cf_result = self._content_filter.check(text)
-            return OutputGuardrailsResult(text=cf_result.text, flags=cf_result.flags)
+            result = OutputGuardrailsResult(text=cf_result.text, flags=cf_result.flags)
+
+        pii_redacted = "contains_pii" in result.flags
+        _log.info(json.dumps({
+            "event": "guardrail.output.check",
+            "result": "pass",
+            "pii_redacted": pii_redacted,
+            "output_length": len(text),
+        }))
+        return result
