@@ -59,11 +59,10 @@ export default function LeftAudioPanel({
       <div className="px-2 mt-2 space-y-2">
         <div className="bg-linear-to-r from-blue-50 to-indigo-50 rounded-md border border-gray-200 flex items-center gap-2.5 px-2 py-2">
           <div
-            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${
-              agentSpeaking
-                ? 'bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200'
-                : 'bg-blue-100 border border-blue-200'
-            }`}
+            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${agentSpeaking
+              ? 'bg-blue-600/30 border-2 border-blue-500/60 shadow-lg shadow-blue-200'
+              : 'bg-blue-100 border border-blue-200'
+              }`}
           >
             <SiOpenai className="w-5 h-5 text-blue-600" />
           </div>
@@ -100,11 +99,10 @@ export default function LeftAudioPanel({
 
         <div className="bg-linear-to-r from-violet-50 to-purple-50 rounded-md border border-gray-200 flex items-center gap-2.5 px-2 py-2">
           <div
-            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${
-              isRecording
-                ? 'bg-violet-600/30 border-2 border-violet-500/60 shadow-lg shadow-violet-200'
-                : 'bg-violet-100 border border-violet-200'
-            }`}
+            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${isRecording
+              ? 'bg-violet-600/30 border-2 border-violet-500/60 shadow-lg shadow-violet-200'
+              : 'bg-violet-100 border border-violet-200'
+              }`}
           >
             {currentUser?.display_name?.[0] ? (
               <span className="text-sm font-semibold text-violet-700">

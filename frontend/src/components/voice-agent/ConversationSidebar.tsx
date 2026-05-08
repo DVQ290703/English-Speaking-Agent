@@ -50,11 +50,10 @@ function ConvRow({
   const label = c.title || relativeTime(c.started_at);
   return (
     <div
-      className={`group relative flex items-center rounded-lg cursor-pointer transition-colors pl-8 pr-2 py-1.5 mx-1 ${
-        isActive
+      className={`group relative flex items-center rounded-lg cursor-pointer transition-colors pl-8 pr-2 py-1.5 mx-1 ${isActive
           ? 'bg-gray-200 dark:bg-slate-700/60 text-gray-900 dark:text-slate-100'
           : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-600 dark:text-slate-300'
-      }`}
+        }`}
       onClick={() => {
         if (!isDeleting) onSelect();
       }}
@@ -195,11 +194,10 @@ export default function ConversationSidebar({
                         key={tp.code}
                         type="button"
                         onClick={() => handleTopicClick(tp.code)}
-                        className={`w-full group flex items-center gap-2 px-3 py-2 transition-colors text-left ${
-                          isActive
+                        className={`w-full group flex items-center gap-2 px-3 py-2 transition-colors text-left ${isActive
                             ? 'bg-gray-200 dark:bg-slate-700/60 text-gray-900 dark:text-slate-100'
                             : 'hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-300'
-                        }`}
+                          }`}
                       >
                         <MessageSquare className="w-4 h-4 shrink-0 text-gray-400 dark:text-slate-500 group-hover:dark:text-slate-400" />
                         <span className="flex-1 min-w-0 text-xs font-medium truncate">
@@ -257,11 +255,10 @@ export default function ConversationSidebar({
               onNewChat(topicCode);
             }}
             aria-disabled={!!(token && isTopicLimitReached)}
-            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              token && isTopicLimitReached
+            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${token && isTopicLimitReached
                 ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed opacity-60'
                 : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
+              }`}
           >
             <Plus className="w-3.5 h-3.5" />
             {t('va.sidebar.newChat')}
@@ -285,7 +282,7 @@ export default function ConversationSidebar({
                 <p className="text-xs font-bold text-gray-900 dark:text-slate-100">Sign in to save chat history</p>
                 <p className="text-[10px] text-gray-500 dark:text-slate-400 leading-relaxed">Your progress and conversations will be saved across devices.</p>
               </div>
-              <button 
+              <button
                 onClick={() => navigate('/login')}
                 className="w-full py-1.5 bg-blue-600 text-white rounded-lg text-[11px] font-bold hover:bg-blue-700 transition-all active:scale-95"
               >

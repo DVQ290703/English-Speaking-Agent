@@ -42,7 +42,7 @@ export function MicWaveform({ active, speaking }: { active: boolean; speaking?: 
   const isAnimating = active && (speaking ?? true);
 
   return (
-    <div className="flex items-center justify-center gap-0.5 h-16 w-full">
+    <div className="flex items-center justify-center gap-0.5 h-8 w-full">
       {Array.from({ length: 28 }).map((_, i) => (
         <div
           key={i}

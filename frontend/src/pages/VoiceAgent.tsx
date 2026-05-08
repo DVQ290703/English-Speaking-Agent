@@ -7,7 +7,7 @@ import {
   useMemo,
   type KeyboardEvent,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Circle, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
@@ -87,42 +87,42 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
   const isAgent = m.role === 'assistant';
   const mistakes: Mistake[] | undefined = m.score?.words.length
     ? m.score.words.flatMap((w) => {
-        const err = w.error_type;
-        const acc = Math.round(w.accuracy_score ?? 0);
-        const phonemes = (w.phonemes ?? []).map((p) => ({
-          phoneme: p.phoneme,
-          accuracy_score: Math.round(p.accuracy_score ?? 0),
-        }));
-        const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-        const phonemeNote =
-          lowPhonemes.length > 0
-            ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-            : '';
-        if (err && err !== 'None') {
-          const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-          return [
-            {
-              wrong: w.word,
-              correct: w.word,
-              type: type as Mistake['type'],
-              note: `Accuracy ${acc}%${phonemeNote}`,
-              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-            },
-          ];
-        }
-        if (acc < 90 || lowPhonemes.length > 0) {
-          return [
-            {
-              wrong: w.word,
-              correct: w.word,
-              type: 'Pronunciation' as Mistake['type'],
-              note: `Accuracy ${acc}%${phonemeNote}`,
-              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-            },
-          ];
-        }
-        return [];
-      })
+      const err = w.error_type;
+      const acc = Math.round(w.accuracy_score ?? 0);
+      const phonemes = (w.phonemes ?? []).map((p) => ({
+        phoneme: p.phoneme,
+        accuracy_score: Math.round(p.accuracy_score ?? 0),
+      }));
+      const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+      const phonemeNote =
+        lowPhonemes.length > 0
+          ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+          : '';
+      if (err && err !== 'None') {
+        const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+        return [
+          {
+            wrong: w.word,
+            correct: w.word,
+            type: type as Mistake['type'],
+            note: `Accuracy ${acc}%${phonemeNote}`,
+            phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+          },
+        ];
+      }
+      if (acc < 90 || lowPhonemes.length > 0) {
+        return [
+          {
+            wrong: w.word,
+            correct: w.word,
+            type: 'Pronunciation' as Mistake['type'],
+            note: `Accuracy ${acc}%${phonemeNote}`,
+            phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+          },
+        ];
+      }
+      return [];
+    })
     : undefined;
 
   return {
@@ -136,21 +136,26 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
     assessmentStatus: m.score ? 'available' : 'unavailable',
     scoreDetails: m.score
       ? {
-          overall: Math.round(m.score.overall_score ?? 0),
-          pronunciation: Math.round(m.score.overall_score ?? 0),
-          fluency: Math.round(m.score.fluency_score ?? 0),
-          accuracy: Math.round(m.score.accuracy_score ?? 0),
-          completeness:
-            m.score.completeness_score != null
-              ? Math.round(m.score.completeness_score)
-              : undefined,
-        }
+        overall: Math.round(m.score.overall_score ?? 0),
+        pronunciation: Math.round(m.score.overall_score ?? 0),
+        fluency: Math.round(m.score.fluency_score ?? 0),
+        accuracy: Math.round(m.score.accuracy_score ?? 0),
+        completeness:
+          m.score.completeness_score != null
+            ? Math.round(m.score.completeness_score)
+            : undefined,
+      }
       : undefined,
     mistakes,
   };
 }
 
 export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
+  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useOutletContext<{
+    sidebarOpen: boolean;
+    setSidebarOpen: (v: boolean) => void;
+    toggleSidebar: () => void;
+  }>();
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [isDark, toggleDark] = useDarkMode();
@@ -286,7 +291,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   const [isRecording, setIsRecording] = useState(false);
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isTopicLimitReached, setIsTopicLimitReached] = useState(false);
   const [convsLoading, setConvsLoading] = useState(false);
@@ -690,7 +694,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         );
         setIsTopicLimitReached(Boolean(data.limit_reached));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey, topic]);
 
@@ -926,24 +930,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   return (
     <div
       data-va="root"
-      className={`h-screen overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
+      className={`h-full overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
     >
-      <VoiceAgentHeader
-        isDark={isDark}
-        toggleDark={toggleDark}
-        currentUser={currentUser}
-        showUserMenu={showUserMenu}
-        onToggleUserMenu={() => setShowUserMenu((v) => !v)}
-        onCloseUserMenu={() => setShowUserMenu(false)}
-        onRequestLogout={() => {
-          setShowUserMenu(false);
-          setShowLogoutConfirm(true);
-        }}
-        onNavigateDashboard={() => navigate('/dashboard')}
-        onNavigateSignIn={() => navigate('/')}
-        onNavigateSignUp={() => navigate('/register')}
-        onToggleSidebar={() => setShowSidebar((v) => !v)}
-      />
+      {/* VoiceAgentHeader removed - handled by MainLayout */}
 
       {/* Description bar */}
       {(topic || customTopicLabel) && (
@@ -988,13 +977,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               data-testid="button-connect"
               onClick={handleConnect}
               disabled={isConnecting}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-                isConnected
-                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
-                  : isConnecting
-                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-              }`}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
+                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                : isConnecting
+                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+                }`}
             >
               {isConnected
                 ? t('va.connect.disconnect')
@@ -1010,8 +998,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       <div className="flex flex-1 overflow-hidden relative">
         {/* ChatGPT-style persistent sidebar */}
         <ConversationSidebar
-          open={showSidebar}
-          onClose={() => setShowSidebar(false)}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
           token={getAuthSession()?.token ?? null}
           topicCategories={topicCategories}
           conversations={conversations}
@@ -1022,7 +1010,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onSelectTopic={handleTopicSelect}
           onSelectConversation={(id, topicCode) => {
             if (isConnected) persistSession();
-            setShowSidebar(false);
+            setSidebarOpen(false);
             loadConversationInPlace(id, topicCode ?? null);
           }}
           onNewChat={(topicCode) => {
@@ -1044,7 +1032,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             setConversations((prev) => prev.filter((c) => c.id !== id));
             setIsTopicLimitReached(false);
           }}
-          onToggleSidebar={() => setShowSidebar((v) => !v)}
+          onToggleSidebar={toggleSidebar}
         />
 
         {/* Main content */}
@@ -1058,9 +1046,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           )}
           <div
             data-va="left"
-            className={`${
-              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
+            className={`${showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+              } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
             <LeftAudioPanel
               gender={gender}
@@ -1094,7 +1081,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Right panel: Conversation transcript */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Panel top bar */}
             <div
               data-va="conv-header"
@@ -1125,7 +1112,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             {/* Messages area */}
             <div
               data-va="messages"
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
+              className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-4 scrollbar-thin"
             >
               {/* Soft loading spinner while fetching existing conversation history */}
               {historyLoading && (
@@ -1144,9 +1131,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     /* Welcome Screen for Guests (PLG) */
                     <div className="h-full flex flex-col items-center justify-center text-center gap-6 max-w-md mx-auto animate-in fade-in zoom-in duration-500">
                       <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
-                        <img 
-                          src="/src/public/audio-waves.png" 
-                          alt="Logo" 
+                        <img
+                          src="/src/public/audio-waves.png"
+                          alt="Logo"
                           className="w-full h-full object-cover p-4"
                         />
                       </div>
@@ -1243,13 +1230,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     <p className="text-xs text-gray-500">Join thousands of learners improving their English every day.</p>
                   </div>
                   <div className="flex gap-3 w-full sm:w-auto">
-                    <button 
+                    <button
                       onClick={() => navigate('/login')}
                       className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95"
                     >
                       Sign in
                     </button>
-                    <button 
+                    <button
                       onClick={() => navigate('/register')}
                       className="flex-1 sm:flex-none px-8 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all active:scale-95"
                     >

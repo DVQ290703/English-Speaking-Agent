@@ -87,9 +87,7 @@ export default function FlashcardPage() {
   // Study state
   const [dueCards, setDueCards] = useState([]);
 
-  useEffect(() => {
-    if (!token) navigate('/');
-  }, [token, navigate]);
+  // Redundant session check removed. ProtectedRoute handles authentication guards.
 
   // Load decks
   const loadDecks = useCallback(async () => {
