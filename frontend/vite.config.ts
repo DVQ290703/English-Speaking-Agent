@@ -29,6 +29,15 @@ export default defineConfig({
       strict: true,
       deny: ['**/.*'],
     },
+    proxy: {
+      '/voice-agent-audio': {
+        target: 'http://localhost:9000',
+        changeOrigin: false,
+        headers: {
+          Host: 'minio:9000'
+        }
+      },
+    },
   },
   preview: {
     port,

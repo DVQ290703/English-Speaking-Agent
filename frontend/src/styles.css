@@ -3,11 +3,11 @@
 @import './voice-agent-dark.css';
 
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
   --bg: #f5f7fa;
   --bg-2: #ffffff;
@@ -21,16 +21,16 @@
   --accent-glow: rgba(37, 99, 235, 0.18);
   --ok: #15803d;
   --err: #dc2626;
-  
+
   /* Flashcard Colors */
   --background: 210 20% 98%;
   --foreground: 220 40% 15%;
   --border: 214 32% 91%;
-  
+
   --card: 0 0% 100%;
   --card-foreground: 220 40% 15%;
   --card-border: 214 32% 91%;
-  
+
   --sidebar: 210 20% 96%;
   --sidebar-foreground: 220 40% 20%;
   --sidebar-border: 214 32% 91%;
@@ -39,27 +39,27 @@
   --sidebar-accent: 210 40% 92%;
   --sidebar-accent-foreground: 220 40% 20%;
   --sidebar-ring: 221 83% 53%;
-  
+
   --popover: 0 0% 100%;
   --popover-foreground: 220 40% 15%;
   --popover-border: 214 32% 91%;
-  
+
   --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
-  
+
   --secondary: 210 40% 92%;
   --secondary-foreground: 220 40% 20%;
-  
+
   --muted: 214 32% 91%;
   --muted-foreground: 215 16% 47%;
-  
+
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  
+
   --input: 214 32% 91%;
   --ring: 221 83% 53%;
 
-  --radius: 0.75rem; 
+  --radius: 0.75rem;
 
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -71,21 +71,21 @@
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(255, 255, 255, .10);
+  --badge-outline: rgba(255, 255, 255, .05);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(255, 255, 255, .04);
+  --elevate-2: rgba(255, 255, 255, .09);
 
   /* Calm Focus Theme - Dark */
   --background: 222 47% 11%;
   --foreground: 210 40% 98%;
   --border: 217 33% 17%;
-  
+
   --card: 222 47% 11%;
   --card-foreground: 210 40% 98%;
   --card-border: 217 33% 17%;
-  
+
   --sidebar: 223 47% 9%;
   --sidebar-foreground: 210 40% 96%;
   --sidebar-border: 217 33% 17%;
@@ -94,23 +94,23 @@
   --sidebar-accent: 216 34% 17%;
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-ring: 221 83% 53%;
-  
+
   --popover: 222 47% 11%;
   --popover-foreground: 210 40% 98%;
   --popover-border: 217 33% 17%;
-  
+
   --primary: 221 83% 53%;
   --primary-foreground: 0 0% 100%;
-  
+
   --secondary: 217 33% 17%;
   --secondary-foreground: 210 40% 98%;
-  
+
   --muted: 217 33% 17%;
   --muted-foreground: 215 20.2% 65.1%;
-  
+
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
-  
+
   --input: 217 33% 17%;
   --ring: 221 83% 53%;
 }
@@ -174,7 +174,16 @@ body {
   letter-spacing: -0.011em;
 }
 
-h1, h2, h3, h4, h5, h6 {
+button, a, [role="button"], select, .cursor-pointer {
+  cursor: pointer !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   letter-spacing: -0.022em;
   line-height: 1.2;
 }
@@ -183,17 +192,23 @@ h1, h2, h3, h4, h5, h6 {
    OPTICAL DARK MODE OPTIMIZATIONS
    ========================================= */
 .dark body {
-  color: #E2E8F0; 
-  font-weight: 350; 
+  color: #E2E8F0;
+  font-weight: 350;
   text-shadow: 0 0 0.5px rgba(226, 232, 240, 0.1);
 }
 
-.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
   font-weight: 550;
   color: #F8FAFC;
 }
 
-.dark strong, .dark b {
+.dark strong,
+.dark b {
   font-weight: 550;
 }
 
@@ -229,6 +244,7 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.2;
   pointer-events: none;
 }
+
 .orb-left {
   width: 380px;
   height: 380px;
@@ -236,6 +252,7 @@ h1, h2, h3, h4, h5, h6 {
   left: -100px;
   top: 0;
 }
+
 .orb-right {
   width: 340px;
   height: 340px;
@@ -319,9 +336,11 @@ h1, h2, h3, h4, h5, h6 {
   color: #475569;
   animation: slide-up 420ms ease-out both;
 }
+
 .feature-list li:nth-child(2) {
   animation-delay: 80ms;
 }
+
 .feature-list li:nth-child(3) {
   animation-delay: 150ms;
 }
@@ -427,6 +446,7 @@ h1, h2, h3, h4, h5, h6 {
     color 140ms ease,
     background 140ms ease;
 }
+
 .toggle-btn:hover {
   color: #1e293b;
   background: rgba(15, 23, 42, 0.06);
@@ -460,6 +480,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   font-size: 0.88rem;
 }
+
 .form-row a:hover {
   text-decoration: underline;
 }
@@ -480,11 +501,13 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow 140ms ease;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
+
 .submit-btn:hover:not(:disabled) {
   background: var(--accent-h);
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
 }
+
 .submit-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -496,12 +519,14 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.88rem;
   color: var(--ink-2);
 }
+
 .switch-link a {
   color: #2563eb;
   font-weight: 600;
   text-decoration: none;
   margin-left: 4px;
 }
+
 .switch-link a:hover {
   text-decoration: underline;
 }
@@ -512,6 +537,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   font-size: 0.88rem;
 }
+
 .error-msg {
   margin: 6px 0 0;
   color: var(--err);
@@ -542,6 +568,7 @@ h1, h2, h3, h4, h5, h6 {
   margin: 0 0 16px;
   font-size: 1.5rem;
 }
+
 .empty-state {
   color: var(--ink-2);
   margin: 4px 0;
@@ -553,6 +580,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateY(18px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -564,6 +592,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -571,11 +600,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 @keyframes dotPulse {
+
   0%,
   100% {
     opacity: 0.4;
     transform: scale(0.8);
   }
+
   50% {
     opacity: 1;
     transform: scale(1);
@@ -586,9 +617,11 @@ h1, h2, h3, h4, h5, h6 {
   0% {
     transform: scaleY(0.3);
   }
+
   50% {
     transform: scaleY(1);
   }
+
   100% {
     transform: scaleY(0.3);
   }
@@ -599,6 +632,7 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -617,18 +651,21 @@ h1, h2, h3, h4, h5, h6 {
       0 0 0 0 rgba(37, 99, 235, 0.3);
     transform: scale(1);
   }
+
   35% {
     box-shadow:
       0 0 0 6px rgba(37, 99, 235, 0.18),
       0 0 22px 4px rgba(96, 165, 250, 0.55);
     transform: scale(1.015);
   }
+
   70% {
     box-shadow:
       0 0 0 10px rgba(37, 99, 235, 0),
       0 0 18px 2px rgba(96, 165, 250, 0.3);
     transform: scale(1);
   }
+
   100% {
     box-shadow:
       0 0 0 0 rgba(37, 99, 235, 0),
@@ -647,9 +684,11 @@ h1, h2, h3, h4, h5, h6 {
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
 }
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
 }
+
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.25);
   border-radius: 999px;
@@ -660,6 +699,7 @@ h1, h2, h3, h4, h5, h6 {
   .login-layout {
     grid-template-columns: 1fr;
   }
+
   .brand-panel,
   .card-panel {
     padding: 26px;

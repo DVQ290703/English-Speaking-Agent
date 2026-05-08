@@ -84,6 +84,26 @@ export const deleteCard = (token, cardId) =>
     headers: authHeaders(token),
   });
 
+// ── Media ─────────────────────────────────────────────────────────────────────
+
+export const uploadCardMedia = (token, cardId, { side, media_type, file }) => {
+  const form = new FormData();
+  form.append('side', side);
+  form.append('media_type', media_type);
+  form.append('file', file);
+  return request(`${ENDPOINTS.flashcards.card(cardId)}/media`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: form,
+  });
+};
+
+export const deleteCardMedia = (token, mediaId) =>
+  request(`/api/flashcards/media/${mediaId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
 // ── Reviews ───────────────────────────────────────────────────────────────────
 
 export const getDueCards = (token, deckId) =>

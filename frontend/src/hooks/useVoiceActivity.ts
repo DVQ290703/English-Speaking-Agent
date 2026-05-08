@@ -72,7 +72,7 @@ async function createAudioFrameBridge(
     cleanup: () => {},
   };
 
-  if (shouldAbort() || ctx.state === 'closed') {
+  if (shouldAbort() || (ctx.state as string) === 'closed') {
     return noOpBridge;
   }
 
@@ -107,7 +107,7 @@ async function createAudioFrameBridge(
         URL.revokeObjectURL(moduleUrl);
       }
 
-      if (shouldAbort() || ctx.state === 'closed') {
+      if (shouldAbort() || (ctx.state as string) === 'closed') {
         return noOpBridge;
       }
 
@@ -137,14 +137,14 @@ async function createAudioFrameBridge(
         },
       };
     } catch (err) {
-      if (shouldAbort() || ctx.state === 'closed') {
+      if (shouldAbort() || (ctx.state as string) === 'closed') {
         return noOpBridge;
       }
       console.warn('[VAD] AudioWorklet unavailable — falling back to ScriptProcessor', err);
     }
   }
 
-  if (shouldAbort() || ctx.state === 'closed') {
+  if (shouldAbort() || (ctx.state as string) === 'closed') {
     return noOpBridge;
   }
 

@@ -128,6 +128,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.replayLast': 'Replay last agent reply',
     'shortcuts.newSession': 'Start new session',
     'shortcuts.toggleTheme': 'Toggle dark mode',
+    'shortcuts.openFlashcards': 'Open Flashcards',
+    'shortcuts.section.flashcards': 'Flashcards',
+    'shortcuts.flashcardFlip': 'Flashcards',
+    'shortcuts.flashcardRate': 'Rate card (1: Again, 2: Hard, 3: Good, 4: Easy)',
+    'shortcuts.flashcardReplay': 'Replay audio',
 
     // Badges / gamification
     'badges.title': 'Achievements',
@@ -515,6 +520,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.replayLast': 'Nghe lại câu cuối của trợ lý',
     'shortcuts.newSession': 'Bắt đầu phiên mới',
     'shortcuts.toggleTheme': 'Đổi giao diện sáng/tối',
+    'shortcuts.openFlashcards': 'Mở Flashcards',
+    'shortcuts.section.flashcards': 'Flashcards',
+    'shortcuts.flashcardFlip': 'Flashcards',
+    'shortcuts.flashcardRate': 'Đánh giá (1: Lại, 2: Khó, 3: Tốt, 4: Dễ)',
+    'shortcuts.flashcardReplay': 'Nghe lại âm thanh',
 
     // Badges / gamification
     'badges.title': 'Thành tích',

@@ -44,10 +44,19 @@ const SHORTCUTS: { sectionKey: string; items: Shortcut[] }[] = [
     ],
   },
   {
-    sectionKey: 'shortcuts.section.dashboard',
-    items: [
+    'sectionKey': 'shortcuts.section.dashboard',
+    'items': [
       { keys: ['N'], descKey: 'shortcuts.newSession' },
       { keys: ['T'], descKey: 'shortcuts.toggleTheme' },
+      { keys: ['F'], descKey: 'shortcuts.openFlashcards' },
+    ],
+  },
+  {
+    'sectionKey': 'shortcuts.section.flashcards',
+    'items': [
+      { keys: ['F'], descKey: 'shortcuts.flashcardFlip' },
+      { keys: ['1', '2', '3', '4'], descKey: 'shortcuts.flashcardRate' },
+      { keys: ['R'], descKey: 'shortcuts.flashcardReplay' },
     ],
   },
 ];

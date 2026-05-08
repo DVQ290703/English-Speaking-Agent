@@ -7,7 +7,7 @@ import { getAuthSession } from "@/auth/tokenStorage";
 import {
   listDecks, createDeck, updateDeck, deleteDeck, getDeckStats,
   listCards, createCard, createCardWithMedia, updateCard, deleteCard,
-  getDueCards, submitReview,
+  getDueCards, submitReview, uploadCardMedia, deleteCardMedia
 } from "@/api/flashcards";
 
 function useToken() {
@@ -153,6 +153,33 @@ export function useSubmitReview() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/flashcards/reviews/due"] });
       qc.invalidateQueries({ queryKey: getListDecksQueryKey() });
+    },
+  });
+}
+// ── Media hooks ──────────────────────────────────────────────────────────────
+
+export function useUploadMedia() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cardId, deckId, ...data }: { cardId: string; deckId: string; side: string; media_type: string; file: File }) =>
+      uploadCardMedia(token!, cardId, data as any),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDeckQueryKey(variables.deckId) });
+    },
+  });
+}
+
+export function useDeleteMedia() {
+  const token = useToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mediaId, deckId }: { mediaId: string; deckId: string }) =>
+      deleteCardMedia(token!, mediaId),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDeckQueryKey(variables.deckId) });
     },
   });
 }

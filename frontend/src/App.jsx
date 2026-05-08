@@ -61,6 +61,11 @@ function GlobalShortcuts() {
       } else if (key === 'n') {
         e.preventDefault();
         navigate('/VoiceAgent');
+      } else if (key === 'f') {
+        if (!window.location.pathname.startsWith('/flashcards')) {
+          e.preventDefault();
+          navigate('/flashcards/decks');
+        }
       }
     };
     window.addEventListener('keydown', onKey);
