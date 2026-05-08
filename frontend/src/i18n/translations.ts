@@ -403,6 +403,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
       'Could not start the session. Please check your microphone and try again.',
     'va.alert.recognitionFailed': 'Speech recognition could not start: {detail}',
 
+    // VoiceAgent — welcome screen
+    'va.welcome.title': "Hello! I'm your English Speaking Agent",
+    'va.welcome.subtitle':
+      "I'm here to help you practice your English through natural conversations, pronunciation feedback, and real-time corrections.",
+
     // Message bubble
     'bubble.replay.title': 'Replay',
     'bubble.score.title': 'Pronunciation score',
@@ -789,6 +794,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
       'Nhận dạng giọng nói liên tục lỗi. Hãy thử mở app ở tab mới (Chrome/Edge) và cấp quyền micro.',
     'va.alert.connectFailed': 'Không thể bắt đầu phiên. Hãy kiểm tra micro và thử lại.',
     'va.alert.recognitionFailed': 'Không khởi động được nhận dạng giọng nói: {detail}',
+
+    // VoiceAgent — welcome screen
+    'va.welcome.title': 'Chào mừng bạn đến với English Speaking Agent',
+    'va.welcome.subtitle':
+      'Tôi sẽ giúp bạn luyện nói tiếng Anh thông qua các cuộc trò chuyện tự nhiên, phản hồi phát âm và sửa lỗi thời gian thực.',
 
     // Message bubble
     'bubble.replay.title': 'Phát lại',

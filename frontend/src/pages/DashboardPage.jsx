@@ -20,7 +20,8 @@ import {
 
 import { fetchMe } from '../api/auth';
 import { fetchConversationStats } from '../api/conversations';
-import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
+import { useAuth } from '../auth/AuthContext';
+import { getAuthSession } from '../auth/tokenStorage';
 import BadgesCard from '../components/dashboard/BadgesCard';
 import OnboardingTip from '../components/dashboard/OnboardingTip';
 import CountUp from '../components/ui/CountUp';
@@ -176,8 +177,8 @@ function CategoryTabsRow({ categories, onStart }) {
               key={cat.name}
               onClick={() => setActiveIdx(i)}
               className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${activeIdx === i
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
                 }`}
             >
               {cat.displayName ?? t(`category.${cat.name}.name`)}
@@ -201,12 +202,10 @@ function CategoryTabsRow({ categories, onStart }) {
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-500 dark:text-slate-400 mb-3 px-1">
-        {active.displayDesc ?? t(`category.${active.name}.desc`)}
-      </p>
+
       <div
         ref={scrollerRef}
-        className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pb-2 -mx-1 px-1"
+        className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-thin pt-2 pb-2 -mx-1 px-1"
       >
         {active.topics.map((t) => (
           <TopicCard
@@ -701,10 +700,10 @@ export default function DashboardPage() {
       });
   }, [navigate, session]);
 
+  const { logout } = useAuth();
   const handleLogout = () => {
-    clearAuthSession();
+    logout();
     toast.success(t('toast.signedOut'));
-    navigate('/', { replace: true });
   };
 
   const startSession = (topicKey, categoryName) => {
@@ -712,11 +711,11 @@ export default function DashboardPage() {
     // URLSearchParams handles encoding (spaces → +, special chars → %XX) automatically.
     const params = new URLSearchParams({ topic: topicKey });
     if (categoryName) params.set('categories', categoryName);
-    navigate(`/VoiceAgent?${params.toString()}`);
+    navigate(`/chat?${params.toString()}`);
   };
 
   const handleChartStart = useCallback(() => {
-    navigate('/VoiceAgent');
+    navigate('/chat');
   }, [navigate]);
 
   const totalSessions = allSessions.length;
@@ -863,7 +862,7 @@ export default function DashboardPage() {
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        navigate('/VoiceAgent');
+                        navigate('/chat');
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors"
                     >

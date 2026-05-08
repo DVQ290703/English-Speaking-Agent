@@ -265,7 +265,7 @@ export default function FlashcardStudyPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-5xl min-h-[500px] h-[70vh] relative cursor-pointer"
+              className="w-full max-w-4xl min-h-[400px] h-[70vh] relative cursor-pointer"
               onClick={handleFlip}
             >
               <motion.div
@@ -322,7 +322,7 @@ export default function FlashcardStudyPage() {
                         </div>
                         <div className="flex items-center justify-center h-full w-full">
                           <div 
-                            className="w-full h-64 md:h-[450px] bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
+                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomedImage(sanitizeMediaUrl(frontImage.public_url));
@@ -389,7 +389,7 @@ export default function FlashcardStudyPage() {
                         </div>
                         <div className="flex items-center justify-center h-full w-full">
                           <div 
-                            className="w-full h-64 md:h-[450px] bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
+                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomedImage(sanitizeMediaUrl(backImage.public_url));

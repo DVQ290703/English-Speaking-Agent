@@ -1,11 +1,10 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 
-import { getAuthSession } from './auth/tokenStorage';
+import { AuthProvider } from './auth/AuthContext';
+import { ProtectedRoute, PublicRoute } from './auth/AuthGuards';
 import Skeleton from './components/ui/Skeleton';
 import ShortcutsModal, { useShortcutsToggle } from './components/ui/ShortcutsModal';
-import { useT } from './i18n/useLanguage';
 import LoginPage from './pages/LoginPage';
 import { useDarkMode } from './theme/useDarkMode';
 import { HelpCircle } from 'lucide-react';
@@ -27,23 +26,6 @@ function PageFallback() {
   );
 }
 
-function ProtectedRoute({ children }) {
-  const t = useT();
-  const location = useLocation();
-  const session = getAuthSession();
-  useEffect(() => {
-    if (!session?.token) {
-      toast.info(t('toast.loginRequired'));
-    }
-    // we only want this to fire once per redirect attempt
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-  if (!session?.token) {
-    return <Navigate to="/" replace state={{ from: location.pathname }} />;
-  }
-  return children;
-}
-
 function GlobalShortcuts() {
   const [, toggleDark] = useDarkMode();
   const navigate = useNavigate();
@@ -61,7 +43,7 @@ function GlobalShortcuts() {
         toggleDark();
       } else if (key === 'n') {
         e.preventDefault();
-        navigate('/VoiceAgent');
+        navigate('/chat');
       } else if (key === 'f') {
         if (!window.location.pathname.startsWith('/flashcards')) {
           e.preventDefault();
@@ -91,60 +73,42 @@ function GlobalHelpButton({ onClick }) {
 export default function App() {
   const { open, setOpen } = useShortcutsToggle();
   return (
-    <>
+    <AuthProvider>
       <Suspense fallback={<PageFallback />}>
         <Routes>
-          <Route path="/" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/VoiceAgent" element={<VoiceAgent />} />
+          {/* Public / Hybrid Routes */}
+          <Route element={<PublicRoute />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+          </Route>
+
+          {/* Hybrid Route: Accessible to everyone, logic inside the component */}
           <Route path="/chat" element={<VoiceAgent />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/flashcards"
-            element={<Navigate to="/flashcards/decks" replace />}
-          />
-          <Route
-            path="/flashcards/decks"
-            element={
-              <ProtectedRoute>
-                <FlashcardLayout>
-                  <FlashcardDecksPage />
-                </FlashcardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/flashcards/decks/:deckId/cards"
-            element={
-              <ProtectedRoute>
-                <FlashcardLayout>
-                  <FlashcardCardsPage />
-                </FlashcardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/flashcards/decks/:deckId/study"
-            element={
-              <ProtectedRoute>
-                <FlashcardLayout>
-                  <FlashcardStudyPage />
-                </FlashcardLayout>
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/VoiceAgent" element={<Navigate to="/chat" replace />} />
+
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            
+            <Route path="/flashcards" element={<Navigate to="/flashcards/decks" replace />} />
+            <Route path="/flashcards" element={<FlashcardLayout />}>
+              <Route path="decks" element={<FlashcardDecksPage />} />
+              <Route path="decks/:deckId/cards" element={<FlashcardCardsPage />} />
+              <Route path="decks/:deckId/study" element={<FlashcardStudyPage />} />
+            </Route>
+          </Route>
+
+          {/* Root Redirect */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
       <GlobalShortcuts />
       <GlobalHelpButton onClick={() => setOpen(true)} />
       <ShortcutsModal open={open} onClose={() => setOpen(false)} />
-    </>
+    </AuthProvider>
   );
 }
+

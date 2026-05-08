@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
-// Reminder: ensure <Toaster /> from sonner is mounted at app root (e.g. App.tsx/main.tsx).
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { deleteConversation, type ConversationSummary } from '../../api/conversations';
@@ -108,6 +108,7 @@ export default function ConversationSidebar({
   onToggleSidebar,
 }: Props) {
   const t = useT();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
@@ -125,7 +126,6 @@ export default function ConversationSidebar({
     });
   };
 
-  // When the active topic changes externally, drill into it automatically
   useEffect(() => {
     if (currentTopicCode) {
       setActiveTopicView(currentTopicCode);
@@ -157,7 +157,6 @@ export default function ConversationSidebar({
     }
   };
 
-  /* ── View 1: Main menu — categories & topics ── */
   const renderMainMenu = () => (
     <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
       {loading ? (
@@ -190,7 +189,7 @@ export default function ConversationSidebar({
                   {cat.topics.map((tp) => {
                     const count = conversations.filter((c) => c.topic_code === tp.code).length;
                     const isActive = currentTopicCode === tp.code;
-                    const shouldHighlightLimit = isTopicLimitReached && isActive;
+                    const shouldHighlightLimit = !!(token && isTopicLimitReached && isActive);
                     return (
                       <button
                         key={tp.code}
@@ -206,7 +205,7 @@ export default function ConversationSidebar({
                         <span className="flex-1 min-w-0 text-xs font-medium truncate">
                           {tp.title}
                         </span>
-                        {count > 0 && (
+                        {token && count > 0 && (
                           <span
                             className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${shouldHighlightLimit ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-gray-200 dark:bg-slate-700/80 text-gray-500 dark:text-slate-400'}`}
                           >
@@ -225,7 +224,6 @@ export default function ConversationSidebar({
     </div>
   );
 
-  /* ── View 2: Topic drill-down — conversations for a specific topic ── */
   const renderTopicView = (topicCode: string) => {
     const topic = topicCategories.flatMap((c) => c.topics).find((tp) => tp.code === topicCode);
     const topicConvs = conversations
@@ -234,7 +232,6 @@ export default function ConversationSidebar({
 
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
-        {/* Back + topic title */}
         <div className="flex items-center gap-2 px-2 py-2 shrink-0 border-b border-gray-200 dark:border-slate-800">
           <button
             type="button"
@@ -249,23 +246,19 @@ export default function ConversationSidebar({
           </span>
         </div>
 
-        {/* New Chat button */}
         <div className="px-3 py-2 shrink-0">
           <button
             type="button"
             onClick={() => {
-              if (isTopicLimitReached) {
-                toast.warning(
-                  'Session limit reached. Please delete an existing session to create a new one.',
-                );
+              if (token && isTopicLimitReached) {
+                toast.warning('Session limit reached. Please delete an existing session.');
                 return;
               }
               onNewChat(topicCode);
             }}
-            aria-disabled={isTopicLimitReached}
-            title={isTopicLimitReached ? t('va.sidebar.limitReached') : t('va.sidebar.newChat')}
+            aria-disabled={!!(token && isTopicLimitReached)}
             className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              isTopicLimitReached
+              token && isTopicLimitReached
                 ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed opacity-60'
                 : 'bg-blue-600 hover:bg-blue-700 text-white'
             }`}
@@ -275,17 +268,31 @@ export default function ConversationSidebar({
           </button>
         </div>
 
-        {/* Inline limit warning banner */}
-        {isTopicLimitReached && (
+        {token && isTopicLimitReached && (
           <div className="mx-3 mb-1 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:border-amber-700/40 dark:bg-amber-900/30 dark:text-amber-400">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{t('va.sidebar.limitWarningAlert')}</span>
           </div>
         )}
 
-        {/* Conversation list */}
         <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
-          {topicConvs.length === 0 ? (
+          {!token ? (
+            <div className="mx-3 mt-4 p-4 rounded-2xl bg-white/50 dark:bg-slate-900/50 border border-gray-100 dark:border-slate-800 flex flex-col items-center gap-3 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <Plus className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-gray-900 dark:text-slate-100">Sign in to save chat history</p>
+                <p className="text-[10px] text-gray-500 dark:text-slate-400 leading-relaxed">Your progress and conversations will be saved across devices.</p>
+              </div>
+              <button 
+                onClick={() => navigate('/login')}
+                className="w-full py-1.5 bg-blue-600 text-white rounded-lg text-[11px] font-bold hover:bg-blue-700 transition-all active:scale-95"
+              >
+                Sign in
+              </button>
+            </div>
+          ) : topicConvs.length === 0 ? (
             <p className="px-4 py-3 text-[11px] text-gray-400 dark:text-slate-500 italic">
               {t('va.sidebar.emptyTopic')}
             </p>
@@ -317,7 +324,6 @@ export default function ConversationSidebar({
 
   return (
     <>
-      {/* ── Mobile backdrop ── */}
       {open && (
         <div
           className="md:hidden fixed inset-0 z-9998 bg-black/50 backdrop-blur-sm"
@@ -325,7 +331,6 @@ export default function ConversationSidebar({
         />
       )}
 
-      {/* ── Mobile: full sliding aside ── */}
       <aside
         className={`
         md:hidden fixed inset-y-0 left-0 z-9999 w-64 shadow-2xl
@@ -338,20 +343,13 @@ export default function ConversationSidebar({
           <span className="text-sm font-semibold text-gray-800 dark:text-slate-200 select-none">
             {t('brand.name')}
           </span>
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            title="Close sidebar"
-            aria-label="Close sidebar"
-            className={btnCls}
-          >
+          <button type="button" onClick={onToggleSidebar} className={btnCls}>
             <PanelLeftClose className="w-4 h-4" />
           </button>
         </div>
         {activeTopicView ? renderTopicView(activeTopicView) : renderMainMenu()}
       </aside>
 
-      {/* ── Desktop: single collapsible sidebar ── */}
       <aside
         className={`
         hidden md:flex flex-col shrink-0 overflow-hidden
@@ -360,21 +358,11 @@ export default function ConversationSidebar({
         ${isOpen ? 'w-64' : 'w-12'}
       `}
       >
-        <div
-          className={`flex items-center shrink-0 h-12 transition-all duration-300 ${isOpen ? 'justify-between px-3 py-3' : 'justify-center py-3'}`}
-        >
-          <span
-            className={`text-sm font-semibold text-gray-800 dark:text-slate-200 select-none whitespace-nowrap overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0'}`}
-          >
+        <div className={`flex items-center shrink-0 h-12 transition-all duration-300 ${isOpen ? 'justify-between px-3 py-3' : 'justify-center py-3'}`}>
+          <span className={`text-sm font-semibold text-gray-800 dark:text-slate-200 select-none whitespace-nowrap overflow-hidden transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0'}`}>
             {t('brand.name')}
           </span>
-          <button
-            type="button"
-            onClick={() => setIsOpen((p) => !p)}
-            title={isOpen ? 'Close sidebar' : 'Open sidebar'}
-            aria-label={isOpen ? 'Close sidebar' : 'Open sidebar'}
-            className={btnCls}
-          >
+          <button type="button" onClick={() => setIsOpen((p) => !p)} className={btnCls}>
             <PanelLeft className="w-4 h-4" />
           </button>
         </div>

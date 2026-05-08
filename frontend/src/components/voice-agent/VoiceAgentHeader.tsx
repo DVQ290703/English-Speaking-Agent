@@ -57,10 +57,10 @@ export default function VoiceAgentHeader({
           className="flex items-center gap-2 focus:outline-none cursor-pointer"
           title={t('common.dashboard')}
         >
-          <div className="w-6 h-6 bg-blue-600 rounded-sm flex items-center justify-center">
+          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
             <span className="text-[10px] font-black text-white leading-none">VIN</span>
           </div>
-          <span className="text-sm font-semibold text-gray-800">{t('brand.name')}</span>
+          <span className="text-sm font-bold text-gray-900 tracking-tight">{t('brand.name')}</span>
         </button>
       </div>
 

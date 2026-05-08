@@ -6,7 +6,7 @@ export default function Toaster() {
   const [dark] = useDarkMode();
   return (
     <SonnerToaster
-      position="top-right"
+      position="top-center"
       theme={dark ? 'dark' : 'light'}
       richColors
       closeButton

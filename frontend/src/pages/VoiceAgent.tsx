@@ -8,11 +8,12 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Circle } from 'lucide-react';
+import { Circle, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
-import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
+import { useAuth } from '../auth/AuthContext';
+import { getAuthSession } from '../auth/tokenStorage';
 import { fetchGrammarFeedback } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
@@ -911,13 +912,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [displayMsg, setMessages]);
 
+  const { isAuthenticated, logout } = useAuth();
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
-    clearAuthSession();
-    setCurrentUser(null);
     if (onLogout) onLogout();
-    navigate('/', { replace: true });
-  }, [navigate, onLogout]);
+    logout();
+  }, [logout, onLogout]);
 
   const handleSendChat = useCallback(() => {
     if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
@@ -1137,20 +1137,40 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 </div>
               )}
 
+              {/* Conditional empty state / welcome screen */}
               {!historyLoading && status === 'disconnected' && messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
-                    <SiOpenai className="w-8 h-8 text-blue-400/50" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-gray-600 text-sm">
-                      {t('va.empty.clickConnectPrefix')}{' '}
-                      <span className="font-semibold text-gray-900">{t('va.connect.connect')}</span>{' '}
-                      {t('va.empty.clickConnectSuffix')}
-                    </p>
-                    <p className="text-gray-400 text-xs">{t('va.empty.transcriptHere')}</p>
-                  </div>
-                </div>
+                <>
+                  {!isAuthenticated ? (
+                    /* Welcome Screen for Guests (PLG) */
+                    <div className="h-full flex flex-col items-center justify-center text-center gap-6 max-w-md mx-auto animate-in fade-in zoom-in duration-500">
+                      <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
+                        <img 
+                          src="/src/public/audio-waves.png" 
+                          alt="Logo" 
+                          className="w-full h-full object-cover p-4"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">
+                          {t('va.welcome.title')}
+                        </h2>
+                        <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed">
+                          {t('va.welcome.subtitle')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Standard Empty State for Logged-in Users */
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <div className="w-16 h-16 rounded-2xl bg-gray-50 dark:bg-slate-800/50 flex items-center justify-center mb-4">
+                        <Mic className="w-8 h-8 text-gray-300 dark:text-slate-600" />
+                      </div>
+                      <p className="text-gray-400 dark:text-slate-500 text-sm">
+                        {t('va.history.empty')}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {showSessionSummary && sessionSummary && (
@@ -1215,19 +1235,44 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               <div ref={chatBottomRef} />
             </div>
 
-            <ChatInputBar
-              inputRef={inputRef}
-              isConnected={isConnected}
-              isRecording={isRecording}
-              isSpeaking={isSpeaking}
-              micEnabled={micEnabled}
-              agentTyping={agentTyping}
-              chatInput={chatInput}
-              onToggleMic={toggleMic}
-              onChangeInput={setChatInput}
-              onKeyDown={handleKeyDown}
-              onSend={handleSendChat}
-            />
+            {!isAuthenticated ? (
+              <div className="px-4 py-6 border-t border-gray-100 bg-white/80 backdrop-blur-md">
+                <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100/50 shadow-sm">
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-base font-bold text-gray-900">Sign in or Sign up to start talking</p>
+                    <p className="text-xs text-gray-500">Join thousands of learners improving their English every day.</p>
+                  </div>
+                  <div className="flex gap-3 w-full sm:w-auto">
+                    <button 
+                      onClick={() => navigate('/login')}
+                      className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95"
+                    >
+                      Sign in
+                    </button>
+                    <button 
+                      onClick={() => navigate('/register')}
+                      className="flex-1 sm:flex-none px-8 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all active:scale-95"
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <ChatInputBar
+                inputRef={inputRef}
+                isConnected={isConnected}
+                isRecording={isRecording}
+                isSpeaking={isSpeaking}
+                micEnabled={micEnabled}
+                agentTyping={agentTyping}
+                chatInput={chatInput}
+                onToggleMic={toggleMic}
+                onChangeInput={setChatInput}
+                onKeyDown={handleKeyDown}
+                onSend={handleSendChat}
+              />
+            )}
           </div>
         </div>
       </div>

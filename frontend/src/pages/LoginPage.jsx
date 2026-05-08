@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { loginRequest } from '../api/auth';
-import { saveAuthSession } from '../auth/tokenStorage';
+import { useAuth } from '../auth/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { useT } from '../i18n/useLanguage';
 
@@ -15,6 +15,7 @@ const initialForm = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const t = useT();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
@@ -55,7 +56,7 @@ export default function LoginPage() {
         email: form.email.trim(),
         password: form.password,
       });
-      saveAuthSession({
+      login({
         token: data.access_token,
         expiresIn: data.expires_in,
         user: data.user,

@@ -36,8 +36,8 @@ export default function OnboardingTip() {
         className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 max-w-md w-full p-6 sm:p-7"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-linear-to-br from-blue-500 to-violet-600 text-white text-3xl mx-auto mb-4 shadow-md">
-          🎙️
+        <div className="flex items-center justify-center w-16 h-16 rounded-3xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 mx-auto mb-4 shadow-xl overflow-hidden">
+          <img src="/src/public/audio-waves.png" alt="Logo" className="w-full h-full object-cover p-2" />
         </div>
         <h2 className="text-xl font-bold text-center text-gray-900 dark:text-slate-100 mb-2">
           {t('onboarding.title')}

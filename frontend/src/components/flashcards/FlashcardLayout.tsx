@@ -1,20 +1,16 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { LogOut, Mic, Library } from "lucide-react";
 import { toast } from "sonner";
 
-import { useLanguage } from "@/i18n/useLanguage";
-import LanguageToggle from "@/i18n/LanguageToggle";
-import ThemeToggle from "@/theme/ThemeToggle";
-import { useDarkMode } from "@/theme/useDarkMode";
-import { getAuthSession, clearAuthSession } from "@/auth/tokenStorage";
-import { fetchMe } from "@/api/auth";
+import { useLanguage } from "../../i18n/useLanguage";
+import LanguageToggle from "../../i18n/LanguageToggle";
+import ThemeToggle from "../../theme/ThemeToggle";
+import { useDarkMode } from "../../theme/useDarkMode";
+import { getAuthSession, clearAuthSession } from "../../auth/tokenStorage";
+import { fetchMe } from "../../api/auth";
 
-interface LayoutProps {
-  children: React.ReactNode;
-}
-
-export function FlashcardLayout({ children }: LayoutProps) {
+export function FlashcardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
@@ -46,19 +42,16 @@ export function FlashcardLayout({ children }: LayoutProps) {
 
   const displayName = profile?.display_name || profile?.email || t('dash.fallbackName');
 
-  // Apply dark class to wrapper if needed
-  const isDark = dark;
-
   return (
-    <div className={isDark ? "dark" : ""}>
+    <div className={dark ? "dark" : ""}>
       <div className="min-h-[100dvh] flex flex-col bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100">
         <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
           <div className="flex items-center gap-6">
             <Link to="/dashboard" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-              <div className="w-7 h-7 bg-blue-600 rounded-md flex items-center justify-center">
-                <span className="text-[11px] font-black text-white leading-none">VIN</span>
+              <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
+                <span className="text-[10px] font-black text-white leading-none">VIN</span>
               </div>
-              <span className="text-base font-semibold text-gray-800 dark:text-slate-100">
+              <span className="text-base font-bold text-gray-900 dark:text-slate-100 tracking-tight">
                 {t('brand.name')}
               </span>
             </Link>
@@ -107,7 +100,7 @@ export function FlashcardLayout({ children }: LayoutProps) {
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        navigate('/VoiceAgent');
+                        navigate('/chat');
                       }}
                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors"
                     >
@@ -146,9 +139,8 @@ export function FlashcardLayout({ children }: LayoutProps) {
         </header>
 
         <main className="flex-1">
-          {/* We keep the flashcard app's wrapper so the inner flashcard components look correct */}
           <div className="max-w-screen-xl mx-auto px-4 py-6 md:px-6 md:py-8">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>
