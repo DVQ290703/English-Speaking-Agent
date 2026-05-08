@@ -55,6 +55,12 @@ async def add_security_headers(request: Request, call_next):
 
 
 @app.middleware("http")
+async def log_requests(request: Request, call_next):
+    middleware = LoggingMiddleware(app=app)
+    return await middleware.dispatch(request, call_next)
+
+
+@app.middleware("http")
 async def add_trace_context(request: Request, call_next):
     """Generate trace_id per request and seed trace context. Outermost middleware."""
     import uuid
@@ -80,12 +86,6 @@ async def add_trace_context(request: Request, call_next):
         return response
     finally:
         clear_trace_context()
-
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    middleware = LoggingMiddleware(app=app)
-    return await middleware.dispatch(request, call_next)
 
 
 
