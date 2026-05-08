@@ -1,9 +1,12 @@
+import json
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
-def _make_app(raise_exc: bool = False) -> FastAPI:
+def _make_app() -> FastAPI:
     """Minimal FastAPI app with LoggingMiddleware for testing."""
     from app.core.logging_middleware import LoggingMiddleware
 
@@ -22,7 +25,6 @@ def _make_app(raise_exc: bool = False) -> FastAPI:
 
 
 def test_request_start_logged(caplog):
-    import logging
     with caplog.at_level(logging.INFO, logger="AI-Lab-Agent.api"):
         client = TestClient(_make_app(), raise_server_exceptions=False)
         client.get("/ok")
@@ -30,7 +32,6 @@ def test_request_start_logged(caplog):
     messages = [r.message for r in caplog.records if "AI-Lab-Agent.api" in r.name]
     start = [m for m in messages if "request_start" in m]
     assert len(start) == 1
-    import json
     data = json.loads(start[0])
     assert data["event"] == "request_start"
     assert data["method"] == "GET"
@@ -38,7 +39,6 @@ def test_request_start_logged(caplog):
 
 
 def test_request_end_logged(caplog):
-    import logging, json
     with caplog.at_level(logging.INFO, logger="AI-Lab-Agent.api"):
         client = TestClient(_make_app(), raise_server_exceptions=False)
         client.get("/ok")
@@ -54,7 +54,6 @@ def test_request_end_logged(caplog):
 
 
 def test_exception_logged_at_error(caplog):
-    import logging, json
     with caplog.at_level(logging.ERROR, logger="AI-Lab-Agent.api"):
         client = TestClient(_make_app(), raise_server_exceptions=False)
         client.get("/boom")
@@ -71,6 +70,5 @@ def test_exception_logged_at_error(caplog):
 
 def test_logger_name_is_api():
     from app.core.logging_middleware import LoggingMiddleware
-    import logging
     mw = LoggingMiddleware(app=FastAPI())
     assert mw._log.name == "AI-Lab-Agent.api"

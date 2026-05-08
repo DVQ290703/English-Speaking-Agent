@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+import traceback
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -39,6 +40,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 "latency_ms": latency_ms,
                 "exc_type": type(exc).__name__,
                 "exc_message": str(exc),
+                "stack_trace": traceback.format_exc(),
                 "trace_id": ctx["trace_id"],
             }))
             raise
