@@ -10,27 +10,23 @@ sources:
     read_from: beginning
 
 transforms:
-  parse_json_logs:
+  extract_prefix:
     type: remap
     inputs:
       - app_logs
     source: |
-      # Log line format: "2026-05-07 10:23:45 INFO     [AI-Lab-Agent]: <message>"
-      parsed, err = parse_regex(.message, r'^\S+ \S+ \S+\s+\[\S+\]:\s+(?P<payload>.+)$')
+      parsed, err = parse_regex(.message, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<level>\S+)\s+\[(?P<logger>[^\]]+)\]:\s+(?P<payload>.+)$')
       if err == null {
-        json_payload, json_err = parse_json(parsed.payload)
-        if json_err == null && is_object(json_payload) {
-          . = merge!(., json_payload)
-          .log_type = "span"
-        } else {
-          .log_type = "plain"
-          .raw_message = parsed.payload
+        ts, ts_err = parse_timestamp(parsed.ts, "%Y-%m-%d %H:%M:%S")
+        if ts_err == null {
+          .@timestamp = ts
         }
+        .level = parsed.level
+        .logger = parsed.logger
+        .payload = parsed.payload
       } else {
-        .log_type = "plain"
-        .raw_message = .message
+        .payload = .message
       }
-      .source_file = .file
 
   route_by_category:
     type: route
