@@ -32,7 +32,7 @@ class TestRecordSpanMetricsTTFT:
                 {"model": "llama-3.3-70b-versatile"},
             )
 
-        mock_hist.labels.return_value.observe.assert_not_called()
+        mock_hist.labels.assert_not_called()
 
     def test_llm_span_ttft_none_does_not_observe_histogram(self):
         from unittest.mock import patch
