@@ -21,7 +21,7 @@ interface PronunciationIssueItemProps {
   idx: number;
   isLast: boolean;
   selectedPhoneme: SelectedPhoneme | null;
-  onPhonemeClick: (key: string, phoneme: string, score: number) => void;
+  onPhonemeClick: (e: React.MouseEvent, key: string, phoneme: string, score: number) => void;
   onClosePhonemeTip: () => void;
 }
 
@@ -57,7 +57,7 @@ function PronunciationIssueItem({
                 data-phoneme-trigger-key={`ph-${idx}-${pIdx}`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onPhonemeClick(`ph-${idx}-${pIdx}`, p.phoneme, Math.round(p.accuracy_score));
+                  onPhonemeClick(e, `ph-${idx}-${pIdx}`, p.phoneme, Math.round(p.accuracy_score));
                 }}
                 className="inline-flex items-center gap-1 rounded-md border border-violet-300/60 dark:border-violet-500/40 px-2 py-0.5 text-[10px] text-violet-700 dark:text-violet-200 bg-white dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-slate-700 transition-all duration-200 ease-in-out"
               >
@@ -70,14 +70,7 @@ function PronunciationIssueItem({
         </div>
       )}
 
-      {activeTipForItem && (
-        <PhonemeTip
-          phoneme={activeTipForItem.phoneme}
-          score={activeTipForItem.score}
-          tip={PHONEME_TIPS[activeTipForItem.phoneme] ?? ''}
-          onClose={onClosePhonemeTip}
-        />
-      )}
+
 
       {m.note && <p className="text-[11px] text-gray-700 dark:text-slate-300 leading-relaxed">{m.note}</p>}
       {!isLast && <hr className="mt-2.5 border-violet-200 dark:border-violet-700/40" />}
@@ -93,7 +86,9 @@ export default function CombinedFeedbackModal({
   onClose,
 }: CombinedFeedbackModalProps) {
   const t = useT();
-  const [selectedPhoneme, setSelectedPhoneme] = useState<SelectedPhoneme | null>(null);
+  const [selectedPhoneme, setSelectedPhoneme] = useState<
+    (SelectedPhoneme & { rect: DOMRect }) | null
+  >(null);
   const isGrammarMode = type === 'grammar';
   const hasPronunciationErrors = pronunciationErrors.length > 0;
   const hasGrammarErrors = grammarErrors.length > 0;
@@ -104,9 +99,10 @@ export default function CombinedFeedbackModal({
         pronunciation: pronunciationErrors.length,
       });
 
-  const onPhonemeClick = (key: string, phoneme: string, score: number) => {
+  const onPhonemeClick = (e: React.MouseEvent, key: string, phoneme: string, score: number) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setSelectedPhoneme((prev) =>
-      prev?.key === key ? null : { key, phoneme, score },
+      prev?.key === key ? null : { key, phoneme, score, rect },
     );
   };
 
@@ -253,6 +249,16 @@ export default function CombinedFeedbackModal({
           Đã hiểu
         </button>
       </div>
+
+      {selectedPhoneme && (
+        <PhonemeTip
+          phoneme={selectedPhoneme.phoneme}
+          score={selectedPhoneme.score}
+          tip={PHONEME_TIPS[selectedPhoneme.phoneme] ?? ''}
+          triggerRect={selectedPhoneme.rect}
+          onClose={() => setSelectedPhoneme(null)}
+        />
+      )}
     </div>
   );
 }

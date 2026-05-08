@@ -370,6 +370,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     playMessageAudio,
     trimLocalAudioUrls,
     clearLocalAudioUrls,
+    stopAllAudio,
   } = useAgentAudio({
     setMicEnabled,
     setAgentSpeaking,
@@ -527,6 +528,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   const { persistSession } = useSessionPersistence({
     hasSavedCurrentSessionRef,
+    conversationIdRef,
   });
 
   const startNewSession = useCallback(
@@ -580,8 +582,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // setTimeout from a prior handleConnect call is immediately
       // invalidated by its own version-check guard.
       ++sessionVersionRef.current;
-      window.speechSynthesis?.cancel();
-      ttsActiveRef.current = false;
+      stopAllAudio();
       setSummaryDismissed(false);
       setStatusSync('disconnected');
       setAgentSpeaking(false);
@@ -750,6 +751,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       if (!authSession?.token) return;
 
       hasAutoLoadedRef.current = true;
+      stopAllAudio();
       startNewSession({ stayDisconnected: true });
       // startNewSession clears conversationIdRef — restore it immediately.
       conversationIdRef.current = convId;
@@ -944,63 +946,65 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       />
 
       {/* Description bar */}
-      <div
-        data-va="descbar"
-        className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-700">{t('va.descbar.label')}</span>
-          <span className="text-gray-400">·</span>
-          <span className="text-gray-700">
-            {customTopicLabel ??
-              (topic
-                ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic)
-                : 'Daily Conversation')}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            data-testid="button-mobile-panel"
-            onClick={() => setShowLeftPanelMobile((v) => !v)}
-            title={t('va.left.aiFeedback')}
-            aria-label={t('va.left.aiFeedback')}
-            className="md:hidden p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      {(topic || customTopicLabel) && (
+        <div
+          data-va="descbar"
+          className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-700">{t('va.descbar.label')}</span>
+            <span className="text-gray-400">·</span>
+            <span className="text-gray-700">
+              {customTopicLabel ??
+                (topic
+                  ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic)
+                  : '')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="button-mobile-panel"
+              onClick={() => setShowLeftPanelMobile((v) => !v)}
+              title={t('va.left.aiFeedback')}
+              aria-label={t('va.left.aiFeedback')}
+              className="md:hidden p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
             >
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-          <button
-            data-testid="button-connect"
-            onClick={handleConnect}
-            disabled={isConnecting}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-              isConnected
-                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <button
+              data-testid="button-connect"
+              onClick={handleConnect}
+              disabled={isConnecting}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                isConnected
+                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                  : isConnecting
+                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+              }`}
+            >
+              {isConnected
+                ? t('va.connect.disconnect')
                 : isConnecting
-                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-            }`}
-          >
-            {isConnected
-              ? t('va.connect.disconnect')
-              : isConnecting
-                ? t('va.connect.connecting')
-                : t('va.connect.connect')}
-          </button>
+                  ? t('va.connect.connecting')
+                  : t('va.connect.connect')}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Body row: persistent sidebar + main content */}
       <div className="flex flex-1 overflow-hidden relative">

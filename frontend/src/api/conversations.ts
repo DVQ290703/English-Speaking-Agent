@@ -135,6 +135,12 @@ export async function deleteConversation(token: string, conversationId: string):
   });
 }
 
+export async function updateConversation(token: string, conversationId: string): Promise<void> {
+  await apiFetch<void>(ENDPOINTS.conversations.update(conversationId), token, {
+    method: 'PATCH',
+  });
+}
+
 export interface ConversationScores {
   pronunciation: number | null;
   fluency: number | null;

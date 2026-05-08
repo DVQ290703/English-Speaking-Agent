@@ -8,6 +8,7 @@ import ShortcutsModal, { useShortcutsToggle } from './components/ui/ShortcutsMod
 import { useT } from './i18n/useLanguage';
 import LoginPage from './pages/LoginPage';
 import { useDarkMode } from './theme/useDarkMode';
+import { HelpCircle } from 'lucide-react';
 
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -74,6 +75,19 @@ function GlobalShortcuts() {
   return null;
 }
 
+function GlobalHelpButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="fixed bottom-6 left-6 z-50 p-2.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 group"
+      aria-label="Help and keyboard shortcuts"
+      title="Keyboard shortcuts"
+    >
+      <HelpCircle className="w-6 h-6" />
+    </button>
+  );
+}
+
 export default function App() {
   const { open, setOpen } = useShortcutsToggle();
   return (
@@ -129,6 +143,7 @@ export default function App() {
         </Routes>
       </Suspense>
       <GlobalShortcuts />
+      <GlobalHelpButton onClick={() => setOpen(true)} />
       <ShortcutsModal open={open} onClose={() => setOpen(false)} />
     </>
   );
