@@ -38,6 +38,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(LoggingMiddleware)
+
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -52,12 +54,6 @@ async def add_security_headers(request: Request, call_next):
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
-
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    middleware = LoggingMiddleware(app=app)
-    return await middleware.dispatch(request, call_next)
 
 
 @app.middleware("http")
