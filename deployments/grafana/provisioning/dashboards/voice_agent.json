@@ -1,0 +1,232 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Voice Agent observability — LLM, STT, TTS, guardrails",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "LLM Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_requests_total[1m])) by (model, status)",
+          "legendFormat": "{{model}} / {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "LLM Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_requests_total{status=\"error\"}[1m])) by (model) / sum(rate(llm_requests_total[1m])) by (model)",
+          "legendFormat": "{{model}} error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "LLM Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p50 {{model}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p95 {{model}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(llm_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p99 {{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "LLM Time-to-First-Token (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "TTFT p50 {{model}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(llm_ttft_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "TTFT p95 {{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "LLM Token Usage (input / output)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_tokens_total{token_type=\"input\"}[1m])) by (model)",
+          "legendFormat": "input {{model}}"
+        },
+        {
+          "expr": "sum(rate(llm_tokens_total{token_type=\"output\"}[1m])) by (model)",
+          "legendFormat": "output {{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Estimated LLM Cost (USD / min)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_cost_usd_total[1m])) by (model)",
+          "legendFormat": "{{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "STT Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p50 {{model}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(stt_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p95 {{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "TTS Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p50 {{model}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tts_latency_seconds_bucket[5m])) by (le, model))",
+          "legendFormat": "p95 {{model}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Guardrail Decisions",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(guardrail_decisions_total[1m])) by (check_name, decision)",
+          "legendFormat": "{{check_name}} / {{decision}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "HTTP Request Rate (FastAPI)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (handler, status_code)",
+          "legendFormat": "{{handler}} {{status_code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["voice-agent", "llm", "monitoring"],
+  "templating": {
+    "list": [
+      {
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Voice Agent — Observability",
+  "uid": "voice-agent-obs-v1",
+  "version": 1
+}

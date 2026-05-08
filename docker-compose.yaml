@@ -20,6 +20,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173"
+      TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./logs:/app/logs
     ports:
@@ -182,6 +183,41 @@ services:
         { [ "$$status" = "200" ] || [ "$$status" = "409" ] || { echo "Plain view failed: $$status" && exit 1; }; } &&
         echo 'Kibana data views created.'
 
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: voice_agent_prometheus
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: voice_agent_grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+
   vector:
     image: timberio/vector:0.38.0-alpine
     container_name: voice_agent_vector
@@ -203,3 +239,5 @@ volumes:
   minio_data:
   elasticsearch_data:
   vector_data:
+  prometheus_data:
+  grafana_data:
