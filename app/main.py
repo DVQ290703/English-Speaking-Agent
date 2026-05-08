@@ -8,6 +8,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.api.router import router
 from app.core.database import init_db_pool
 from app.core.logger import logger
+from app.core.logging_middleware import LoggingMiddleware
 from app.core.settings import CORS_ORIGINS, JWT_ALGORITHM, JWT_SECRET_KEY
 from app.core.storage import init_storage
 from app.core.telemetry import clear_trace_context, set_trace_context
@@ -79,6 +80,13 @@ async def add_trace_context(request: Request, call_next):
         return response
     finally:
         clear_trace_context()
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    middleware = LoggingMiddleware(app=app)
+    return await middleware.dispatch(request, call_next)
+
 
 
 @app.get("/health")
