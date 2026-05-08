@@ -56,7 +56,7 @@ def test_rate_limit_enforced(fake_redis, monkeypatch):
     assert exc_info.value.code == "RATE_LIMITED"
 
 
-def test_validator_runs_before_rate_limiter(fake_redis, monkeypatch):
+def test_validator_runs_before_rate_limiter(monkeypatch):
     """Empty input should be caught by validator, not rate limiter."""
     import app.core.settings as s
     monkeypatch.setattr(s, "RATE_LIMIT_RPM", 0)  # rate limiter would block everything

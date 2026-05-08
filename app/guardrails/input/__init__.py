@@ -34,12 +34,14 @@ class InputGuardrails:
     def check(self, text: str, user_id: str) -> str:
         """Return normalized text or raise GuardrailException. Order: cheapest first."""
         exc_caught: GuardrailException | None = None
+        _passed = False
         try:
             with span_context("guardrail.input", kind="guardrail"):
                 text = self._validator.check(text)
                 self._rate_limiter.check(user_id)
                 self._injection_detector.check(text)
                 self._topic_filter.check(text)
+            _passed = True
         except GuardrailException as exc:
             exc_caught = exc
             raise
@@ -53,7 +55,7 @@ class InputGuardrails:
                     "user_id": user_id,
                     "input_length": len(text),
                 }))
-            else:
+            elif _passed:
                 _log.info(json.dumps({
                     "event": "guardrail.input.check",
                     "result": "pass",
