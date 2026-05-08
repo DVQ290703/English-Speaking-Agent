@@ -76,6 +76,17 @@ guardrail_decisions_total = Counter(
 )
 
 # ---------------------------------------------------------------------------
+# TTFT metric
+# ---------------------------------------------------------------------------
+
+llm_ttft_seconds = Histogram(
+    "llm_ttft_seconds",
+    "LLM time-to-first-token latency in seconds",
+    ["model", "endpoint"],
+    buckets=[0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 2.0, 5.0],
+)
+
+# ---------------------------------------------------------------------------
 # Placeholder metrics — registered but never updated until feature ships
 # ---------------------------------------------------------------------------
 
@@ -113,6 +124,9 @@ def record_span_metrics(name: str, kind: str, duration_ms: int, status: str, ext
         cost = extra.get("estimated_cost_usd") or 0.0
         if cost:
             llm_cost_usd_total.labels(model=model, endpoint=name).inc(cost)
+        ttft_ms = extra.get("ttft_ms")
+        if ttft_ms is not None:
+            llm_ttft_seconds.labels(model=model, endpoint=name).observe(ttft_ms / 1000.0)
 
     elif kind == "stt":
         stt_requests_total.labels(model=model, status=status).inc()
