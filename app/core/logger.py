@@ -92,3 +92,8 @@ class IndustryLogger:
 #   from app.core.logger import logger
 # ---------------------------------------------------------------------------
 logger = IndustryLogger()
+
+
+def get_logger(component: str) -> logging.Logger:
+    """Return a named child logger: AI-Lab-Agent.<component>"""
+    return logging.getLogger(f"AI-Lab-Agent.{component}")
