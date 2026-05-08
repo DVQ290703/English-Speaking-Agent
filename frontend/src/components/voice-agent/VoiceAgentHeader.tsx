@@ -1,4 +1,5 @@
-import { LogIn, LogOut, Menu, UserPlus } from 'lucide-react';
+import { LogIn, LogOut, Menu, UserPlus, Library } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useT } from '../../i18n/useLanguage';
 import LanguageToggle from '../../i18n/LanguageToggle';
 import ThemeToggle from '../../theme/ThemeToggle';
@@ -32,6 +33,7 @@ export default function VoiceAgentHeader({
   onToggleSidebar,
 }: VoiceAgentHeaderProps) {
   const t = useT();
+  const navigate = useNavigate();
   return (
     <header
       data-va="header"
@@ -101,10 +103,22 @@ export default function VoiceAgentHeader({
                     <div className="text-xs text-gray-500 truncate">{currentUser.email}</div>
                   </div>
                   <button
-                    onClick={onRequestLogout}
-                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                    onClick={() => {
+                      onCloseUserMenu();
+                      navigate('/flashcards/decks');
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
                   >
-                    <LogOut className="w-3.5 h-3.5" /> {t('common.signOut')}
+                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <Library className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium">Flashcards</span>
+                  </button>
+                  <button
+                    onClick={onRequestLogout}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
+                  >
+                    <LogOut className="w-3.5 h-3.5" /> <span className="ml-1">{t('common.signOut')}</span>
                   </button>
                 </div>
               </>

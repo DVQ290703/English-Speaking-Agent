@@ -12,7 +12,10 @@ import { useDarkMode } from './theme/useDarkMode';
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const VoiceAgent = lazy(() => import('./pages/VoiceAgent'));
-const FlashcardPage = lazy(() => import('./pages/FlashcardPage'));
+const FlashcardDecksPage = lazy(() => import('./pages/FlashcardDecksPage'));
+const FlashcardCardsPage = lazy(() => import('./pages/FlashcardCardsPage'));
+const FlashcardStudyPage = lazy(() => import('./pages/FlashcardStudyPage'));
+import { FlashcardLayout } from './components/flashcards/FlashcardLayout';
 
 function PageFallback() {
   return (
@@ -86,9 +89,35 @@ export default function App() {
           />
           <Route
             path="/flashcards"
+            element={<Navigate to="/flashcards/decks" replace />}
+          />
+          <Route
+            path="/flashcards/decks"
             element={
               <ProtectedRoute>
-                <FlashcardPage />
+                <FlashcardLayout>
+                  <FlashcardDecksPage />
+                </FlashcardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flashcards/decks/:deckId/cards"
+            element={
+              <ProtectedRoute>
+                <FlashcardLayout>
+                  <FlashcardCardsPage />
+                </FlashcardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flashcards/decks/:deckId/study"
+            element={
+              <ProtectedRoute>
+                <FlashcardLayout>
+                  <FlashcardStudyPage />
+                </FlashcardLayout>
               </ProtectedRoute>
             }
           />

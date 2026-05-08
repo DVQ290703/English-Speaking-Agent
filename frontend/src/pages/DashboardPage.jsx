@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Mic } from 'lucide-react';
+import { LogOut, Mic, Library } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LineChart,
@@ -175,11 +175,10 @@ function CategoryTabsRow({ categories, onStart }) {
             <button
               key={cat.name}
               onClick={() => setActiveIdx(i)}
-              className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
-                activeIdx === i
+              className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${activeIdx === i
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-              }`}
+                }`}
             >
               {cat.displayName ?? t(`category.${cat.name}.name`)}
             </button>
@@ -325,11 +324,11 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
   // Median band — robust to outliers (1 session điểm thấp không kéo cả nhóm xuống)
   const medianBand = chartData.length
     ? (() => {
-        const sorted = chartData.map((d) => d.band).sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-        return +med.toFixed(1);
-      })()
+      const sorted = chartData.map((d) => d.band).sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      return +med.toFixed(1);
+    })()
     : 0;
   const avgBand = medianBand;
   const avgBandColor = bandColor(avgBand);
@@ -575,11 +574,11 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
                   contentStyle={
                     dark
                       ? {
-                          background: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: 12,
-                          color: '#e2e8f0',
-                        }
+                        background: '#1e293b',
+                        border: '1px solid #334155',
+                        borderRadius: 12,
+                        color: '#e2e8f0',
+                      }
                       : undefined
                   }
                   itemStyle={dark ? { color: '#e2e8f0' } : undefined}
@@ -677,7 +676,7 @@ export default function DashboardPage() {
       corrections: 0,
       scores:
         s.scores &&
-        (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
+          (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
           ? s.scores
           : null,
     }));
@@ -872,6 +871,18 @@ export default function DashboardPage() {
                         <Mic className="w-3.5 h-3.5" />
                       </div>
                       <span className="font-medium">{t('dash.newSession')}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        navigate('/flashcards/decks');
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors border-t border-gray-100 dark:border-slate-800"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center justify-center">
+                        <Library className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="font-medium">Flashcards</span>
                     </button>
                     <button
                       onClick={() => {

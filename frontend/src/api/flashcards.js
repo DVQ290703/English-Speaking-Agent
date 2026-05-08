@@ -24,6 +24,13 @@ export const createDeck = (token, { name, description }) =>
     body: JSON.stringify({ name, description }),
   });
 
+export const updateDeck = (token, deckId, { name, description }) =>
+  request(ENDPOINTS.flashcards.deck(deckId), {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description }),
+  });
+
 export const deleteDeck = (token, deckId) =>
   request(ENDPOINTS.flashcards.deck(deckId), {
     method: 'DELETE',
@@ -63,6 +70,13 @@ export const createCardWithMedia = (token, deckId, { front_text, back_text, tags
     body: form,
   });
 };
+
+export const updateCard = (token, cardId, { front_text, back_text, tags }) =>
+  request(ENDPOINTS.flashcards.card(cardId), {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ front_text, back_text, tags }),
+  });
 
 export const deleteCard = (token, cardId) =>
   request(ENDPOINTS.flashcards.card(cardId), {
