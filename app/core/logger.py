@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict
 import sys
@@ -13,7 +14,7 @@ load_dotenv()
 class IndustryLogger:
     """
     Structured logger following industry practices.
-    - Plain log messages: %(asctime)s %(levelname)s [%(module)s]: %(message)s
+    - Plain log messages: %(asctime)s %(levelname)s [%(name)s] [%(filename)s]: %(message)s
     - Structured events (log_event): single-line JSON written at INFO level
     - Writes to both console and a date-stamped file under LOG_DIR
     - Log level controlled by LOG_LEVEL env var (default INFO)
@@ -36,9 +37,10 @@ class IndustryLogger:
         log_file = os.path.join(log_dir, f"{datetime.now().strftime('%Y-%m-%d')}.log")
 
         formatter = logging.Formatter(
-            "%(asctime)s %(levelname)-8s [%(name)s]: %(message)s",
+            "%(asctime)s %(levelname)-8s [%(name)s] [%(filename)s]: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
+        formatter.converter = time.localtime
 
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
@@ -60,7 +62,7 @@ class IndustryLogger:
     def log_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Emit a single-line JSON entry for structured/auditable events."""
         payload = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().isoformat(),
             "event": event_type,
             "data": data,
         }

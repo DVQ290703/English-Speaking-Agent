@@ -15,7 +15,7 @@ transforms:
     inputs:
       - app_logs
     source: |
-      parsed, err = parse_regex(.message, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<level>\S+)\s+\[(?P<logger>[^\]]+)\]:\s+(?P<payload>.+)$')
+      parsed, err = parse_regex(.message, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<level>\S+)\s+\[(?P<logger>[^\]]+)\] \[(?P<python_file>[^\]]+)\]:\s+(?P<payload>.+)$')
       if err == null {
         ts, ts_err = parse_timestamp(parsed.ts, "%Y-%m-%d %H:%M:%S")
         if ts_err == null {
@@ -23,6 +23,7 @@ transforms:
         }
         .level = parsed.level
         .logger = parsed.logger
+        .python_file = parsed.python_file
         .payload = parsed.payload
       } else {
         .payload = .message
@@ -124,7 +125,7 @@ tests:
       - insert_at: extract_prefix
         type: log
         log_fields:
-          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent]: {\"span_name\": \"chat_route\", \"timestamp\": \"2026-05-07T15:53:11.100Z\", \"trace_id\": \"abc123\", \"duration_ms\": 42.0, \"status\": \"ok\"}"
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [chat.py]: {\"span_name\": \"chat_route\", \"timestamp\": \"2026-05-07T15:53:11.100Z\", \"trace_id\": \"abc123\", \"duration_ms\": 42.0, \"status\": \"ok\"}"
           file: "/logs/2026-05-07.log"
     outputs:
       - extract_from: parse_payload
@@ -136,6 +137,7 @@ tests:
               .log_type == "span" &&
               .level == "INFO" &&
               .logger == "AI-Lab-Agent" &&
+              .python_file == "chat.py" &&
               .span_name == "chat_route" &&
               .trace_id == "abc123" &&
               !exists(.timestamp) &&
@@ -146,7 +148,7 @@ tests:
       - insert_at: extract_prefix
         type: log
         log_fields:
-          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent]: {\"event_type\": \"audit_event\", \"timestamp\": \"2026-05-07T15:53:11.109Z\", \"session_id\": \"sess1\"}"
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [logger.py]: {\"event_type\": \"audit_event\", \"timestamp\": \"2026-05-07T15:53:11.109Z\", \"session_id\": \"sess1\"}"
           file: "/logs/2026-05-07.log"
     outputs:
       - extract_from: parse_payload
@@ -162,12 +164,12 @@ tests:
               !exists(.timestamp) &&
               !exists(.payload)
 
-  - name: "plain log line — raw_message and level preserved"
+  - name: "plain log line — raw_message, level, and python_file preserved"
     inputs:
       - insert_at: extract_prefix
         type: log
         log_fields:
-          message: "2026-05-07 15:53:11 WARNING  [AI-Lab-Agent]: something went wrong"
+          message: "2026-05-07 15:53:11 WARNING  [AI-Lab-Agent] [assess.py]: something went wrong"
           file: "/logs/2026-05-07.log"
     outputs:
       - extract_from: parse_payload
@@ -178,6 +180,7 @@ tests:
               .log_type == "plain" &&
               .level == "WARNING" &&
               .logger == "AI-Lab-Agent" &&
+              .python_file == "assess.py" &&
               .raw_message == "something went wrong" &&
               !exists(.payload)
 
@@ -203,7 +206,7 @@ tests:
       - insert_at: extract_prefix
         type: log
         log_fields:
-          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent]: {\"span_name\": \"no_ts_span\", \"trace_id\": \"xyz789\"}"
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [chat.py]: {\"span_name\": \"no_ts_span\", \"trace_id\": \"xyz789\"}"
           file: "/logs/2026-05-07.log"
     outputs:
       - extract_from: parse_payload
