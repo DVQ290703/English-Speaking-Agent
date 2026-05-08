@@ -38,10 +38,11 @@ transforms:
         merged, merge_err = merge(., json_payload)
         if merge_err == null {
           . = merged
+          .log_type = "span"
         } else {
           .parse_error = true
+          .log_type = "plain"
         }
-        .log_type = "span"
         if exists(.timestamp) {
           ts, ts_err = parse_timestamp(.timestamp, "%+")
           if ts_err == null {
