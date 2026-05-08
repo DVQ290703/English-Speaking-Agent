@@ -1,5 +1,7 @@
 # Vector configuration — tails app log files, parses JSON spans, routes to data streams
 
+data_dir: ${VECTOR_DATA_DIR:-/var/lib/vector}
+
 sources:
   app_logs:
     type: file
