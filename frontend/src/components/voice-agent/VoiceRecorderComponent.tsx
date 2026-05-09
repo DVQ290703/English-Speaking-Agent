@@ -1,5 +1,5 @@
 // frontend/src/components/voice-agent/VoiceRecorderComponent.tsx
-import { type KeyboardEvent, type RefObject } from 'react';
+import { useRef, type KeyboardEvent, type RefObject } from 'react';
 import { CheckCircle, Mic, SendHorizontal, Square } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
 import useVoiceRecorder from '../../hooks/useVoiceRecorder';
@@ -76,6 +76,8 @@ export default function VoiceRecorderComponent({
     cancel,
   } = useVoiceRecorder({ selectedMicId, onTranscribe, onSend: onSendRecording });
 
+  const audioRef = useRef<HTMLAudioElement>(null);
+
   const isRecording = status === 'recording';
   const isExpandedState = status === 'transcribing' || status === 'confirm' || status === 'done';
   const recordDisabled = agentTyping || isExpandedState;
@@ -132,6 +134,7 @@ export default function VoiceRecorderComponent({
 
           {/* Audio playback */}
           <audio
+            ref={audioRef}
             key={audioUrl}
             controls
             src={audioUrl ?? undefined}
