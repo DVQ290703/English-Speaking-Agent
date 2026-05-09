@@ -34,7 +34,7 @@ export interface UseVoiceRecorderResult {
 }
 
 const LIVE_BAR_COUNT = 42;
-const WAVEFORM_BAR_COUNT = 80;
+const WAVEFORM_BAR_COUNT = 150;
 
 /** Decode a recorded audio blob into normalized amplitude bars for waveform display. */
 async function decodeWaveform(blob: Blob, barCount: number): Promise<number[]> {
