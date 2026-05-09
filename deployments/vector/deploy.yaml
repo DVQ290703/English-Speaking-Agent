@@ -82,10 +82,6 @@ data:
   vector.yaml: |
     data_dir: ${VECTOR_DATA_DIR:-/var/lib/vector}
 
-    api:
-      enabled: true
-      address: "0.0.0.0:8686"
-
     sources:
       app_logs:
         type: kubernetes_logs
@@ -270,11 +266,6 @@ spec:
             - "--config"
             - "/etc/vector/vector.yaml"
 
-          ports:
-            - name: api
-              containerPort: 8686
-              protocol: TCP
-
           env:
             # Injected via downward API so kubernetes_logs knows which node it's on.
             - name: VECTOR_SELF_NODE_NAME
@@ -304,14 +295,6 @@ spec:
             - name: es-certs
               mountPath: /etc/vector/certs
               readOnly: true
-
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8686
-            initialDelaySeconds: 10
-            periodSeconds: 20
-            failureThreshold: 3
 
           resources:
             requests:
