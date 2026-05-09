@@ -80,7 +80,7 @@ export async function chatRespond({
   }
 
   if (audioBlob) {
-    formData.append('audio_file', audioBlob, 'recording.webm');
+    formData.append('audio_file', audioBlob, audioBlob.type === 'audio/wav' ? 'recording.wav' : 'recording.webm');
   }
 
   if (conversationId) {
