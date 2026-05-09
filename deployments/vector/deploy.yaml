@@ -11,7 +11,7 @@
 #
 # Collects stdout/stderr from backend-agent pods via kubernetes_logs source.
 # Routes to 3 Elasticsearch data streams: audit, spans, plain.
-# Elasticsearch: https://172.31.45.110:9200 (TLS + basic auth)
+# Elasticsearch: https://3.26.193.122:9200 (public IP, TLS + basic auth)
 # =============================================================================
 
 # ── ServiceAccount ────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ data:
         inputs:
           - route_by_category.audit
         endpoints:
-          - https://172.31.45.110:9200
+          - https://3.26.193.122:9200
         mode: data_stream
         data_stream:
           type: logs
@@ -178,7 +178,7 @@ data:
         inputs:
           - route_by_category.span
         endpoints:
-          - https://172.31.45.110:9200
+          - https://3.26.193.122:9200
         mode: data_stream
         data_stream:
           type: logs
@@ -201,7 +201,7 @@ data:
         inputs:
           - route_by_category.plain
         endpoints:
-          - https://172.31.45.110:9200
+          - https://3.26.193.122:9200
         mode: data_stream
         data_stream:
           type: logs
