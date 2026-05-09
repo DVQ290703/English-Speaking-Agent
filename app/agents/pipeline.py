@@ -73,9 +73,17 @@ class VoiceAgentPipeline:
                 "response_text": state.get("response_text", ""),
             }
 
-        # No tool calls — final response
+        # No tool calls — final response; run grammar analysis as a second pass
         response_text = ai_msg.content or ""
         logger.debug("respond_node done response_length=%d", len(response_text))
+
+        _, grammar_json = self.llm_service.generate_response_with_grammar(
+            user_input=state["user_input"],
+            history=state.get("history", []),
+            category=state.get("category"),
+            topic=state.get("topic"),
+        )
+
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
             f"Assistant: {response_text}",
@@ -84,7 +92,7 @@ class VoiceAgentPipeline:
             **state,
             "response_text": response_text,
             "history": history,
-            "grammar_json": None,
+            "grammar_json": grammar_json,
             "messages": [ai_msg],
             "_tool_call_iterations": iterations,
         }
