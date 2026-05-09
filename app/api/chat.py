@@ -295,7 +295,7 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_json = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_json, tool_steps = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
@@ -456,4 +456,5 @@ def chat_respond(
         conversation_id=conv_id,
         user_message_id=user_message_id,
         grammar_summary=grammar_summary,
+        tool_steps=tool_steps,
     )

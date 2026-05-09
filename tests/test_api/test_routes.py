@@ -299,7 +299,7 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None)),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None, [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -322,7 +322,7 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None)),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None, [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -335,7 +335,7 @@ class TestChatRespond:
         with (
             _client(self._new_conv_conn()) as (c, _),
             patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None)),
+            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None, [])),
             patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
             patch("app.api.chat._upload"),
         ):
@@ -383,7 +383,7 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None)),
+            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None, [])),
         ):
             r = c.post(
                 "/api/chat/respond",

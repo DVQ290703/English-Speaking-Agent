@@ -202,7 +202,7 @@ class TestRunLangraphAgent:
 
         with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar = run_langraph_agent("Tell me about IELTS", history=[])
+            text, audio, grammar, tool_steps = run_langraph_agent("Tell me about IELTS", history=[])
 
         assert text == "Great answer!"
         assert audio == b"mp3data"
@@ -241,7 +241,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback-audio"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar = run_langraph_agent("test")
+            text, audio, grammar, tool_steps = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback-audio"
@@ -256,7 +256,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar = run_langraph_agent("test")
+            text, audio, grammar, tool_steps = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback"
@@ -272,7 +272,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"retry-audio") as mock_synth,
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar = run_langraph_agent("question")
+            text, audio, grammar, tool_steps = run_langraph_agent("question")
 
         mock_synth.assert_called_once_with("Nice job!", voice_gender=None)
         assert text == "Nice job!"
