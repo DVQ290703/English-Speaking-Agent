@@ -1,4 +1,7 @@
-from typing import TypedDict
+from typing import Annotated, TypedDict
+
+from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
@@ -10,3 +13,5 @@ class AgentState(TypedDict):
     grammar_json: str | None  # raw JSON from LLM grammar call; None on failure
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"
+    messages: Annotated[list[BaseMessage], add_messages]  # tool-calling sub-loop accumulator
+    _tool_call_iterations: int                            # loop guard counter

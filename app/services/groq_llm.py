@@ -11,6 +11,7 @@ from langchain_groq import ChatGroq
 from app.core.logger import logger
 from app.core.telemetry import span_context
 from app.prompts.prompt_builder import build_system_prompt
+from app.agents.tools.flashcard_tools import FLASHCARD_TOOLS
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md"
 
@@ -42,6 +43,15 @@ class GroqLLMService:
             raise ValueError("GROQ_API_KEY is missing. Set it in your environment or .env file.")
         self.model_name = model_name
         self.client = ChatGroq(api_key=api_key, model=model_name, temperature=0.2)
+        self.tool_client = self.client.bind_tools(FLASHCARD_TOOLS)
+        if FLASHCARD_TOOLS:
+            logger.info(
+                "GroqLLMService tool_calling_enabled=True model=%s tools=%s",
+                self.model_name,
+                [t.name for t in FLASHCARD_TOOLS],
+            )
+        else:
+            logger.warning("GroqLLMService FLASHCARD_TOOLS is empty — tool calling inactive")
         logger.info("GroqLLMService ready model=%s", model_name)
 
     def generate_response(

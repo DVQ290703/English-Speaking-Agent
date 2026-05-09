@@ -20,6 +20,7 @@ def list_decks(user_id: str) -> list[dict]:
     Args:
         user_id: The UUID of the authenticated user.
     """
+    logger.debug("list_decks enter user_id=%s", user_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -38,10 +39,12 @@ def list_decks(user_id: str) -> list[dict]:
                 (user_id, user_id),
             )
             rows = cur.fetchall()
-    return [
+    result = [
         {"id": r[0], "name": r[1], "description": r[2], "card_count": r[3] or 0, "due_count": r[4] or 0}
         for r in rows
     ]
+    logger.debug("list_decks return count=%d user_id=%s", len(result), user_id)
+    return result
 
 
 @tool
@@ -64,6 +67,7 @@ def create_card(
     Returns:
         dict with card_id, deck_name, front_text.
     """
+    logger.debug("create_card enter user_id=%s deck_id=%s front=%r", user_id, deck_id, front_text)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -72,6 +76,7 @@ def create_card(
             )
             deck_row = cur.fetchone()
             if not deck_row:
+                logger.warning("create_card deck not found deck_id=%s user_id=%s", deck_id, user_id)
                 return {"error": "Deck not found"}
 
             cur.execute(
@@ -94,6 +99,8 @@ def create_card(
             )
 
     logger.info("create_card tool: card_id=%s deck=%s front=%r", card_id, deck_row[0], front_text)
+    logger.log_event("flashcard.card_created", {"user_id": user_id, "card_id": card_id, "deck_id": deck_id, "front_text": front_text})
+    logger.debug("create_card return card_id=%s", card_id)
     return {"card_id": card_id, "deck_name": deck_row[0], "front_text": front_text}
 
 
@@ -117,6 +124,7 @@ def update_card(
     Returns:
         dict with card_id and updated fields, or error.
     """
+    logger.debug("update_card enter user_id=%s card_id=%s", user_id, card_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -132,7 +140,10 @@ def update_card(
             )
             row = cur.fetchone()
     if not row:
+        logger.warning("update_card card not found card_id=%s user_id=%s", card_id, user_id)
         return {"error": "Card not found"}
+    logger.log_event("flashcard.card_updated", {"user_id": user_id, "card_id": row[0]})
+    logger.debug("update_card return card_id=%s", row[0])
     return {"card_id": row[0], "front_text": row[1], "back_text": row[2]}
 
 
@@ -171,6 +182,7 @@ def search_cards(
 
     where = " AND ".join(conditions)
 
+    logger.debug("search_cards enter user_id=%s query=%r tag=%r deck_id=%s", user_id, query, tag, deck_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -185,7 +197,9 @@ def search_cards(
                 params,
             )
             rows = cur.fetchall()
-    return [{"card_id": r[0], "front_text": r[1], "deck_name": r[2], "tags": r[3] or []} for r in rows]
+    result = [{"card_id": r[0], "front_text": r[1], "deck_name": r[2], "tags": r[3] or []} for r in rows]
+    logger.debug("search_cards return count=%d user_id=%s", len(result), user_id)
+    return result
 
 
 @tool
@@ -214,6 +228,7 @@ def get_due_cards(
     params.append(limit)
     where = " AND ".join(conditions)
 
+    logger.debug("get_due_cards enter user_id=%s deck_id=%s limit=%d", user_id, deck_id, limit)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -229,10 +244,12 @@ def get_due_cards(
                 params,
             )
             rows = cur.fetchall()
-    return [
+    result = [
         {"card_id": r[0], "front_text": r[1], "back_text": r[2], "deck_name": r[3], "due_date": r[4]}
         for r in rows
     ]
+    logger.debug("get_due_cards return count=%d user_id=%s", len(result), user_id)
+    return result
 
 
 @tool
@@ -253,6 +270,7 @@ def submit_card_review(
     Returns:
         dict with card_id, new due_date, interval_days, ease_factor, repetitions.
     """
+    logger.debug("submit_card_review enter user_id=%s card_id=%s rating=%s", user_id, card_id, rating)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -266,6 +284,7 @@ def submit_card_review(
             )
             row = cur.fetchone()
             if not row:
+                logger.warning("submit_card_review card not found card_id=%s user_id=%s", card_id, user_id)
                 return {"error": "Card not found or not scheduled"}
 
             new_rep, new_ef, new_interval, due_date = calculate_sm2(
@@ -287,6 +306,8 @@ def submit_card_review(
             )
 
     logger.info("submit_card_review tool: card_id=%s rating=%s due=%s", card_id, rating, due_date)
+    logger.log_event("flashcard.review_submitted", {"user_id": user_id, "card_id": card_id, "rating": rating, "due_date": str(due_date), "interval_days": new_interval})
+    logger.debug("submit_card_review return card_id=%s due=%s interval=%d", card_id, due_date, new_interval)
     return {
         "card_id": card_id,
         "due_date": str(due_date),
@@ -307,6 +328,7 @@ def get_deck_stats(user_id: str, deck_id: str) -> dict:
     Returns:
         dict with total_cards, due_today, learned, retention_rate (0.0-1.0).
     """
+    logger.debug("get_deck_stats enter user_id=%s deck_id=%s", user_id, deck_id)
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -334,13 +356,16 @@ def get_deck_stats(user_id: str, deck_id: str) -> dict:
             )
             row = cur.fetchone()
     if not row or row[0] is None:
+        logger.warning("get_deck_stats deck not found deck_id=%s user_id=%s", deck_id, user_id)
         return {"error": "Deck not found"}
-    return {
+    result = {
         "total_cards": row[0] or 0,
         "due_today": row[1] or 0,
         "learned": row[2] or 0,
         "retention_rate": float(row[3] or 0),
     }
+    logger.debug("get_deck_stats return deck_id=%s total=%d due=%d retention=%.2f", deck_id, result["total_cards"], result["due_today"], result["retention_rate"])
+    return result
 
 
 # All tools exported for LangGraph registration
