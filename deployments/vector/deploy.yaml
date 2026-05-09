@@ -82,6 +82,10 @@ data:
   vector.yaml: |
     data_dir: ${VECTOR_DATA_DIR:-/var/lib/vector}
 
+    api:
+      enabled: true
+      address: "0.0.0.0:8686"
+
     sources:
       app_logs:
         type: kubernetes_logs
@@ -163,10 +167,9 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        auth:
-          strategy: basic
-          user: ""
-          password: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        request:
+          headers:
+            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
         encoding:
           except_fields:
             - file
@@ -186,10 +189,9 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        auth:
-          strategy: basic
-          user: ""
-          password: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        request:
+          headers:
+            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
         encoding:
           except_fields:
             - file
@@ -209,10 +211,9 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        auth:
-          strategy: basic
-          user: ""
-          password: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        request:
+          headers:
+            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
         encoding:
           except_fields:
             - file
@@ -266,23 +267,24 @@ spec:
             - "--config"
             - "/etc/vector/vector.yaml"
 
+          ports:
+            - name: api
+              containerPort: 8686
+              protocol: TCP
+
           env:
             # Injected via downward API so kubernetes_logs knows which node it's on.
             - name: VECTOR_SELF_NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            # ES API key — value format: "id:api_key_value" (raw, no base64 needed here;
-            # Vector builds the Authorization header as "ApiKey <value>" using the
-            # auth.password field in the sink config).
+            # ES API key — value format: "id:api_key_value" (raw, no base64).
+            # Injected as Authorization: ApiKey <value> via request.headers in each sink.
             - name: ELASTICSEARCH_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: vector-es-secret
                   key: api_key
-            - name: VECTOR_DATA_DIR
-              value: /var/lib/vector
-
           volumeMounts:
             # Host pod log directory — read-only, kubernetes_logs source reads here.
             - name: varlogpods
@@ -300,6 +302,14 @@ spec:
             - name: es-certs
               mountPath: /etc/vector/certs
               readOnly: true
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8686
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
 
           resources:
             requests:
