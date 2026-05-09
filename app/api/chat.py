@@ -14,7 +14,7 @@ from app.api._audio import (
     _validate_uploaded_audio,
 )
 from app.api._validators import _enforce_max_length, _validate_uuid
-from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan
+from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan, ToolCallStep
 from app.services.grammar_parser import parse_grammar_response
 from app.core.ai_services import (
     _synthesize_audio_bytes,

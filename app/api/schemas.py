@@ -65,6 +65,15 @@ class GrammarSummary(BaseModel):
     flagged_spans: list[GrammarSpan]
 
 
+class ToolCallStep(BaseModel):
+    tool_name: str
+    input_summary: str
+    output_summary: str
+    duration_ms: int | None = None
+    status: Literal["completed", "failed"] = "completed"
+    error: str | None = None
+
+
 class ChatResponse(BaseModel):
     user_input: str
     response_text: str
@@ -77,6 +86,7 @@ class ChatResponse(BaseModel):
     grammar_summary: GrammarSummary = Field(
         default_factory=lambda: GrammarSummary(error_count=0, has_errors=False, flagged_spans=[])
     )
+    tool_steps: list[ToolCallStep] = Field(default_factory=list)
 
 
 class MessageOut(BaseModel):
