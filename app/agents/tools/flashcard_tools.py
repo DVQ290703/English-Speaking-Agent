@@ -30,6 +30,9 @@ def list_decks(user_id: str) -> list[dict]:
         user_id: The UUID of the authenticated user.
     """
     logger.debug("list_decks enter user_id=%s", user_id)
+    if not _is_valid_uuid(user_id):
+        logger.warning("list_decks invalid user_id=%r — not a UUID", user_id)
+        return []
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -54,6 +57,51 @@ def list_decks(user_id: str) -> list[dict]:
     ]
     logger.debug("list_decks return count=%d user_id=%s", len(result), user_id)
     return result
+
+
+@tool
+def create_deck(
+    user_id: str,
+    name: str,
+    description: str | None = None,
+) -> dict:
+    """Create a new flashcard deck for the user.
+
+    Always ask the user what they would like to name the deck before calling
+    this tool. If the user says they don't know or don't mind, infer a
+    suitable name from the current conversation topic or category
+    (e.g. "IELTS Part 2 Vocabulary") and proceed without further prompting.
+
+    Args:
+        user_id: The UUID of the authenticated user.
+        name: The deck name chosen by the user or inferred from context.
+        description: Optional short description of the deck's purpose.
+
+    Returns:
+        dict with deck_id, name, and description on success, or error on failure.
+    """
+    logger.debug("create_deck enter user_id=%s name=%r", user_id, name)
+    if not _is_valid_uuid(user_id):
+        logger.warning("create_deck invalid user_id=%r — not a UUID", user_id)
+        return {"error": f"user_id '{user_id}' is not a valid UUID."}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO flashcard_decks (user_id, name, description)
+                VALUES (%s, %s, %s)
+                RETURNING id::text, name, description
+                """,
+                (user_id, name, description),
+            )
+            row = cur.fetchone()
+    deck_id, deck_name, deck_desc = row
+    logger.info("create_deck return deck_id=%s name=%r", deck_id, deck_name)
+    logger.log_event(
+        "flashcard.deck_created",
+        {"user_id": user_id, "deck_id": deck_id, "name": deck_name},
+    )
+    return {"deck_id": deck_id, "name": deck_name, "description": deck_desc}
 
 
 @tool
@@ -395,6 +443,7 @@ def get_deck_stats(user_id: str, deck_id: str) -> dict:
 # All tools exported for LangGraph registration
 FLASHCARD_TOOLS = [
     list_decks,
+    create_deck,
     create_card,
     update_card,
     search_cards,
