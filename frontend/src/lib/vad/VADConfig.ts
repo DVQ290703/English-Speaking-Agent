@@ -35,7 +35,7 @@ export const VAD_CONFIG = {
   /**
    * Minimum recording duration before VAD can stop (ms).
    */
-  minSpeechMs: 400,
+  minSpeechMs: 600,
 
   /**
    * ZCR range for voiced speech.
@@ -50,13 +50,13 @@ export const VAD_CONFIG = {
    * Lower because with SNR=1.8, fewer frames will be classified as speech
    * but they'll be genuine speech frames.
    */
-  minSpeechFrameRatio: 0.05, // was 0.15 → too strict for SNR=1.8
+  minSpeechFrameRatio: 0.23, // was 0.15 → too strict for SNR=1.8
 
   /**
    * Minimum peak RMS to pass quality gate.
    * Reject recordings with no meaningful audio energy at all.
    */
-  minPeakRMS: 0.003, // new: explicit peak energy gate
+  minPeakRMS: 0.008, // new: explicit peak energy gate
 
   /**
    * Web Audio processor buffer size in frames.
@@ -74,7 +74,7 @@ export const VAD_CONFIG = {
    * Absolute RMS floor that qualifies as plausible speech energy.
    * Increase to reject faint background noise; decrease for softer speakers.
    */
-  minimumSpeechRms: 0.003,
+  minimumSpeechRms: 0.008,
 
   /**
    * How quickly the background-noise estimate adapts during non-speech frames.
