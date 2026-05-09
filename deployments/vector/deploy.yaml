@@ -5,13 +5,13 @@
 #
 # Pre-requisite secret (create once, never commit):
 #   kubectl create secret generic vector-es-secret \
-#     --from-literal=api_key="<id:api_key_value>" \
+#     --from-literal=password="<elastic_password>" \
 #     --from-file=http_ca.crt=./http_ca.crt \
 #     -n english-speaking-agent
 #
 # Collects stdout/stderr from backend-agent pods via kubernetes_logs source.
 # Routes to 3 Elasticsearch data streams: audit, spans, plain.
-# Elasticsearch: https://172.31.45.110:9200 (TLS + API key auth)
+# Elasticsearch: https://172.31.45.110:9200 (TLS + basic auth)
 # =============================================================================
 
 # ── ServiceAccount ────────────────────────────────────────────────────────────
@@ -167,9 +167,10 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        request:
-          headers:
-            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        auth:
+          strategy: basic
+          user: "elastic"
+          password: "${ELASTICSEARCH_PASSWORD}"
         encoding:
           except_fields:
             - file
@@ -189,9 +190,10 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        request:
-          headers:
-            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        auth:
+          strategy: basic
+          user: "elastic"
+          password: "${ELASTICSEARCH_PASSWORD}"
         encoding:
           except_fields:
             - file
@@ -211,9 +213,10 @@ data:
           namespace: default
         tls:
           ca_file: /etc/vector/certs/http_ca.crt
-        request:
-          headers:
-            Authorization: "ApiKey ${ELASTICSEARCH_API_KEY}"
+        auth:
+          strategy: basic
+          user: "elastic"
+          password: "${ELASTICSEARCH_PASSWORD}"
         encoding:
           except_fields:
             - file
@@ -278,13 +281,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            # ES API key — value format: "id:api_key_value" (raw, no base64).
-            # Injected as Authorization: ApiKey <value> via request.headers in each sink.
-            - name: ELASTICSEARCH_API_KEY
+            # ES password — injected into auth.password in each sink via basic auth.
+            - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: vector-es-secret
-                  key: api_key
+                  key: password
           volumeMounts:
             # Host pod log directory — read-only, kubernetes_logs source reads here.
             - name: varlogpods
