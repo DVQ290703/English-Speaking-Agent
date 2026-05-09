@@ -162,7 +162,7 @@ data:
           dataset: voice_agent.audit
           namespace: default
         tls:
-          ca_file: /etc/vector/certs/http_ca.crt
+          verify_certificate: false
         auth:
           strategy: basic
           user: "elastic"
@@ -185,7 +185,7 @@ data:
           dataset: voice_agent.spans
           namespace: default
         tls:
-          ca_file: /etc/vector/certs/http_ca.crt
+          verify_certificate: false
         auth:
           strategy: basic
           user: "elastic"
@@ -208,7 +208,7 @@ data:
           dataset: voice_agent.plain
           namespace: default
         tls:
-          ca_file: /etc/vector/certs/http_ca.crt
+          verify_certificate: false
         auth:
           strategy: basic
           user: "elastic"
