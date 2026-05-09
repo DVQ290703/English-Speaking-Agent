@@ -85,7 +85,7 @@ export default function VoiceRecorderComponent({
             {formatTime(recordingTime)}
           </div>
           <div className="flex items-end justify-center gap-0.5 h-12">
-            {visualizerData.map((val, i) => (
+            {visualizerData.slice(0, 42).map((val, i) => (
               <div
                 key={i}
                 className="w-1 rounded-full bg-red-400 transition-none"
