@@ -28,7 +28,6 @@ export interface UseVoiceRecorderResult {
   stop: () => void;
   retake: () => void;
   transcribe: () => Promise<void>;
-  setTranscript: (text: string) => void;
   send: () => void;
   cancel: () => void;
 }
@@ -337,10 +336,6 @@ export default function useVoiceRecorder({
     setStatus('idle');
   }, [revokeUrl]);
 
-  const setTranscript = useCallback((text: string) => {
-    setTranscriptState(text);
-  }, []);
-
   const send = useCallback(() => {
     const blob = audioBlobRef.current;
     if (!blob || !transcript.trim()) return;
@@ -395,7 +390,6 @@ export default function useVoiceRecorder({
     stop,
     retake,
     transcribe,
-    setTranscript,
     send,
     cancel,
   };
