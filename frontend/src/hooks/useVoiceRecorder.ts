@@ -34,6 +34,91 @@ export interface UseVoiceRecorderResult {
 
 const LIVE_BAR_COUNT = 42;
 const WAVEFORM_BAR_COUNT = 150;
+const SILENCE_THRESHOLD = 0.02;  // amplitude below this = silence (speech boundary detection)
+const NOISE_GATE_FLOOR  = 0.005; // amplitude below this = zeroed out (residual hiss removal)
+const TRIM_PADDING_MS   = 100;   // ms of audio kept before/after detected speech boundaries
+
+function writeWavString(view: DataView, offset: number, str: string): void {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+/** Encode a Float32Array of mono PCM samples to a 16-bit WAV Blob. */
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const numSamples = samples.length;
+  const dataSize = numSamples * 2; // 16-bit = 2 bytes per sample
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeWavString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeWavString(view, 8, 'WAVE');
+  writeWavString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);             // fmt chunk size
+  view.setUint16(20, 1, true);              // PCM format
+  view.setUint16(22, 1, true);              // mono
+  view.setUint32(24, sampleRate, true);     // sample rate
+  view.setUint32(28, sampleRate * 2, true); // byte rate (sampleRate * blockAlign)
+  view.setUint16(32, 2, true);              // block align (1 channel * 2 bytes)
+  view.setUint16(34, 16, true);             // bits per sample
+  writeWavString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 32768 : s * 32767, true);
+    offset += 2;
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+/**
+ * Trim silence from both ends of an AudioBuffer, apply a noise gate to remove
+ * residual hiss, and encode to a WAV Blob.
+ *
+ * Falls back to the full buffer if no sample exceeds SILENCE_THRESHOLD
+ * (e.g. very quiet speaker — avoids producing empty audio).
+ */
+function trimGateEncode(audioBuffer: AudioBuffer): Blob {
+  const data = audioBuffer.getChannelData(0);
+  const sampleRate = audioBuffer.sampleRate;
+  const total = data.length;
+
+  // Find first sample above speech threshold (scan from start)
+  let startSample = 0;
+  for (let i = 0; i < total; i++) {
+    if (Math.abs(data[i]) >= SILENCE_THRESHOLD) {
+      startSample = i;
+      break;
+    }
+  }
+
+  // Find last sample above speech threshold (scan from end)
+  let endSample = total - 1;
+  for (let i = total - 1; i >= 0; i--) {
+    if (Math.abs(data[i]) >= SILENCE_THRESHOLD) {
+      endSample = i;
+      break;
+    }
+  }
+
+  // Add padding so leading/trailing consonants aren't clipped
+  const paddingSamples = Math.round((TRIM_PADDING_MS / 1000) * sampleRate);
+  const trimStart = Math.max(0, startSample - paddingSamples);
+  const trimEnd   = Math.min(total, endSample + paddingSamples + 1);
+
+  // Extract trimmed slice and apply noise gate
+  const out = new Float32Array(trimEnd - trimStart);
+  for (let i = 0; i < out.length; i++) {
+    const s = data[trimStart + i];
+    out[i] = Math.abs(s) < NOISE_GATE_FLOOR ? 0 : s;
+  }
+
+  return encodeWav(out, sampleRate);
+}
 
 /** Decode a Blob into an AudioBuffer. Throws if AudioContext is unavailable. */
 async function decodeAudioBuffer(blob: Blob): Promise<AudioBuffer> {
