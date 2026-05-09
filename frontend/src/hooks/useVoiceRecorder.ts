@@ -58,6 +58,8 @@ export default function useVoiceRecorder({
   const audioUrlRef = useRef<string | null>(null);
   const cancelGenRef = useRef(0);
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopFnRef = useRef<() => void>(() => {});
 
   const stopVisualizer = useCallback(() => {
     if (rafRef.current !== null) {
@@ -105,6 +107,7 @@ export default function useVoiceRecorder({
     cancelGenRef.current++;
     stopVisualizer();
     stopTimer();
+    if (maxDurationTimerRef.current !== null) { clearTimeout(maxDurationTimerRef.current); maxDurationTimerRef.current = null; }
     try {
       recorderRef.current?.stop();
     } catch {
@@ -124,6 +127,7 @@ export default function useVoiceRecorder({
 
   const start = useCallback(async () => {
     if (recorderRef.current) return;
+    setError(null);
     const w = window as WindowWithWebkit;
     if (
       !navigator.mediaDevices?.getUserMedia ||
@@ -198,7 +202,12 @@ export default function useVoiceRecorder({
     setRecordingTime(0);
     timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
 
-    setError(null);
+    // 3-minute recording cap
+    maxDurationTimerRef.current = setTimeout(() => {
+      maxDurationTimerRef.current = null;
+      stopFnRef.current();
+    }, 180_000);
+
     setStatus('recording');
   }, [selectedMicId]);
 
@@ -231,6 +240,10 @@ export default function useVoiceRecorder({
       recorder.stop();
     }
   }, [stopVisualizer, stopTimer, releaseStream]);
+
+  useEffect(() => {
+    stopFnRef.current = stop;
+  }, [stop]);
 
   const retake = useCallback(() => {
     revokeUrl();
@@ -285,6 +298,7 @@ export default function useVoiceRecorder({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (timerRef.current !== null) clearInterval(timerRef.current);
       if (sendTimerRef.current !== null) clearTimeout(sendTimerRef.current);
+      if (maxDurationTimerRef.current !== null) clearTimeout(maxDurationTimerRef.current);
       try {
         recorderRef.current?.stop();
       } catch {

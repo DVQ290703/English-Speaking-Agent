@@ -100,7 +100,7 @@ export default function VoiceRecorderComponent({
       {status === 'preview' && (
         <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-3 space-y-2">
           <div className="flex items-center gap-2">
-            <audio controls src={audioUrl ?? undefined} className="flex-1 h-8" />
+            <audio controls src={audioUrl ?? undefined} className="flex-1" />
             <span className="text-xs text-gray-500 shrink-0">{formatTime(recordingTime)}</span>
           </div>
           <div className="flex gap-2 justify-end">
