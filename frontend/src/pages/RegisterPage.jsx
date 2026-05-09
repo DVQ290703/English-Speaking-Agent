@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { registerRequest } from '../api/auth';
-import { saveAuthSession } from '../auth/tokenStorage';
+import { useAuth } from '../auth/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { useT } from '../i18n/useLanguage';
 
@@ -57,7 +57,6 @@ function PasswordStrengthBar({ password }) {
 
   return (
     <div className="mt-1.5 space-y-1">
-      {/* 3-segment bar */}
       <div className="flex gap-1">
         {[0, 1, 2].map((i) => (
           <div
@@ -68,7 +67,6 @@ function PasswordStrengthBar({ password }) {
           />
         ))}
       </div>
-      {/* Label */}
       <p className={`text-xs font-semibold flex items-center gap-1 ${meta.text}`}>
         {strength === 'strong' && (
           <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -85,9 +83,6 @@ function PasswordStrengthBar({ password }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Eye toggle icon
-// ---------------------------------------------------------------------------
 function EyeIcon({ open }) {
   return open ? (
     <svg
@@ -120,9 +115,6 @@ function EyeIcon({ open }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 const initialForm = {
   display_name: '',
   email: '',
@@ -132,6 +124,7 @@ const initialForm = {
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const t = useT();
   const [form, setForm] = useState(initialForm);
   const [showPassword, setShowPassword] = useState(false);
@@ -167,7 +160,7 @@ export default function RegisterPage() {
         email: form.email.trim(),
         password: form.password,
       });
-      saveAuthSession({
+      login({
         token: data.access_token,
         expiresIn: data.expires_in,
         user: data.user,
@@ -216,7 +209,6 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="login-form">
-            {/* Display name */}
             <label className="field">
               <span>Display name</span>
               <input
@@ -228,8 +220,6 @@ export default function RegisterPage() {
               />
               {errors.display_name && <small>{errors.display_name}</small>}
             </label>
-
-            {/* Email */}
             <label className="field">
               <span>Email</span>
               <input
@@ -241,8 +231,6 @@ export default function RegisterPage() {
               />
               {errors.email && <small>{errors.email}</small>}
             </label>
-
-            {/* Password */}
             <div className="field">
               <label>
                 <span>Password</span>
@@ -264,12 +252,9 @@ export default function RegisterPage() {
                   </button>
                 </div>
               </label>
-              {/* Strength bar — shown whenever user has typed something */}
               <PasswordStrengthBar password={form.password} />
               {errors.password && <small>{errors.password}</small>}
             </div>
-
-            {/* Confirm password */}
             <label className="field">
               <span>Confirm password</span>
               <div className="password-row">
@@ -302,17 +287,16 @@ export default function RegisterPage() {
                 'Create account'
               )}
             </button>
-
             {apiError && <p className="error-msg">{apiError}</p>}
           </form>
 
           <p className="switch-link">
             Already have an account?{' '}
             <a
-              href="/"
+              href="/login"
               onClick={(e) => {
                 e.preventDefault();
-                navigate('/');
+                navigate('/login');
               }}
             >
               Sign in

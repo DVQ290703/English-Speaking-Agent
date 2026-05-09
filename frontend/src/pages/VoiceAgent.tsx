@@ -7,13 +7,15 @@ import {
   useMemo,
   type KeyboardEvent,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Circle } from 'lucide-react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Circle, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
-import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
-import { assessPronunciation, fetchGrammarFeedback } from '../api/chat';
+
+import { useAuth } from '../auth/AuthContext';
+import { getAuthSession } from '../auth/tokenStorage';
+import { fetchGrammarFeedback, assessPronunciation } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
@@ -24,7 +26,6 @@ import {
   MessageBubble,
   SelectDropdown,
   SessionSummaryModal,
-  VoiceAgentHeader,
 } from '../components/voice-agent';
 import VoiceRecorderComponent from '../components/voice-agent/VoiceRecorderComponent';
 import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
@@ -45,6 +46,7 @@ import useMicDevices from '../hooks/useMicDevices';
 import useSendChatMessage from '../hooks/useSendChatMessage';
 import useSessionPersistence from '../hooks/useSessionPersistence';
 import { useDarkMode } from '../theme/useDarkMode';
+import useAudioCapture from '@/hooks/useAudioCapture';
 
 interface VoiceAgentProps {
   currentUser?: AuthUser | null;
@@ -68,10 +70,7 @@ function areMistakesEqual(a: Mistake[], b: Mistake[]): boolean {
     const yp = y.phonemes ?? [];
     if (xp.length !== yp.length) return false;
     for (let j = 0; j < xp.length; j++) {
-      if (
-        xp[j].phoneme !== yp[j].phoneme ||
-        xp[j].accuracy_score !== yp[j].accuracy_score
-      ) {
+      if (xp[j].phoneme !== yp[j].phoneme || xp[j].accuracy_score !== yp[j].accuracy_score) {
         return false;
       }
     }
@@ -81,8 +80,9 @@ function areMistakesEqual(a: Mistake[], b: Mistake[]): boolean {
 
 function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
   const isAgent = m.role === 'assistant';
-  const mistakes: Mistake[] | undefined = m.score?.words.length
-    ? m.score.words.flatMap((w) => {
+  const mistakes: Mistake[] | undefined =
+    m.score?.words && m.score.words.length
+      ? m.score.words.flatMap((w) => {
         const err = w.error_type;
         const acc = Math.round(w.accuracy_score ?? 0);
         const phonemes = (w.phonemes ?? []).map((p) => ({
@@ -119,7 +119,7 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
         }
         return [];
       })
-    : undefined;
+      : undefined;
 
   return {
     id: idx + 1,
@@ -132,26 +132,29 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
     assessmentStatus: m.score ? 'available' : 'unavailable',
     scoreDetails: m.score
       ? {
-          overall: Math.round(m.score.overall_score ?? 0),
-          pronunciation: Math.round(m.score.overall_score ?? 0),
-          fluency: Math.round(m.score.fluency_score ?? 0),
-          accuracy: Math.round(m.score.accuracy_score ?? 0),
-          completeness:
-            m.score.completeness_score != null
-              ? Math.round(m.score.completeness_score)
-              : undefined,
-        }
+        overall: Math.round(m.score.overall_score ?? 0),
+        pronunciation: Math.round(m.score.overall_score ?? 0),
+        fluency: Math.round(m.score.fluency_score ?? 0),
+        accuracy: Math.round(m.score.accuracy_score ?? 0),
+        completeness:
+          m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
+      }
       : undefined,
     mistakes,
   };
 }
 
 export default function VoiceAgent({ currentUser: initialUser = null, onLogout }: VoiceAgentProps) {
+  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useOutletContext<{
+    sidebarOpen: boolean;
+    setSidebarOpen: (v: boolean) => void;
+    toggleSidebar: () => void;
+  }>();
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
-  const [isDark, toggleDark] = useDarkMode();
+  const [isDark] = useDarkMode();
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+  const [currentUser] = useState<AuthUser | null>(() => {
     if (initialUser) return initialUser;
     const session = getAuthSession();
     if (!session?.user) return null;
@@ -191,6 +194,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const { micDevices, selectedMicId, selectedMicIdRef, setSelectedMicId, refreshMicDevicesRef } =
     useMicDevices();
 
+  const isConnected = status === 'connected';
+  const isConnecting = status === 'connecting';
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialState.messages);
   const sessionIdRef = useRef<string | null>(initialState.sessionId);
@@ -276,7 +281,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [isGrammarLoading, setIsGrammarLoading] = useState(false);
 
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isTopicLimitReached, setIsTopicLimitReached] = useState(false);
   const [convsLoading, setConvsLoading] = useState(false);
@@ -340,6 +344,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // No-op stubs — VoiceRecorderComponent manages its own mic lifecycle now.
   const noopSetMicEnabled = useCallback((_: boolean) => {}, []);
   const noopUserMicIntentRef = useRef(false);
+  const { mediaStreamRef, startUserAudioCapture, stopUserAudioCapture, releaseMediaStream } =
+    useAudioCapture(selectedMicIdRef);
 
   const {
     ttsActiveRef,
@@ -349,6 +355,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     playMessageAudio,
     trimLocalAudioUrls,
     clearLocalAudioUrls,
+    stopAllAudio,
   } = useAgentAudio({
     setMicEnabled: noopSetMicEnabled,
     setAgentSpeaking,
@@ -423,6 +430,21 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setMicEnabled: noopSetMicEnabled,
   });
 
+  // Toast notification when it's the user's turn to speak (after agent finishes talking).
+  useEffect(() => {
+    if (isConnected && !agentSpeaking && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      // Only show if the last message was from the agent and they are not currently "typing"
+      // (which for the agent means waiting for a response or streaming).
+      if (lastMsg.role === 'agent' && !agentTyping) {
+        toast.info(t('va.toast.yourTurn'), {
+          position: 'top-center',
+          duration: 2500,
+        });
+      }
+    }
+  }, [agentSpeaking, isConnected, messages, t, agentTyping]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -453,6 +475,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   const { persistSession } = useSessionPersistence({
     hasSavedCurrentSessionRef,
+    conversationIdRef,
   });
 
   const startNewSession = useCallback(
@@ -506,8 +529,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // setTimeout from a prior handleConnect call is immediately
       // invalidated by its own version-check guard.
       ++sessionVersionRef.current;
-      window.speechSynthesis?.cancel();
-      ttsActiveRef.current = false;
+      stopAllAudio();
       setSummaryDismissed(false);
       setStatusSync('disconnected');
       setAgentSpeaking(false);
@@ -557,6 +579,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     t,
     topic,
     ttsActiveRef,
+    stopAllAudio,
   ]);
 
   // Validate the initial topic code against the loaded DB topics. If the code
@@ -578,8 +601,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       }
     }
     // Only run when DB topics finish loading — don't run on every topic change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDbTopics]);
+  }, [allDbTopics, topic]);
 
   // Fetch topic conversations from DB for the sidebar; re-runs whenever
   // convsRefreshKey is bumped or selected topic changes.
@@ -609,7 +631,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         );
         setIsTopicLimitReached(Boolean(data.limit_reached));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey, topic]);
 
@@ -634,8 +656,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         /* silently ignore — user can still start fresh */
       });
     // Run only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialState.conversationId]);
 
   // Final unmount cleanup — flush in-flight timers and stream after the
   // session-persistence hook has saved the latest snapshot.
@@ -646,8 +667,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [clearTimers, clearLocalAudioUrls]);
 
-  const isConnected = status === 'connected';
-  const isConnecting = status === 'connecting';
 
   // Load a DB conversation in-place (no full page reload): reset all local
   // state, restore conversationIdRef, update the URL, then fetch messages.
@@ -657,6 +676,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       if (!authSession?.token) return;
 
       hasAutoLoadedRef.current = true;
+      stopAllAudio();
       startNewSession({ stayDisconnected: true });
       // startNewSession clears conversationIdRef — restore it immediately.
       conversationIdRef.current = convId;
@@ -689,58 +709,63 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         })
         .finally(() => setHistoryLoading(false));
     },
-    [startNewSession, setTopic, setMessages],
+    [startNewSession, setTopic, setMessages, stopAllAudio],
   );
 
   // When the page loads with a ?topic= but no ?session= (e.g. navigating from
   // the dashboard), automatically open the most recent DB conversation for that
   // topic so the user lands directly in context. Fires only once per mount.
   useEffect(() => {
-    if (hasAutoLoadedRef.current) return;
-    if (conversationIdRef.current) return; // already in a DB session
-    if (!topic) return;
-    if (conversations.length === 0) return; // wait for conversations to load
+    // 1. If we've already performed an auto-load for this session/topic switch, 
+    // or if we are already in an active session, don't do anything.
+    if (hasAutoLoadedRef.current || conversationIdRef.current) return;
 
-    hasAutoLoadedRef.current = true;
+    // 2. We need a topic and we must wait for the conversations list to finish loading.
+    if (!topic || convsLoading || conversations.length === 0) return;
 
-    const latest = conversations
-      .filter((c) => c.topic_code === topic)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+    // 3. Filter conversations to ensure they belong to the current topic.
+    // This is crucial because 'conversations' might still hold data from the previous topic
+    // for a few frames during the transition.
+    const topicConvs = conversations.filter((c) => c.topic_code === topic);
+    if (topicConvs.length === 0) return;
+
+    // 4. Find the most recent conversation.
+    const sorted = [...topicConvs].sort(
+      (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
+    );
+    const latest = sorted[0];
 
     if (latest) {
-      // Use in-place loading to avoid a full page reload (SPA navigation).
+      // 5. Mark as auto-loaded and trigger the load.
+      hasAutoLoadedRef.current = true;
       loadConversationInPlace(latest.id, topic);
     }
-  }, [conversations, topic, loadConversationInPlace]);
+  }, [conversations, topic, convsLoading, loadConversationInPlace]);
 
   const handleTopicSelect = useCallback(
     (code: string) => {
+      if (code === topic) return; // Already on this topic
+
       setCustomTopicLabel(null);
       setSubOption(null);
 
-      // Find the most recently created conversation for this topic
-      const latest = conversations
-        .filter((c) => c.topic_code === code)
-        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+      // Clear stale conversations so the sidebar and auto-load logic don't see old data.
+      setConversations([]);
+      // Reset auto-load flag so the useEffect can pick up the latest for the NEW topic.
+      hasAutoLoadedRef.current = false;
+      startNewSession({ stayDisconnected: true });
+      setTopic(code);
 
-      if (latest) {
-        loadConversationInPlace(latest.id, code);
-      } else {
-        // No existing conversation — show blank new chat for this topic
-        hasAutoLoadedRef.current = false;
-        startNewSession({ stayDisconnected: true });
-        setTopic(code);
-        try {
-          const url = new URL(window.location.href);
-          url.searchParams.set('topic', code);
-          url.searchParams.delete('session');
-          window.history.replaceState({}, '', url.toString());
-        } catch {
-          /* ignore */
-        }
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('topic', code);
+        url.searchParams.delete('session');
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        /* ignore */
       }
     },
-    [conversations, loadConversationInPlace, startNewSession, setTopic],
+    [topic, setTopic, startNewSession],
   );
 
   // Keep grammar feedback bound to the currently selected sentence.
@@ -816,13 +841,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [displayMsg, setMessages]);
 
+  const { isAuthenticated, logout } = useAuth();
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
-    clearAuthSession();
-    setCurrentUser(null);
     if (onLogout) onLogout();
-    navigate('/', { replace: true });
-  }, [navigate, onLogout]);
+    logout();
+  }, [logout, onLogout]);
 
   const handleSendChat = useCallback(() => {
     if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
@@ -845,90 +869,74 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   return (
     <div
       data-va="root"
-      className={`h-screen overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
+      className={`h-full overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
     >
-      <VoiceAgentHeader
-        isDark={isDark}
-        toggleDark={toggleDark}
-        currentUser={currentUser}
-        showUserMenu={showUserMenu}
-        onToggleUserMenu={() => setShowUserMenu((v) => !v)}
-        onCloseUserMenu={() => setShowUserMenu(false)}
-        onRequestLogout={() => {
-          setShowUserMenu(false);
-          setShowLogoutConfirm(true);
-        }}
-        onNavigateDashboard={() => navigate('/dashboard')}
-        onNavigateSignIn={() => navigate('/')}
-        onNavigateSignUp={() => navigate('/register')}
-        onToggleSidebar={() => setShowSidebar((v) => !v)}
-      />
+      {/* VoiceAgentHeader removed - handled by MainLayout */}
 
       {/* Description bar */}
-      <div
-        data-va="descbar"
-        className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
-      >
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-700">{t('va.descbar.label')}</span>
-          <span className="text-gray-400">·</span>
-          <span className="text-gray-700">
-            {customTopicLabel ??
-              (topic
-                ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic)
-                : 'Daily Conversation')}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            data-testid="button-mobile-panel"
-            onClick={() => setShowLeftPanelMobile((v) => !v)}
-            title={t('va.left.aiFeedback')}
-            aria-label={t('va.left.aiFeedback')}
-            className="md:hidden p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+      {(topic || customTopicLabel) && (
+        <div
+          data-va="descbar"
+          className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-[#f5f7fa]/80 text-xs text-gray-500"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-700">{t('va.descbar.label')}</span>
+            <span className="text-gray-400">·</span>
+            <span className="text-gray-700">
+              {customTopicLabel ??
+                (topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : '')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="button-mobile-panel"
+              onClick={() => setShowLeftPanelMobile((v) => !v)}
+              title={t('va.left.aiFeedback')}
+              aria-label={t('va.left.aiFeedback')}
+              className="md:hidden p-1.5 rounded hover:bg-gray-100 transition-colors text-gray-700 hover:text-gray-400"
             >
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-          <button
-            data-testid="button-connect"
-            onClick={handleConnect}
-            disabled={isConnecting}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-              isConnected
-                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <button
+              data-testid="button-connect"
+              onClick={handleConnect}
+              disabled={isConnecting}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
+                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                  : isConnecting
+                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+                }`}
+            >
+              {isConnected
+                ? t('va.connect.disconnect')
                 : isConnecting
-                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-            }`}
-          >
-            {isConnected
-              ? t('va.connect.disconnect')
-              : isConnecting
-                ? t('va.connect.connecting')
-                : t('va.connect.connect')}
-          </button>
+                  ? t('va.connect.connecting')
+                  : t('va.connect.connect')}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Body row: persistent sidebar + main content */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* ChatGPT-style persistent sidebar */}
         <ConversationSidebar
-          open={showSidebar}
-          onClose={() => setShowSidebar(false)}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
           token={getAuthSession()?.token ?? null}
           topicCategories={topicCategories}
           conversations={conversations}
@@ -939,7 +947,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           onSelectTopic={handleTopicSelect}
           onSelectConversation={(id, topicCode) => {
             if (isConnected) persistSession();
-            setShowSidebar(false);
+            setSidebarOpen(false);
             loadConversationInPlace(id, topicCode ?? null);
           }}
           onNewChat={(topicCode) => {
@@ -961,7 +969,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             setConversations((prev) => prev.filter((c) => c.id !== id));
             setIsTopicLimitReached(false);
           }}
-          onToggleSidebar={() => setShowSidebar((v) => !v)}
+          onToggleSidebar={toggleSidebar}
         />
 
         {/* Main content */}
@@ -975,9 +983,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           )}
           <div
             data-va="left"
-            className={`${
-              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
+            className={`${showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+              } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
             <LeftAudioPanel
               gender={gender}
@@ -1008,7 +1015,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           </div>
 
           {/* Right panel: Conversation transcript */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             {/* Panel top bar */}
             <div
               data-va="conv-header"
@@ -1039,7 +1046,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             {/* Messages area */}
             <div
               data-va="messages"
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin"
+              className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-4 scrollbar-thin"
             >
               {/* Soft loading spinner while fetching existing conversation history */}
               {historyLoading && (
@@ -1051,20 +1058,40 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 </div>
               )}
 
+              {/* Conditional empty state / welcome screen */}
               {!historyLoading && status === 'disconnected' && messages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center">
-                    <SiOpenai className="w-8 h-8 text-blue-400/50" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-gray-600 text-sm">
-                      {t('va.empty.clickConnectPrefix')}{' '}
-                      <span className="font-semibold text-gray-900">{t('va.connect.connect')}</span>{' '}
-                      {t('va.empty.clickConnectSuffix')}
-                    </p>
-                    <p className="text-gray-400 text-xs">{t('va.empty.transcriptHere')}</p>
-                  </div>
-                </div>
+                <>
+                  {!isAuthenticated ? (
+                    /* Welcome Screen for Guests (PLG) */
+                    <div className="h-full flex flex-col items-center justify-center text-center gap-6 max-w-md mx-auto animate-in fade-in zoom-in duration-500">
+                      <div className="w-24 h-24 rounded-4xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
+                        <img
+                          src="/src/public/audio-waves.png"
+                          alt="Logo"
+                          className="w-full h-full object-cover p-4"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100 tracking-tight">
+                          {t('va.welcome.title')}
+                        </h2>
+                        <p className="text-gray-500 dark:text-slate-400 text-sm leading-relaxed">
+                          {t('va.welcome.subtitle')}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Standard Empty State for Logged-in Users */
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <div className="w-16 h-16 rounded-2xl bg-gray-50 dark:bg-slate-800/50 flex items-center justify-center mb-4">
+                        <Mic className="w-8 h-8 text-gray-300 dark:text-slate-600" />
+                      </div>
+                      <p className="text-gray-400 dark:text-slate-500 text-sm">
+                        {t('va.history.empty')}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {showSessionSummary && sessionSummary && (
@@ -1141,6 +1168,34 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               onTranscribe={onTranscribe}
               onSendRecording={onSendRecording}
             />
+            {!isAuthenticated && (
+              <div className="px-4 py-6 border-t border-gray-100 bg-white/80 backdrop-blur-md">
+                <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 p-6 bg-linear-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100/50 shadow-sm">
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-base font-bold text-gray-900">
+                      Sign in or Sign up to start talking
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Join thousands of learners improving their English every day.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 w-full sm:w-auto">
+                    <button
+                      onClick={() => navigate('/login')}
+                      className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95"
+                    >
+                      Sign in
+                    </button>
+                    <button
+                      onClick={() => navigate('/register')}
+                      className="flex-1 sm:flex-none px-8 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all active:scale-95"
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

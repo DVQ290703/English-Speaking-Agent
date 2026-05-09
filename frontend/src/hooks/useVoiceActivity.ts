@@ -1,9 +1,187 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+
+import { VAD_CONFIG } from '../lib/vad/VADConfig';
+import { VADController } from '../lib/vad/VADController';
+import { computeVADFrameMetrics } from '../lib/vad/VADMath';
+import type { VADDebugData, VADSessionQuality, VADState } from '../lib/vad/VADTypes';
 
 type WindowWithWebkitAudio = Window &
   typeof globalThis & {
     webkitAudioContext?: typeof AudioContext;
   };
+
+interface UseVoiceActivityOptions {
+  onSpeechComplete?: () => void;
+}
+
+interface UseVoiceActivityResult {
+  isSpeaking: boolean;
+  getLastSessionQuality: () => VADSessionQuality;
+}
+
+const DEFAULT_VAD_SESSION_QUALITY: VADSessionQuality = {
+  speechDetected: false,
+  speechFrameRatio: 0,
+  peakRMS: 0,
+  durationMs: 0,
+};
+
+let workletModuleCounter = 0;
+
+function buildWorkletSource(processorName: string, frameSize: number): string {
+  return `class VADFrameProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = new Float32Array(${frameSize});
+    this.offset = 0;
+  }
+
+  process(inputs) {
+    const channelData = inputs[0] && inputs[0][0];
+    if (channelData && channelData.length > 0) {
+      let sourceIndex = 0;
+      while (sourceIndex < channelData.length) {
+        const remaining = this.buffer.length - this.offset;
+        const copyCount = Math.min(remaining, channelData.length - sourceIndex);
+        this.buffer.set(channelData.subarray(sourceIndex, sourceIndex + copyCount), this.offset);
+        this.offset += copyCount;
+        sourceIndex += copyCount;
+
+        if (this.offset === this.buffer.length) {
+          this.port.postMessage(this.buffer.slice());
+          this.offset = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('${processorName}', VADFrameProcessor);
+`;
+}
+
+async function createAudioFrameBridge(
+  ctx: AudioContext,
+  source: MediaStreamAudioSourceNode,
+  onSamples: (samples: Float32Array) => void,
+  shouldAbort: () => boolean,
+): Promise<{ cleanup: () => void; processor: VADDebugData['processor'] }> {
+  const noOpBridge = {
+    processor: 'unavailable' as const,
+    cleanup: () => {},
+  };
+
+  if (shouldAbort() || (ctx.state as string) === 'closed') {
+    return noOpBridge;
+  }
+
+  const silenceGain = ctx.createGain();
+  silenceGain.gain.value = 0;
+
+  const cleanupNodes = (disconnect: () => void) => {
+    try {
+      disconnect();
+    } catch {
+      /* ignore */
+    }
+    try {
+      silenceGain.disconnect();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Prefer AudioWorklet when available for lower-jitter processing.
+  // Safari < 14 lacks it, so we fall back to ScriptProcessor below.
+  if ('audioWorklet' in ctx && typeof AudioWorkletNode !== 'undefined') {
+    try {
+      const processorName = `vad-frame-processor-${++workletModuleCounter}`;
+      const moduleUrl = URL.createObjectURL(
+        new Blob([buildWorkletSource(processorName, VAD_CONFIG.analysisBufferSize)], {
+          type: 'application/javascript',
+        }),
+      );
+
+      try {
+        await ctx.audioWorklet.addModule(moduleUrl);
+        // console.log('[VAD] AudioWorklet module added successfully');
+      } finally {
+        URL.revokeObjectURL(moduleUrl);
+      }
+
+      if (shouldAbort() || (ctx.state as string) === 'closed') {
+        return noOpBridge;
+      }
+
+      const node = new AudioWorkletNode(ctx, processorName, {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+        channelCount: 1,
+      });
+
+      node.port.onmessage = (event: MessageEvent<Float32Array>) => {
+        onSamples(event.data);
+      };
+
+      source.connect(node);
+      node.connect(silenceGain);
+      silenceGain.connect(ctx.destination);
+
+      return {
+        processor: 'audio-worklet',
+        cleanup: () => {
+          cleanupNodes(() => {
+            node.port.onmessage = null;
+            source.disconnect(node);
+            node.disconnect();
+          });
+        },
+      };
+    } catch (err) {
+      if (shouldAbort() || (ctx.state as string) === 'closed') {
+        return noOpBridge;
+      }
+      // console.warn('[VAD] AudioWorklet unavailable — falling back to ScriptProcessor', err);
+    }
+  }
+
+  if (shouldAbort() || (ctx.state as string) === 'closed') {
+    return noOpBridge;
+  }
+
+  const processor = ctx.createScriptProcessor(VAD_CONFIG.analysisBufferSize, 1, 1);
+  processor.onaudioprocess = (event: AudioProcessingEvent) => {
+    const channelData = event.inputBuffer.getChannelData(0);
+    onSamples(channelData.slice());
+  };
+
+  source.connect(processor);
+  processor.connect(silenceGain);
+  silenceGain.connect(ctx.destination);
+
+  return {
+    processor: 'script-processor',
+    cleanup: () => {
+      cleanupNodes(() => {
+        processor.onaudioprocess = null;
+        source.disconnect(processor);
+        processor.disconnect();
+      });
+    },
+  };
+}
+
+const DEFAULT_VAD_DEBUG: VADDebugData = {
+  state: 'calibrating',
+  rms: 0,
+  zcr: 0,
+  snr: 0,
+  speechFrameRatio: 0,
+  threshold: 0,
+  processor: 'unavailable',
+};
 
 /**
  * Detects whether the user is currently speaking by sampling the RMS of a
@@ -23,133 +201,221 @@ type WindowWithWebkitAudio = Window &
 export default function useVoiceActivity(
   streamRef: RefObject<MediaStream | null>,
   active: boolean,
-  options: { threshold?: number; attackMs?: number; releaseMs?: number } = {},
-) {
-  const { threshold = 0.025, attackMs = 30, releaseMs = 220 } = options;
+  options: UseVoiceActivityOptions = {},
+): UseVoiceActivityResult {
+  const isDev = import.meta.env.DEV;
+  const { onSpeechComplete } = options;
   const [internalSpeaking, setInternalSpeaking] = useState(false);
+  const controllerRef = useRef(new VADController());
+  const speakingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
+  const lastLogAtRef = useRef(0);
+  const lastLoggedStateRef = useRef<VADState>('calibrating');
+  const onSpeechCompleteRef = useRef(onSpeechComplete);
+  const debugRef = useRef<VADDebugData>(DEFAULT_VAD_DEBUG);
+  const lastSessionQualityRef = useRef<VADSessionQuality>(DEFAULT_VAD_SESSION_QUALITY);
+
+  useEffect(() => {
+    onSpeechCompleteRef.current = onSpeechComplete;
+  }, [onSpeechComplete]);
+
+  useEffect(() => {
+    if (!active) {
+      const completedQuality = controllerRef.current.sessionQuality;
+      if (completedQuality.durationMs > 0) {
+        lastSessionQualityRef.current = completedQuality;
+      }
+      controllerRef.current.reset();
+      speakingRef.current = false;
+      stopRequestedRef.current = false;
+      lastLogAtRef.current = 0;
+      lastLoggedStateRef.current = 'calibrating';
+      debugRef.current = DEFAULT_VAD_DEBUG;
+    }
+  }, [active, isDev]);
 
   useEffect(() => {
     if (!active) return;
     const stream = streamRef.current;
+    // console.log('[VAD] effect triggered', { active, hasStream: !!stream });
     if (!stream) return;
+
+    /*
+    console.log('[VAD] stream diagnostic', {
+      streamId: stream?.id,
+      active: stream?.active,
+      trackCount: stream?.getTracks().length,
+      tracks: stream?.getTracks().map(t => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+        label: t.label
+      }))
+    });
+    */
 
     const w = window as WindowWithWebkitAudio;
     const Ctor = w.AudioContext || w.webkitAudioContext;
     if (!Ctor) return;
 
     let cancelled = false;
-    let raf: number | null = null;
     let ctx: AudioContext | null = null;
     let source: MediaStreamAudioSourceNode | null = null;
-    let analyser: AnalyserNode | null = null;
+    let teardownProcessor: (() => void) | null = null;
+
+    controllerRef.current.reset();
+    lastSessionQualityRef.current = DEFAULT_VAD_SESSION_QUALITY;
+    speakingRef.current = false;
+    stopRequestedRef.current = false;
+    lastLogAtRef.current = 0;
+    lastLoggedStateRef.current = 'calibrating';
+    debugRef.current = DEFAULT_VAD_DEBUG;
+    setInternalSpeaking(false);
+    let frameCount = 0;
 
     const teardown = () => {
-      if (raf !== null) {
-        cancelAnimationFrame(raf);
-        raf = null;
-      }
+      teardownProcessor?.();
+      teardownProcessor = null;
       try {
         source?.disconnect();
       } catch {
         /* ignore */
       }
       try {
-        analyser?.disconnect();
+        if (ctx && ctx.state !== 'closed') {
+          void ctx.close();
+          // console.log('[VAD] cleanup: AudioContext closed');
+        }
       } catch {
         /* ignore */
       }
-      try {
-        if (ctx && ctx.state !== 'closed') void ctx.close();
-      } catch {
-        /* ignore */
-      }
+      // console.log('[VAD] cleanup: audio graph disconnected');
       source = null;
-      analyser = null;
       ctx = null;
     };
 
-    try {
-      ctx = new Ctor();
-      source = ctx.createMediaStreamSource(stream);
-      analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.6;
-      source.connect(analyser);
-      // Some browsers (notably iOS Safari) start AudioContexts in the
-      // 'suspended' state until a user gesture; resume opportunistically
-      // so RMS sampling actually reflects the input level.
-      if (ctx.state === 'suspended') {
-        void ctx.resume().catch(() => {});
-      }
-    } catch {
-      teardown();
-      return;
-    }
-
-    const data = new Uint8Array(analyser.fftSize);
-    let lastSpeaking = false;
-    let firstTick = true;
-    let aboveSince = 0;
-    let belowSince = 0;
-
-    const tick = () => {
-      if (cancelled || !analyser) return;
-      // First tick after (re)binding: clear any stale `true` from a previous
-      // activation cycle so the consumer doesn't briefly see "speaking" while
-      // the new mic input is still silent. Done in the rAF callback (allowed
-      // by `react-hooks/set-state-in-effect`) rather than the effect body.
-      if (firstTick) {
-        firstTick = false;
-        setInternalSpeaking(false);
-      }
-      // If the underlying stream was swapped (e.g. user changed mic device),
-      // stop sampling — the parent effect will re-bind on the next active
-      // toggle. This avoids reporting speech from a stale, possibly closed
-      // MediaStreamSource.
-      if (streamRef.current !== stream) {
-        if (lastSpeaking) {
-          lastSpeaking = false;
-          setInternalSpeaking(false);
-        }
+    const processSamples = (samples: Float32Array) => {
+      if (cancelled || streamRef.current !== stream) {
         return;
       }
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) {
-        const v = (data[i] - 128) / 128;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / data.length);
-      const isLoud = rms > threshold;
-      const now = performance.now();
 
-      if (isLoud) {
-        if (aboveSince === 0) aboveSince = now;
-        belowSince = 0;
-        if (!lastSpeaking && now - aboveSince >= attackMs) {
-          lastSpeaking = true;
-          setInternalSpeaking(true);
-        }
-      } else {
-        if (belowSince === 0) belowSince = now;
-        aboveSince = 0;
-        if (lastSpeaking && now - belowSince >= releaseMs) {
-          lastSpeaking = false;
-          setInternalSpeaking(false);
+      /*
+      if (frameCount < 3) {
+        console.log('[VAD] raw audio sample check', {
+          frameCount,
+          firstSample: samples[0],
+          allZero: samples.every(v => v === 0)
+        });
+        frameCount++;
+      }
+      */
+
+      const now = performance.now();
+      const metrics = computeVADFrameMetrics(samples);
+      const decision = controllerRef.current.processFrame(metrics, now);
+      lastSessionQualityRef.current = controllerRef.current.sessionQuality;
+      debugRef.current = {
+        state: decision.state,
+        rms: decision.rms,
+        zcr: decision.zcr,
+        snr: decision.snr,
+        speechFrameRatio: decision.speechFrameRatio,
+        threshold: decision.threshold,
+        processor: debugRef.current.processor,
+      };
+
+      if (decision.isSpeaking !== speakingRef.current) {
+        speakingRef.current = decision.isSpeaking;
+        setInternalSpeaking(decision.isSpeaking);
+      }
+
+      if (
+        (isDev && decision.shouldStop) ||
+        (isDev && decision.state !== lastLoggedStateRef.current) ||
+        (isDev && now - lastLogAtRef.current >= VAD_CONFIG.debugLogIntervalMs)
+      ) {
+        if (isDev) {
+          /*
+          console.log('[VAD]', {
+            state: decision.state,
+            rms: Number(decision.rms.toFixed(4)),
+            zcr: Number(decision.zcr.toFixed(4)),
+            snr: Number(decision.snr.toFixed(2)),
+            speechFrameRatio: Number(decision.speechFrameRatio.toFixed(2)),
+            threshold: Number(decision.threshold.toFixed(4)),
+            processor: debugRef.current.processor,
+          });
+          */
+          lastLoggedStateRef.current = decision.state;
+          lastLogAtRef.current = now;
         }
       }
-      raf = requestAnimationFrame(tick);
+
+      if (decision.shouldStop && !stopRequestedRef.current) {
+        stopRequestedRef.current = true;
+        onSpeechCompleteRef.current?.();
+      }
     };
-    raf = requestAnimationFrame(tick);
+
+    void (async () => {
+      try {
+        ctx = new Ctor();
+        // Safari can start AudioContext suspended until a user-driven record session begins.
+        // Resume before wiring analysis so VAD sees real microphone samples.
+        if (ctx.state === 'suspended') {
+          await ctx.resume();
+          // console.log('[VAD] AudioContext resumed from suspended state');
+        }
+        // console.log('[VAD] AudioContext state:', ctx.state);
+
+        /*
+        console.log('[VAD] audio graph setup', {
+          contextState: ctx.state,
+          processorType: 'audio-worklet' in ctx && typeof AudioWorkletNode !== 'undefined' ? 'AudioWorklet' : 'ScriptProcessor'
+        });
+        */
+
+        if (cancelled) {
+          void ctx.close();
+          return;
+        }
+
+        source = ctx.createMediaStreamSource(stream);
+        const bridge = await createAudioFrameBridge(ctx, source, processSamples, () => cancelled);
+        if (cancelled || ctx.state === 'closed') {
+          bridge.cleanup();
+          return;
+        }
+        /*
+        console.log('[VAD] audio graph connected', {
+          sourceId: source.mediaStream.id,
+          processor: bridge.processor,
+          contextState: ctx.state
+        });
+        */
+        debugRef.current = {
+          ...debugRef.current,
+          processor: bridge.processor,
+        };
+        teardownProcessor = bridge.cleanup;
+      } catch (err) {
+        // console.error('[VAD] Failed to initialize voice activity detector', err);
+        teardown();
+      }
+    })();
 
     return () => {
       cancelled = true;
       teardown();
     };
-  }, [active, streamRef, threshold, attackMs, releaseMs]);
+  }, [active, streamRef, isDev]);
 
   // Gate the returned value on `active` so consumers see `false` instantly
   // when activation flips off — without us having to call setState inside
   // the effect body or cleanup.
-  return active && internalSpeaking;
+  return {
+    isSpeaking: active && internalSpeaking,
+    getLastSessionQuality: () => lastSessionQualityRef.current,
+  };
 }

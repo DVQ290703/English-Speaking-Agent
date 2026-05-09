@@ -334,6 +334,32 @@ def delete_conversation(
     logger.info("delete_conversation conversation_id=%s user_id=%s", conv_id_str, user_id)
 
 
+@router.patch("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def update_conversation(
+    conversation_id: uuid.UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Mark a conversation as finished by setting ended_at = NOW().
+    This enables duration calculation for dashboard statistics.
+    """
+    conv_id_str = str(conversation_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE conversations
+                SET ended_at = NOW(), updated_at = NOW()
+                WHERE id = %s AND user_id = %s AND ended_at IS NULL
+                RETURNING id::text
+                """,
+                (conv_id_str, user_id),
+            )
+            # If no row returned, it either doesn't exist or already has ended_at.
+            # We don't error out if it already has ended_at (idempotent).
+    logger.info("update_conversation (ended_at) conversation_id=%s user_id=%s", conv_id_str, user_id)
+
+
 @router.get("/{conversation_id}/messages-with-scores", response_model=ConversationWithScoresResponse)
 def get_conversation_messages_with_scores(
     conversation_id: str,

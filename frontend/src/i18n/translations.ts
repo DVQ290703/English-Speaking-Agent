@@ -108,6 +108,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'toast.accountCreated': 'Account created!',
     'toast.registerFailed': 'Registration failed. Please try again.',
     'toast.loginRequired': 'Please sign in to access this page.',
+    'va.toast.yourTurn': "It's your turn to speak",
 
     // Auth (loading states)
     'auth.signingIn': 'Signing in…',
@@ -128,6 +129,12 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.replayLast': 'Replay last agent reply',
     'shortcuts.newSession': 'Start new session',
     'shortcuts.toggleTheme': 'Toggle dark mode',
+    'shortcuts.openFlashcards': 'Open Flashcards',
+    'shortcuts.section.flashcards': 'Flashcards',
+    'shortcuts.flashcardFlip': 'Flashcards',
+    'shortcuts.flashcardRate': 'Rate card (1: Again, 2: Hard, 3: Good, 4: Easy)',
+    'shortcuts.flashcardReplay': 'Replay audio',
+    'shortcuts.toggleAutoPlay': 'Toggle auto-play audio',
 
     // Badges / gamification
     'badges.title': 'Achievements',
@@ -398,6 +405,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
       'Could not start the session. Please check your microphone and try again.',
     'va.alert.recognitionFailed': 'Speech recognition could not start: {detail}',
 
+    // VoiceAgent — welcome screen
+    'va.welcome.title': "Hello! I'm your English Speaking Agent",
+    'va.welcome.subtitle':
+      "I'm here to help you practice your English through natural conversations, pronunciation feedback, and real-time corrections.",
+
     // Message bubble
     'bubble.replay.title': 'Replay',
     'bubble.score.title': 'Pronunciation score',
@@ -495,6 +507,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'toast.accountCreated': 'Đã tạo tài khoản!',
     'toast.registerFailed': 'Đăng ký thất bại. Vui lòng thử lại.',
     'toast.loginRequired': 'Vui lòng đăng nhập để vào trang này.',
+    'va.toast.yourTurn': 'Đến lượt bạn nói',
 
     // Auth (loading states)
     'auth.signingIn': 'Đang đăng nhập…',
@@ -515,6 +528,12 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.replayLast': 'Nghe lại câu cuối của trợ lý',
     'shortcuts.newSession': 'Bắt đầu phiên mới',
     'shortcuts.toggleTheme': 'Đổi giao diện sáng/tối',
+    'shortcuts.openFlashcards': 'Mở Flashcards',
+    'shortcuts.section.flashcards': 'Flashcards',
+    'shortcuts.flashcardFlip': 'Flashcards',
+    'shortcuts.flashcardRate': 'Đánh giá (1: Lại, 2: Khó, 3: Tốt, 4: Dễ)',
+    'shortcuts.flashcardReplay': 'Nghe lại âm thanh',
+    'shortcuts.toggleAutoPlay': 'Bật/tắt tự động phát âm thanh',
 
     // Badges / gamification
     'badges.title': 'Thành tích',
@@ -578,7 +597,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.deleteFailed': 'Không thể xóa cuộc hội thoại.',
     'va.sidebar.close': 'Đóng thanh bên',
     'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
-    'va.sidebar.limitWarningAlert': 'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
+    'va.sidebar.limitWarningAlert':
+      'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
     'va.sidebar.limitBadge': '5/5',
     'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
     'va.sidebar.emptyTopic': 'Chưa có hội thoại nào cho topic này.',
@@ -779,6 +799,11 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
       'Nhận dạng giọng nói liên tục lỗi. Hãy thử mở app ở tab mới (Chrome/Edge) và cấp quyền micro.',
     'va.alert.connectFailed': 'Không thể bắt đầu phiên. Hãy kiểm tra micro và thử lại.',
     'va.alert.recognitionFailed': 'Không khởi động được nhận dạng giọng nói: {detail}',
+
+    // VoiceAgent — welcome screen
+    'va.welcome.title': 'Chào mừng bạn đến với English Speaking Agent',
+    'va.welcome.subtitle':
+      'Tôi sẽ giúp bạn luyện nói tiếng Anh thông qua các cuộc trò chuyện tự nhiên, phản hồi phát âm và sửa lỗi thời gian thực.',
 
     // Message bubble
     'bubble.replay.title': 'Phát lại',

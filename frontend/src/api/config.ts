@@ -18,13 +18,15 @@ export const ENDPOINTS = {
     forTopic: (code: string) =>
       `/api/conversations/for-topic?topic_code=${encodeURIComponent(code)}`,
     delete: (conversationId: string) => `/api/conversations/${conversationId}`,
+    update: (conversationId: string) => `/api/conversations/${conversationId}`,
     stats: '/api/conversations/stats',
   },
   topics: {
     categories: '/api/topics/get_categories_topics',
   },
   grammar: {
-    detailFeedback: (messageId: string) => `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
+    detailFeedback: (messageId: string) =>
+      `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
   },
   flashcards: {
     decks: '/api/flashcards/decks',

@@ -24,6 +24,13 @@ export const createDeck = (token, { name, description }) =>
     body: JSON.stringify({ name, description }),
   });
 
+export const updateDeck = (token, deckId, { name, description }) =>
+  request(ENDPOINTS.flashcards.deck(deckId), {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, description }),
+  });
+
 export const deleteDeck = (token, deckId) =>
   request(ENDPOINTS.flashcards.deck(deckId), {
     method: 'DELETE',
@@ -50,7 +57,7 @@ export const createCardWithMedia = (token, deckId, { front_text, back_text, tags
   const form = new FormData();
   form.append('front_text', front_text);
   form.append('back_text', back_text);
-  (tags || []).forEach(t => form.append('tags', t));
+  (tags || []).forEach((t) => form.append('tags', t));
   (mediaFiles || []).forEach(({ file, side, media_type }) => {
     form.append('files', file);
     form.append('sides', side);
@@ -64,8 +71,35 @@ export const createCardWithMedia = (token, deckId, { front_text, back_text, tags
   });
 };
 
+export const updateCard = (token, cardId, { front_text, back_text, tags }) =>
+  request(ENDPOINTS.flashcards.card(cardId), {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ front_text, back_text, tags }),
+  });
+
 export const deleteCard = (token, cardId) =>
   request(ENDPOINTS.flashcards.card(cardId), {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+// ── Media ─────────────────────────────────────────────────────────────────────
+
+export const uploadCardMedia = (token, cardId, { side, media_type, file }) => {
+  const form = new FormData();
+  form.append('side', side);
+  form.append('media_type', media_type);
+  form.append('file', file);
+  return request(`${ENDPOINTS.flashcards.card(cardId)}/media`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: form,
+  });
+};
+
+export const deleteCardMedia = (token, mediaId) =>
+  request(`/api/flashcards/media/${mediaId}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -73,12 +107,9 @@ export const deleteCard = (token, cardId) =>
 // ── Reviews ───────────────────────────────────────────────────────────────────
 
 export const getDueCards = (token, deckId) =>
-  request(
-    deckId
-      ? `${ENDPOINTS.flashcards.due}?deck_id=${deckId}`
-      : ENDPOINTS.flashcards.due,
-    { headers: authHeaders(token) },
-  );
+  request(deckId ? `${ENDPOINTS.flashcards.due}?deck_id=${deckId}` : ENDPOINTS.flashcards.due, {
+    headers: authHeaders(token),
+  });
 
 export const submitReview = (token, cardId, rating) =>
   request(ENDPOINTS.flashcards.review(cardId), {

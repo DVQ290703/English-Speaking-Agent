@@ -1,25 +1,80 @@
-import { Lightbulb } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
+import { createPortal } from 'react-dom';
+import { useLayoutEffect, useState, useEffect } from 'react';
+import { Lightbulb } from 'lucide-react';
 
 interface PhonemeTipProps {
   phoneme: string;
   score: number;
   tip: string;
+  triggerRect: DOMRect;
   onClose: () => void;
 }
 
-export default function PhonemeTip({ phoneme, score, tip, onClose }: PhonemeTipProps) {
+export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }: PhonemeTipProps) {
   const t = useT();
   const resolvedTip = tip || t('va.tip.noTip');
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
 
-  return (
+  useLayoutEffect(() => {
+    const tipWidth = 400; // More compact width
+    const margin = 20;
+
+    // Calculate horizontal center
+    let left = triggerRect.left + triggerRect.width / 2;
+    const halfWidth = Math.min(tipWidth, window.innerWidth - margin * 2) / 2;
+
+    // Boundary check for horizontal
+    if (left - halfWidth < margin) {
+      left = halfWidth + margin;
+    } else if (left + halfWidth > window.innerWidth - margin) {
+      left = window.innerWidth - margin - halfWidth;
+    }
+
+    // Position below the trigger
+    const top = triggerRect.bottom + 10;
+
+    setCoords({ top, left });
+
+    const onPointerDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('[data-phoneme-tip]')) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown, true);
+    return () => document.removeEventListener('mousedown', onPointerDown, true);
+  }, [triggerRect, onClose]);
+
+  // Close tip on scroll to avoid "floating disconnect"
+  useEffect(() => {
+    const modalContent = document.querySelector('[data-va="combined-modal-content"]');
+    if (!modalContent) return;
+
+    const onScroll = () => onClose();
+    modalContent.addEventListener('scroll', onScroll, { passive: true });
+    return () => modalContent.removeEventListener('scroll', onScroll);
+  }, [onClose]);
+
+  return createPortal(
     <div
       role="alert"
       data-phoneme-tip="true"
-      className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-80 w-137.5 max-w-[calc(100vw-2rem)] rounded-2xl border border-amber-300/90 bg-amber-50 p-5 shadow-2xl ring-1 ring-amber-200/70 transition-all duration-200 ease-in-out dark:border-amber-400/40 dark:bg-amber-950 dark:ring-amber-400/20"
+      style={{
+        position: 'fixed',
+        top: coords.top,
+        left: coords.left,
+        transform: 'translateX(-50%)',
+      }}
+      className="z-[9999] w-[400px] max-w-[calc(100vw-2rem)] rounded-2xl border border-amber-300/90 bg-amber-50 p-5 shadow-2xl ring-1 ring-amber-200/70 transition-all duration-200 ease-in-out dark:border-amber-400/40 dark:bg-amber-950 dark:ring-amber-400/20"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 h-3 w-3 rotate-45 border-l border-t border-amber-300/90 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-950" />
+      <div
+        className="absolute -top-1.5 h-3 w-3 rotate-45 border-l border-t border-amber-300/90 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-950"
+        style={{
+          left: `calc(50% + ${triggerRect.left + triggerRect.width / 2 - coords.left}px)`,
+          transform: 'translateX(-50%) rotate(45deg)',
+        }}
+      />
 
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
@@ -55,6 +110,7 @@ export default function PhonemeTip({ phoneme, score, tip, onClose }: PhonemeTipP
           {resolvedTip}
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -25,6 +25,7 @@ export interface UseAgentAudioResult {
   trimLocalAudioUrls: (max?: number) => void;
   clearLocalAudioUrls: () => void;
   stopAndCleanupAudio: (id: number) => void;
+  stopAllAudio: () => void;
 }
 
 /**
@@ -50,6 +51,7 @@ export default function useAgentAudio({
       { audio: HTMLAudioElement; url: string; createdUrl: boolean; timeoutId?: number }
     >
   >({});
+  const currentAgentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -116,6 +118,32 @@ export default function useAgentAudio({
     delete audioPlayersRef.current[id];
   }, []);
 
+  const stopAllAudio = useCallback(() => {
+    // 1. Stop Web Speech TTS
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    ttsActiveRef.current = false;
+
+    // 2. Stop Agent Audio
+    if (currentAgentAudioRef.current) {
+      try {
+        currentAgentAudioRef.current.pause();
+        currentAgentAudioRef.current.src = '';
+      } catch {
+        /* ignore */
+      }
+      currentAgentAudioRef.current = null;
+    }
+
+    // 3. Stop all user message audio players
+    Object.keys(audioPlayersRef.current).forEach((k) => {
+      stopAndCleanupAudio(Number(k));
+    });
+
+    setAgentSpeaking(false);
+  }, [setAgentSpeaking, stopAndCleanupAudio]);
+
   useEffect(() => {
     const players = audioPlayersRef.current;
     return () => {
@@ -166,12 +194,10 @@ export default function useAgentAudio({
           utt.onend = () => {
             ttsActiveRef.current = false;
             setAgentSpeaking(false);
-            if (userMicIntentRef.current) setMicEnabled(true);
           };
           utt.onerror = () => {
             ttsActiveRef.current = false;
             setAgentSpeaking(false);
-            if (userMicIntentRef.current) setMicEnabled(true);
           };
           window.speechSynthesis.speak(utt);
         };
@@ -206,24 +232,25 @@ export default function useAgentAudio({
       try {
         window.speechSynthesis?.cancel();
         const audio = new Audio(audioUrl);
+        currentAgentAudioRef.current = audio;
         ttsActiveRef.current = true;
         setMicEnabled(false);
         setAgentSpeaking(true);
         audio.onended = () => {
+          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
         };
         audio.onerror = () => {
+          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
           speakText(text);
         };
         void audio.play().catch(() => {
+          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
           speakText(text);
         });
       } catch {
@@ -365,5 +392,6 @@ export default function useAgentAudio({
     trimLocalAudioUrls,
     clearLocalAudioUrls,
     stopAndCleanupAudio,
+    stopAllAudio,
   };
 }

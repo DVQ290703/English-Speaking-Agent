@@ -28,16 +28,39 @@ export const LANGUAGE_CODES: Record<Language, string> = {
   Vietnamese: 'vi-VN',
 };
 
+export interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+export interface SpeechRecognitionResult {
+  isFinal: boolean;
+  [index: number]: SpeechRecognitionAlternative;
+  length: number;
+}
+
+export interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+  length: number;
+}
+
+export interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
 export interface ISpeechRecognition extends EventTarget {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
   start(): void;
   stop(): void;
+  abort(): void;
   onstart: ((this: ISpeechRecognition, ev: Event) => void) | null;
   onend: ((this: ISpeechRecognition, ev: Event) => void) | null;
   onerror: ((this: ISpeechRecognition, ev: Event) => void) | null;
   onresult: ((this: ISpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onnomatch: ((this: ISpeechRecognition, ev: Event) => void) | null;
 }
 
 export type SpeechRecognitionCtor = new () => ISpeechRecognition;
