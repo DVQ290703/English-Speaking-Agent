@@ -19,6 +19,7 @@ export interface UseVoiceRecorderResult {
   status: RecorderStatus;
   recordingTime: number;
   audioBlob: Blob | null;
+  cleanBlob: Blob | null;
   audioUrl: string | null;
   visualizerData: number[];
   waveformData: number[];
@@ -162,6 +163,7 @@ export default function useVoiceRecorder({
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [visualizerData, setVisualizerData] = useState<number[]>(Array(LIVE_BAR_COUNT).fill(0));
   const [waveformData, setWaveformData] = useState<number[]>(Array(WAVEFORM_BAR_COUNT).fill(0));
+  const [cleanBlob, setCleanBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<RecorderError>(null);
   const [transcript, setTranscriptState] = useState('');
 
@@ -173,6 +175,7 @@ export default function useVoiceRecorder({
   const rafRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
+  const cleanBlobRef = useRef<Blob | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const cancelGenRef = useRef(0);
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,7 +244,9 @@ export default function useVoiceRecorder({
     releaseStream();
     revokeUrl();
     audioBlobRef.current = null;
+    cleanBlobRef.current = null;
     setAudioBlob(null);
+    setCleanBlob(null);
     setRecordingTime(0);
     setTranscriptState('');
     setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
@@ -367,13 +372,16 @@ export default function useVoiceRecorder({
 
       const gen = cancelGenRef.current;
 
-      // Decode audio buffer once — used for waveform display (and cleanBlob in Task 3)
+      // Decode audio buffer once — compute waveform bars + produce clean blob for sending
       void decodeAudioBuffer(blob)
         .then((audioBuf) => {
           if (cancelGenRef.current !== gen) return;
           setWaveformData(computeWaveformBars(audioBuf, WAVEFORM_BAR_COUNT));
+          const clean = trimGateEncode(audioBuf);
+          cleanBlobRef.current = clean;
+          setCleanBlob(clean);
         })
-        .catch(() => {});
+        .catch(() => {}); // silent — waveform stays zeros, send() falls back to raw blob
 
       // Auto-start transcription immediately
       void transcribeFnRef.current();
@@ -418,7 +426,9 @@ export default function useVoiceRecorder({
     cancelGenRef.current++; // abort any in-flight transcription
     revokeUrl();
     audioBlobRef.current = null;
+    cleanBlobRef.current = null;
     setAudioBlob(null);
+    setCleanBlob(null);
     setRecordingTime(0);
     setTranscriptState('');
     setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
@@ -427,7 +437,8 @@ export default function useVoiceRecorder({
   }, [revokeUrl]);
 
   const send = useCallback(() => {
-    const blob = audioBlobRef.current;
+    // Prefer cleanBlob (trimmed + noise-gated WAV); fall back to raw blob if processing failed
+    const blob = cleanBlobRef.current ?? audioBlobRef.current;
     if (!blob || !transcript.trim()) return;
     onSend(transcript, blob);
     setStatus('done');
@@ -435,7 +446,9 @@ export default function useVoiceRecorder({
       sendTimerRef.current = null;
       revokeUrl();
       audioBlobRef.current = null;
+      cleanBlobRef.current = null;
       setAudioBlob(null);
+      setCleanBlob(null);
       setRecordingTime(0);
       setTranscriptState('');
       setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
@@ -471,6 +484,7 @@ export default function useVoiceRecorder({
     status,
     recordingTime,
     audioBlob,
+    cleanBlob,
     audioUrl,
     visualizerData,
     waveformData,
