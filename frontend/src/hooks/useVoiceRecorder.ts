@@ -56,6 +56,8 @@ export default function useVoiceRecorder({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioBlobRef = useRef<Blob | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const cancelGenRef = useRef(0);
+  const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stopVisualizer = useCallback(() => {
     if (rafRef.current !== null) {
@@ -100,6 +102,7 @@ export default function useVoiceRecorder({
   }, []);
 
   const cancel = useCallback(() => {
+    cancelGenRef.current++;
     stopVisualizer();
     stopTimer();
     try {
@@ -120,8 +123,13 @@ export default function useVoiceRecorder({
   }, [stopVisualizer, stopTimer, releaseStream, revokeUrl]);
 
   const start = useCallback(async () => {
+    if (recorderRef.current) return;
     const w = window as WindowWithWebkit;
-    if (!navigator.mediaDevices?.getUserMedia || !(w.AudioContext || w.webkitAudioContext)) {
+    if (
+      !navigator.mediaDevices?.getUserMedia ||
+      !(w.AudioContext || w.webkitAudioContext) ||
+      typeof MediaRecorder === 'undefined'
+    ) {
       setError('not-supported');
       return;
     }
@@ -237,12 +245,15 @@ export default function useVoiceRecorder({
   const transcribe = useCallback(async () => {
     const blob = audioBlobRef.current;
     if (!blob) return;
+    const gen = cancelGenRef.current;
     setStatus('transcribing');
     try {
       const text = await onTranscribe(blob);
+      if (gen !== cancelGenRef.current) return;
       setTranscriptState(text);
       setStatus('confirm');
     } catch {
+      if (gen !== cancelGenRef.current) return;
       setError('unknown');
       setStatus('preview');
     }
@@ -257,7 +268,8 @@ export default function useVoiceRecorder({
     if (!blob || !transcript.trim()) return;
     onSend(transcript, blob);
     setStatus('done');
-    setTimeout(() => {
+    sendTimerRef.current = setTimeout(() => {
+      sendTimerRef.current = null;
       revokeUrl();
       audioBlobRef.current = null;
       setAudioBlob(null);
@@ -272,6 +284,7 @@ export default function useVoiceRecorder({
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (timerRef.current !== null) clearInterval(timerRef.current);
+      if (sendTimerRef.current !== null) clearTimeout(sendTimerRef.current);
       try {
         recorderRef.current?.stop();
       } catch {
