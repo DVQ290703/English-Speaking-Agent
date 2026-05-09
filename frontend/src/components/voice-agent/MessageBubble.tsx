@@ -1,5 +1,7 @@
 import { Bot, Play, User } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
+import type { ToolCallStep } from '../../api/chat';
+export type { ToolCallStep };
 
 export interface Mistake {
   wrong: string;
@@ -33,6 +35,7 @@ export interface Message {
   mistakes?: Mistake[];
   assessmentStatus?: 'available' | 'unavailable' | 'failed' | 'pending';
   assessmentNote?: string;
+  toolSteps?: ToolCallStep[];
 }
 
 const PHONEME_TIPS_BASE: Record<string, string> = {

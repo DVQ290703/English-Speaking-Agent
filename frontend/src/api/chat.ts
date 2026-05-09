@@ -12,6 +12,15 @@ export interface ChatRespondParams {
   conversationId?: string | null;
 }
 
+export interface ToolCallStep {
+  tool_name: string;
+  input_summary: string;
+  output_summary: string;
+  duration_ms?: number;
+  status: 'completed' | 'failed';
+  error?: string;
+}
+
 export interface ChatRespondResult {
   response_text: string;
   audio_base64?: string;
@@ -21,6 +30,7 @@ export interface ChatRespondResult {
   assistant_audio_url?: string | null;
   conversation_id?: string;
   user_message_id?: string;
+  tool_steps?: ToolCallStep[];
 }
 
 export interface GrammarFeedbackItem {
