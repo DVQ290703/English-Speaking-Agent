@@ -281,6 +281,7 @@ export default function useSendChatMessage({
                       typing: false,
                       audioUrl: playedUrl,
                       minioUrl: data.assistant_audio_url || undefined,
+                      toolSteps: data.tool_steps ?? [],
                     }
                     : message,
               ),
