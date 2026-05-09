@@ -127,7 +127,6 @@ export default function VoiceRecorderComponent({
     stop,
     retake,
     transcribe,
-    setTranscript,
     send,
     cancel,
   } = useVoiceRecorder({ selectedMicId, onTranscribe, onSend: onSendRecording });
@@ -212,14 +211,10 @@ export default function VoiceRecorderComponent({
             </div>
           ) : (
             <>
-              <p className="text-[10px] text-gray-400">Edit if needed, then send</p>
-              <textarea
-                autoFocus
-                value={transcript}
-                onChange={(e) => setTranscript(e.target.value)}
-                rows={3}
-                className="w-full resize-none rounded border border-gray-200 px-2 py-1.5 text-sm text-gray-800 outline-none focus:ring-1 focus:ring-blue-200"
-              />
+              <p className="text-[10px] text-gray-400">Transcript (read-only — retake to re-record)</p>
+              <div className="w-full rounded border border-gray-100 bg-slate-50 px-2 py-1.5 text-sm text-gray-800 select-text min-h-[3rem]">
+                {transcript}
+              </div>
             </>
           )}
 
