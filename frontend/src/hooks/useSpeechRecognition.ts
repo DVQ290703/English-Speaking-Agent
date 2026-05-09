@@ -67,7 +67,7 @@ export default function useSpeechRecognition({
     return () => {
       if (recognitionRef.current) {
         try {
-          console.log('[Speech] cleanup: aborting recognition on unmount');
+          // console.log('[Speech] cleanup: aborting recognition on unmount');
           recognitionRef.current.abort();
           recognitionRef.current = null;
         } catch {
@@ -80,7 +80,7 @@ export default function useSpeechRecognition({
   const stopSpeechRecognition = useCallback(() => {
     if (recognitionRef.current) {
       try {
-        console.log('[Speech] stopping recognition manually');
+        // console.log('[Speech] stopping recognition manually');
         recognitionRef.current.stop();
       } catch {
         /* ignore */
@@ -110,12 +110,14 @@ export default function useSpeechRecognition({
     const passesVADQualityGate = (): boolean => {
       const quality = getLastSessionQualityRef.current();
 
+      /*
       console.log('[Speech] VAD quality gate check', {
         speechDetected: quality.speechDetected,
         speechFrameRatio: quality.speechFrameRatio,
         peakRMS: quality.peakRMS,
         durationMs: quality.durationMs,
       });
+      */
 
       // Bug 1 fix: Require BOTH confirmed speech state AND minimum speech frames
       // Prevents breath sounds (detected as speech but ratio=0) from passing.
@@ -125,16 +127,19 @@ export default function useSpeechRecognition({
 
       if (!hasRealSpeech && !hasAudioEnergy) {
         // Genuine silence — reject
+        /*
         console.warn('[Speech] VAD gate: rejected — silence', {
           speechDetected: quality.speechDetected,
           speechFrameRatio: quality.speechFrameRatio,
           peakRMS: quality.peakRMS,
           reason: 'no speech signal and no audio energy',
         });
+        */
         return false;
       }
 
       if (!hasRealSpeech) {
+        /*
         console.warn('[Speech] VAD gate: rejected — breath/noise', {
           reason: !quality.speechDetected
             ? 'VAD never entered speech state'
@@ -143,6 +148,7 @@ export default function useSpeechRecognition({
           speechFrameRatio: quality.speechFrameRatio,
           peakRMS: quality.peakRMS,
         });
+        */
         return false;
       }
 
@@ -150,11 +156,11 @@ export default function useSpeechRecognition({
         quality.durationMs < VAD_GATE_MIN_DURATION_MS &&
         quality.speechFrameRatio < VAD_GATE_MIN_SPEECH_RATIO * 2
       ) {
-        console.warn('[Speech] VAD quality gate: too short with low speech ratio — send aborted');
+        // console.warn('[Speech] VAD quality gate: too short with low speech ratio — send aborted');
         return false;
       }
 
-      console.log('[Speech] VAD quality gate: PASSED — proceeding to send');
+      // console.log('[Speech] VAD quality gate: PASSED — proceeding to send');
       return true;
     };
 
@@ -163,7 +169,7 @@ export default function useSpeechRecognition({
         return await stopUserAudioCaptureRef.current();
       } catch (err) {
         if (reason !== 'effect cleanup') {
-          console.error('[Speech] stopRecording threw:', { reason, err });
+          // console.error('[Speech] stopRecording threw:', { reason, err });
         }
         return undefined;
       }
@@ -178,7 +184,7 @@ export default function useSpeechRecognition({
       try {
         const recordedAudio = await safeStopRecording(reason);
         if (!recordedAudio || recordedAudio.size === 0) {
-          console.warn('[Speech] backend-only mode: blob missing or empty — send aborted');
+          // console.warn('[Speech] backend-only mode: blob missing or empty — send aborted');
           return;
         }
 
@@ -188,9 +194,11 @@ export default function useSpeechRecognition({
 
         // Firefox and other non-Web-Speech browsers still capture audio via MediaRecorder.
         // Delegate transcription to backend Groq Whisper STT via audio_file upload.
+        /*
         console.log(
           '[Speech] SpeechRecognition unavailable — delegating transcription to backend STT',
         );
+        */
         setChatInput('');
         await Promise.resolve(sendChatMessageRef.current('', recordedAudio));
       } finally {
@@ -232,7 +240,7 @@ export default function useSpeechRecognition({
     if (!SpeechRecognitionAPI) {
       // Firefox does not expose SpeechRecognition/WebKitSpeechRecognition.
       // Keep MediaRecorder capture enabled and let the backend transcribe audio_file.
-      console.log('[Speech] SpeechRecognition not supported — using backend STT only');
+      // console.log('[Speech] SpeechRecognition not supported — using backend STT only');
       backendOnlyCaptureRef.current = true;
       setIsRecording(true);
       void startUserAudioCapture();
@@ -343,15 +351,17 @@ export default function useSpeechRecognition({
         isHandlingEndRef.current = true;
 
         try {
-          console.log('[Speech] calling stopRecording, blob expected next');
+          // console.log('[Speech] calling stopRecording, blob expected next');
           const recordedAudio = await safeStopRecording('stopAndSend');
+          /*
           console.log('[Speech] received blob', {
             type: recordedAudio?.type,
             size: recordedAudio?.size,
           });
+          */
 
           if (!recordedAudio || recordedAudio.size === 0) {
-            console.error('[Speech] blob missing or empty — send aborted');
+            // console.error('[Speech] blob missing or empty — send aborted');
             return;
           }
 
@@ -365,46 +375,54 @@ export default function useSpeechRecognition({
           // Hallucination Guard: Browser-side STT is prone to "hearing things" in noise.
           // Require higher peak energy if we got a transcript from the browser.
           if (messageText && quality.peakRMS < VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT) {
+            /*
             console.warn('[Speech] low energy + browser STT — hallucination risk, aborted', {
               peakRMS: quality.peakRMS,
               transcript: messageText,
             });
+            */
             return;
           }
 
           // Hallucination Guard: Filter out garbled or known fake patterns.
           if (messageText && isHallucinatedTranscript(messageText)) {
+            /*
             console.warn('[Speech] hallucination detected — send aborted', {
               transcript: messageText,
             });
+            */
             return;
           }
           if (!messageText && !recordedAudio) {
-            console.warn('[Speech] no transcript and no blob — send aborted');
+            // console.warn('[Speech] no transcript and no blob — send aborted');
             return;
           }
 
           if (!messageText && recordedAudio) {
             // Edge: window.SpeechRecognition fires onend without onresult for some utterances.
             // Delegate transcription to backend Groq Whisper STT via audio_file upload.
-            console.log('[Speech] transcript empty but blob present — delegating STT to backend');
+            // console.log('[Speech] transcript empty but blob present — delegating STT to backend');
           }
 
           if (messageText) {
+            /*
             console.log('[Speech] using transcript', {
               source: finalTranscript.trim() ? 'final' : 'interim (Edge fallback)',
               text: messageText,
             });
+            */
           }
 
           setChatInput('');
+          /*
           console.log('[Speech] calling sendMessage with blob', {
             hasBlob: !!recordedAudio,
             size: recordedAudio?.size,
           });
+          */
           await Promise.resolve(sendChatMessageRef.current(messageText, recordedAudio));
         } catch (err) {
-          console.error('[Speech] stop/send flow failed', err);
+          // console.error('[Speech] stop/send flow failed', err);
         } finally {
           isHandlingEndRef.current = false;
         }
@@ -420,7 +438,7 @@ export default function useSpeechRecognition({
       };
 
       recognition.onresult = async (event: SpeechRecognitionEvent) => {
-        console.log('[Speech] recognition ended, triggering stop flow');
+        // console.log('[Speech] recognition ended, triggering stop flow');
         interimTranscript = '';
         let finalChunk = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -461,14 +479,14 @@ export default function useSpeechRecognition({
       };
 
       recognition.onend = async () => {
-        console.log('[Speech] recognition ended, triggering stop flow');
+        // console.log('[Speech] recognition ended, triggering stop flow');
         setIsRecording(false);
         // ⚠️ RACE CONDITION: on Edge, speech end fires before blob resolves
         if (!isHandlingEndRef.current) {
           try {
             await stopAndSend();
           } catch (err) {
-            console.error('[Speech] onend flow failed', err);
+            // console.error('[Speech] onend flow failed', err);
           }
         }
         if (stopped) return;

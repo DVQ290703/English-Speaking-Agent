@@ -84,42 +84,42 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
   const mistakes: Mistake[] | undefined =
     m.score?.words && m.score.words.length
       ? m.score.words.flatMap((w) => {
-          const err = w.error_type;
-          const acc = Math.round(w.accuracy_score ?? 0);
-          const phonemes = (w.phonemes ?? []).map((p) => ({
-            phoneme: p.phoneme,
-            accuracy_score: Math.round(p.accuracy_score ?? 0),
-          }));
-          const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-          const phonemeNote =
-            lowPhonemes.length > 0
-              ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-              : '';
-          if (err && err !== 'None') {
-            const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-            return [
-              {
-                wrong: w.word,
-                correct: w.word,
-                type: type as Mistake['type'],
-                note: `Accuracy ${acc}%${phonemeNote}`,
-                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-              },
-            ];
-          }
-          if (acc < 90 || lowPhonemes.length > 0) {
-            return [
-              {
-                wrong: w.word,
-                correct: w.word,
-                type: 'Pronunciation' as Mistake['type'],
-                note: `Accuracy ${acc}%${phonemeNote}`,
-                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-              },
-            ];
-          }
-          return [];
-        })
+        const err = w.error_type;
+        const acc = Math.round(w.accuracy_score ?? 0);
+        const phonemes = (w.phonemes ?? []).map((p) => ({
+          phoneme: p.phoneme,
+          accuracy_score: Math.round(p.accuracy_score ?? 0),
+        }));
+        const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+        const phonemeNote =
+          lowPhonemes.length > 0
+            ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+            : '';
+        if (err && err !== 'None') {
+          const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+          return [
+            {
+              wrong: w.word,
+              correct: w.word,
+              type: type as Mistake['type'],
+              note: `Accuracy ${acc}%${phonemeNote}`,
+              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+            },
+          ];
+        }
+        if (acc < 90 || lowPhonemes.length > 0) {
+          return [
+            {
+              wrong: w.word,
+              correct: w.word,
+              type: 'Pronunciation' as Mistake['type'],
+              note: `Accuracy ${acc}%${phonemeNote}`,
+              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+            },
+          ];
+        }
+        return [];
+      })
       : undefined;
 
   return {
@@ -133,13 +133,13 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
     assessmentStatus: m.score ? 'available' : 'unavailable',
     scoreDetails: m.score
       ? {
-          overall: Math.round(m.score.overall_score ?? 0),
-          pronunciation: Math.round(m.score.overall_score ?? 0),
-          fluency: Math.round(m.score.fluency_score ?? 0),
-          accuracy: Math.round(m.score.accuracy_score ?? 0),
-          completeness:
-            m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
-        }
+        overall: Math.round(m.score.overall_score ?? 0),
+        pronunciation: Math.round(m.score.overall_score ?? 0),
+        fluency: Math.round(m.score.fluency_score ?? 0),
+        accuracy: Math.round(m.score.accuracy_score ?? 0),
+        completeness:
+          m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
+      }
       : undefined,
     mistakes,
   };
@@ -175,6 +175,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const initialState = useMemo(() => getInitialSessionState(), []);
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
+  const isConnected = status === 'connected';
+  const isConnecting = status === 'connecting';
   const [micEnabled, setMicEnabled] = useState(false);
   // Tracks whether the user has explicitly turned the mic on. Used so the
   // auto-mute-during-TTS logic doesn't accidentally turn the mic on when the
@@ -480,7 +482,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setMicEnabled,
   });
 
-  const { stopSpeechRecognition } = useSpeechRecognition({
+  useSpeechRecognition({
     status,
     micEnabled,
     language,
@@ -498,40 +500,20 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     t,
   });
 
-  // Master cleanup effect — runs on component unmount (navigation away)
+  // Toast notification when it's the user's turn to speak (after agent finishes talking).
   useEffect(() => {
-    return () => {
-      console.log('[VoiceAgent] unmounting — running full cleanup');
-      try {
-        // 1. Stop mic + recording (triggers hooks cleanup)
-        setMicEnabled(false);
-        // 2. Stop agent audio playback immediately
-        stopAllAudio();
-        // 3. Stop SpeechRecognition
-        stopSpeechRecognition();
-        console.log('[VoiceAgent] cleanup complete');
-      } catch (err) {
-        console.warn('[VoiceAgent] cleanup error', err);
+    if (isConnected && !agentSpeaking && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      // Only show if the last message was from the agent and they are not currently "typing"
+      // (which for the agent means waiting for a response or streaming).
+      if (lastMsg.role === 'agent' && !agentTyping) {
+        toast.info(t('va.toast.yourTurn'), {
+          position: 'top-center',
+          duration: 2500,
+        });
       }
-    };
-  }, []); // empty deps → runs only on unmount
-
-  // Handle browser tab close / page refresh (hard disconnect)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      // Synchronous cleanup only
-      try {
-        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
-        stopAllAudio();
-      } catch {
-        /* ignore */
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [mediaStreamRef, stopAllAudio]);
+    }
+  }, [agentSpeaking, isConnected, messages, t, agentTyping]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -723,7 +705,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         );
         setIsTopicLimitReached(Boolean(data.limit_reached));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey, topic]);
 
@@ -760,31 +742,15 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [clearTimers, clearLocalAudioUrls, releaseMediaStream]);
 
-  // Notify user to speak when agent finishes
-  useEffect(() => {
-    if (!agentSpeaking && status === 'connected') {
-      const isVi = lang === 'vi';
-      const timer = setTimeout(() => {
-        toast.info(isVi ? 'Đến lượt bạn nói!' : 'Your turn to speak!', {
-          duration: 3000,
-          position: 'top-center',
-          icon: '🎙️',
-        });
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [agentSpeaking, status, lang]);
-
-  const isConnected = status === 'connected';
-  const isConnecting = status === 'connecting';
 
   // Auto-enable microphone when we transition to 'connected'.
   useEffect(() => {
     if (status !== 'connected') return;
-    // By default, keep mic OFF until user explicitly enables it (Option 1)
-    userMicIntentRef.current = false;
+    // Mark that the user (or system) intends the mic to be on so other
+    // components (e.g. agent audio restoring behavior) can respect it.
+    userMicIntentRef.current = true;
     try {
-      setMicEnabled(false);
+      setMicEnabled(true);
     } catch {
       /* ignore */
     }
@@ -838,51 +804,56 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // the dashboard), automatically open the most recent DB conversation for that
   // topic so the user lands directly in context. Fires only once per mount.
   useEffect(() => {
-    if (hasAutoLoadedRef.current) return;
-    if (conversationIdRef.current) return; // already in a DB session
-    if (!topic) return;
-    if (conversations.length === 0) return; // wait for conversations to load
+    // 1. If we've already performed an auto-load for this session/topic switch, 
+    // or if we are already in an active session, don't do anything.
+    if (hasAutoLoadedRef.current || conversationIdRef.current) return;
 
-    hasAutoLoadedRef.current = true;
+    // 2. We need a topic and we must wait for the conversations list to finish loading.
+    if (!topic || convsLoading || conversations.length === 0) return;
 
-    const latest = conversations
-      .filter((c) => c.topic_code === topic)
-      .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+    // 3. Filter conversations to ensure they belong to the current topic.
+    // This is crucial because 'conversations' might still hold data from the previous topic
+    // for a few frames during the transition.
+    const topicConvs = conversations.filter((c) => c.topic_code === topic);
+    if (topicConvs.length === 0) return;
+
+    // 4. Find the most recent conversation.
+    const sorted = [...topicConvs].sort(
+      (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime(),
+    );
+    const latest = sorted[0];
 
     if (latest) {
-      // Use in-place loading to avoid a full page reload (SPA navigation).
+      // 5. Mark as auto-loaded and trigger the load.
+      hasAutoLoadedRef.current = true;
       loadConversationInPlace(latest.id, topic);
     }
-  }, [conversations, topic, loadConversationInPlace, initialState.conversationId]);
+  }, [conversations, topic, convsLoading, loadConversationInPlace]);
 
   const handleTopicSelect = useCallback(
     (code: string) => {
+      if (code === topic) return; // Already on this topic
+
       setCustomTopicLabel(null);
       setSubOption(null);
 
-      // Find the most recently created conversation for this topic
-      const latest = conversations
-        .filter((c) => c.topic_code === code)
-        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0];
+      // Clear stale conversations so the sidebar and auto-load logic don't see old data.
+      setConversations([]);
+      // Reset auto-load flag so the useEffect can pick up the latest for the NEW topic.
+      hasAutoLoadedRef.current = false;
+      startNewSession({ stayDisconnected: true });
+      setTopic(code);
 
-      if (latest) {
-        loadConversationInPlace(latest.id, code);
-      } else {
-        // No existing conversation — show blank new chat for this topic
-        hasAutoLoadedRef.current = false;
-        startNewSession({ stayDisconnected: true });
-        setTopic(code);
-        try {
-          const url = new URL(window.location.href);
-          url.searchParams.set('topic', code);
-          url.searchParams.delete('session');
-          window.history.replaceState({}, '', url.toString());
-        } catch {
-          /* ignore */
-        }
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('topic', code);
+        url.searchParams.delete('session');
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        /* ignore */
       }
     },
-    [conversations, loadConversationInPlace, startNewSession, setTopic],
+    [topic, setTopic, startNewSession],
   );
 
   // Keep grammar feedback bound to the currently selected sentence.
@@ -1017,13 +988,12 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               data-testid="button-connect"
               onClick={handleConnect}
               disabled={isConnecting}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
-                isConnected
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
                   ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
                   : isConnecting
                     ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
                     : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-              }`}
+                }`}
             >
               {isConnected
                 ? t('va.connect.disconnect')
@@ -1087,9 +1057,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           )}
           <div
             data-va="left"
-            className={`${
-              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
+            className={`${showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+              } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
             <LeftAudioPanel
               gender={gender}

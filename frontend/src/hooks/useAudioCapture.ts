@@ -47,7 +47,7 @@ export default function useAudioCapture(
 
   const startUserAudioCapture = useCallback(async () => {
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      console.error('[AudioCapture] MediaRecorder init stage: browser APIs unavailable');
+      // console.error('[AudioCapture] MediaRecorder init stage: browser APIs unavailable');
       return;
     }
 
@@ -74,12 +74,12 @@ export default function useAudioCapture(
         }
       }
     } catch (err) {
-      console.warn('[AudioCapture] Permission stage: AudioContext resume guard failed', err);
+      // console.warn('[AudioCapture] Permission stage: AudioContext resume guard failed', err);
     }
 
     if (!mediaStreamRef.current) {
       const deviceId = selectedMicIdRef.current;
-      console.log('[AudioCapture] Permission stage: requesting microphone stream');
+      // console.log('[AudioCapture] Permission stage: requesting microphone stream');
       try {
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -92,13 +92,13 @@ export default function useAudioCapture(
           },
         });
       } catch (err) {
-        console.error('[AudioCapture] Permission stage: getUserMedia failed', err);
+        // console.error('[AudioCapture] Permission stage: getUserMedia failed', err);
         return;
       }
     }
 
     if (!mediaStreamRef.current) {
-      console.error('[AudioCapture] Permission stage: no media stream available after request');
+      // console.error('[AudioCapture] Permission stage: no media stream available after request');
       return;
     }
 
@@ -106,15 +106,17 @@ export default function useAudioCapture(
     try {
       const negotiatedMimeType = negotiateRecorderMimeType();
       recorderMimeTypeRef.current = negotiatedMimeType;
+      /*
       console.log('[AudioCapture] MediaRecorder init stage: negotiated MIME type', {
         mimeType: negotiatedMimeType || '(browser default)',
       });
+      */
 
       recorder = negotiatedMimeType
         ? new MediaRecorder(mediaStreamRef.current, { mimeType: negotiatedMimeType })
         : new MediaRecorder(mediaStreamRef.current);
     } catch (err) {
-      console.error('[AudioCapture] MediaRecorder init stage: failed to initialize', err);
+      // console.error('[AudioCapture] MediaRecorder init stage: failed to initialize', err);
       return;
     } finally {
       if (activationCtx) {
@@ -134,11 +136,11 @@ export default function useAudioCapture(
     };
 
     recorder.onerror = (event: Event) => {
-      console.error('[AudioCapture] Capture/blob stage: MediaRecorder error', event);
+      // console.error('[AudioCapture] Capture/blob stage: MediaRecorder error', event);
     };
 
     recorder.onstop = () => {
-      console.log('[AudioCapture] Capture/blob stage: recorder stop event fired');
+      // console.log('[AudioCapture] Capture/blob stage: recorder stop event fired');
 
       if (stopWaitTimeoutRef.current) {
         clearTimeout(stopWaitTimeoutRef.current);
@@ -155,10 +157,12 @@ export default function useAudioCapture(
       // Edge timing: useSpeechRecognition.onend fires AFTER blobResolvers resolve,
       // so we must NOT clear lastBlobRef here — late caller needs it from cache.
 
+      /*
       console.log('[AudioCapture] Capture/blob stage: blob finalized (stop event)', {
         type: blob.type,
         size: blob.size,
       });
+      */
 
       audioChunksRef.current = [];
       isStoppingRef.current = false;
@@ -168,7 +172,7 @@ export default function useAudioCapture(
       // Avoid tiny timeslices that can behave inconsistently across browsers.
       recorder.start(250);
     } catch (err) {
-      console.error('[AudioCapture] Capture/blob stage: failed to start recorder', err);
+      // console.error('[AudioCapture] Capture/blob stage: failed to start recorder', err);
       return;
     }
 
@@ -182,23 +186,25 @@ export default function useAudioCapture(
       // DESIGN RULE: lastBlobRef is write-once per session (set in onstop,
       // cleared only in startRecording). Never clear it inside stopRecording()
       // because multiple callers per cycle all need to read the same blob.
+      /*
       console.log('[AudioCapture] stopRecording: returning cached blob', {
         type: cached.type,
         size: cached.size,
       });
+      */
       return cached;
     }
 
     const recorder = mediaRecorderRef.current;
     if (!recorder) {
       // Not an error — happens during cleanup or if start failed
-      console.log('[AudioCapture] stopRecording: no active recorder and no cached blob');
+      // console.log('[AudioCapture] stopRecording: no active recorder and no cached blob');
       return undefined;
     }
 
     // PRIORITY 2: recorder active, stop and await onstop resolver queue.
     if (recorder.state === 'recording') {
-      console.log('[AudioCapture] stopRecording: recorder active, stopping now');
+      // console.log('[AudioCapture] stopRecording: recorder active, stopping now');
 
       if (isStoppingRef.current) {
         return await new Promise<Blob>((resolve) => {
@@ -214,7 +220,7 @@ export default function useAudioCapture(
         try {
           recorder.stop();
         } catch (err) {
-          console.error('[AudioCapture] Capture/blob stage: recorder.stop() failed', err);
+          // console.error('[AudioCapture] Capture/blob stage: recorder.stop() failed', err);
           isStoppingRef.current = false;
           blobResolversRef.current = [];
           reject(err instanceof Error ? err : new Error('[AudioCapture] recorder.stop() failed'));
@@ -224,7 +230,7 @@ export default function useAudioCapture(
 
     // PRIORITY 3: recorder not recording and no cached blob.
     if (recorder.state === 'inactive') {
-      console.log('[AudioCapture] stopRecording: inactive, onstop pending - waiting for blob');
+      // console.log('[AudioCapture] stopRecording: inactive, onstop pending - waiting for blob');
 
       // Edge: recognition.onend can fire before onstop in the same event loop tick.
       // Register a pending resolver instead of rejecting - onstop will fulfill it.
@@ -246,7 +252,7 @@ export default function useAudioCapture(
             (resolver) => resolver !== resolveWhenReady,
           );
           stopWaitTimeoutRef.current = null;
-          console.error('[AudioCapture] stopRecording: timed out waiting for onstop blob');
+          // console.error('[AudioCapture] stopRecording: timed out waiting for onstop blob');
           reject(new Error('Timed out waiting for blob after recorder inactive'));
         }, 200);
 
@@ -254,7 +260,7 @@ export default function useAudioCapture(
       });
     }
 
-    console.error('[AudioCapture] stopRecording: no recorder initialized');
+    // console.error('[AudioCapture] stopRecording: no recorder initialized');
     throw new Error('No active recorder and no cached blob');
   }, []);
 
@@ -272,7 +278,7 @@ export default function useAudioCapture(
       if (mediaRecorderRef.current?.state === 'recording') {
         try {
           mediaRecorderRef.current.stop();
-          console.log('[AudioCapture] cleanup: MediaRecorder stopped');
+          // console.log('[AudioCapture] cleanup: MediaRecorder stopped');
         } catch {
           /* ignore */
         }
@@ -281,7 +287,7 @@ export default function useAudioCapture(
         mediaStreamRef.current.getTracks().forEach((track) => {
           try {
             track.stop();
-            console.log('[AudioCapture] cleanup: mic track stopped', track.label);
+            // console.log('[AudioCapture] cleanup: mic track stopped', track.label);
           } catch {
             /* ignore */
           }

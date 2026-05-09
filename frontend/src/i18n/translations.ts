@@ -108,6 +108,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'toast.accountCreated': 'Account created!',
     'toast.registerFailed': 'Registration failed. Please try again.',
     'toast.loginRequired': 'Please sign in to access this page.',
+    'va.toast.yourTurn': "It's your turn to speak",
 
     // Auth (loading states)
     'auth.signingIn': 'Signing in…',
@@ -506,6 +507,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'toast.accountCreated': 'Đã tạo tài khoản!',
     'toast.registerFailed': 'Đăng ký thất bại. Vui lòng thử lại.',
     'toast.loginRequired': 'Vui lòng đăng nhập để vào trang này.',
+    'va.toast.yourTurn': 'Đến lượt bạn nói',
 
     // Auth (loading states)
     'auth.signingIn': 'Đang đăng nhập…',

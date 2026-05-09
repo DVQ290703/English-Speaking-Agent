@@ -1,9 +1,6 @@
 // File: src/lib/vad/hallucinationFilter.ts
 
 export const KNOWN_HALLUCINATIONS = [
-  'thank you for watching',
-  'thanks for watching',
-  'please subscribe',
   'egentligen',
   'subtitles by',
   'www.',
@@ -12,10 +9,7 @@ export const KNOWN_HALLUCINATIONS = [
   'よろしくお願いします',
   'ありがとうございました',
   'hmm',
-  'russian',
   'amara.org',
-  'you',
-  'thank you',
 ];
 
 export const HALLUCINATION_ALLOWLIST = ['yes', 'no', 'ok', 'hi', 'bye', 'yeah', 'nope'];

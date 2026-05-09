@@ -105,7 +105,7 @@ async function createAudioFrameBridge(
 
       try {
         await ctx.audioWorklet.addModule(moduleUrl);
-        console.log('[VAD] AudioWorklet module added successfully');
+        // console.log('[VAD] AudioWorklet module added successfully');
       } finally {
         URL.revokeObjectURL(moduleUrl);
       }
@@ -143,7 +143,7 @@ async function createAudioFrameBridge(
       if (shouldAbort() || (ctx.state as string) === 'closed') {
         return noOpBridge;
       }
-      console.warn('[VAD] AudioWorklet unavailable — falling back to ScriptProcessor', err);
+      // console.warn('[VAD] AudioWorklet unavailable — falling back to ScriptProcessor', err);
     }
   }
 
@@ -237,9 +237,10 @@ export default function useVoiceActivity(
   useEffect(() => {
     if (!active) return;
     const stream = streamRef.current;
-    console.log('[VAD] effect triggered', { active, hasStream: !!stream });
+    // console.log('[VAD] effect triggered', { active, hasStream: !!stream });
     if (!stream) return;
 
+    /*
     console.log('[VAD] stream diagnostic', {
       streamId: stream?.id,
       active: stream?.active,
@@ -252,6 +253,7 @@ export default function useVoiceActivity(
         label: t.label
       }))
     });
+    */
 
     const w = window as WindowWithWebkitAudio;
     const Ctor = w.AudioContext || w.webkitAudioContext;
@@ -283,12 +285,12 @@ export default function useVoiceActivity(
       try {
         if (ctx && ctx.state !== 'closed') {
           void ctx.close();
-          console.log('[VAD] cleanup: AudioContext closed');
+          // console.log('[VAD] cleanup: AudioContext closed');
         }
       } catch {
         /* ignore */
       }
-      console.log('[VAD] cleanup: audio graph disconnected');
+      // console.log('[VAD] cleanup: audio graph disconnected');
       source = null;
       ctx = null;
     };
@@ -298,6 +300,7 @@ export default function useVoiceActivity(
         return;
       }
 
+      /*
       if (frameCount < 3) {
         console.log('[VAD] raw audio sample check', {
           frameCount,
@@ -306,6 +309,7 @@ export default function useVoiceActivity(
         });
         frameCount++;
       }
+      */
 
       const now = performance.now();
       const metrics = computeVADFrameMetrics(samples);
@@ -332,6 +336,7 @@ export default function useVoiceActivity(
         (isDev && now - lastLogAtRef.current >= VAD_CONFIG.debugLogIntervalMs)
       ) {
         if (isDev) {
+          /*
           console.log('[VAD]', {
             state: decision.state,
             rms: Number(decision.rms.toFixed(4)),
@@ -341,6 +346,7 @@ export default function useVoiceActivity(
             threshold: Number(decision.threshold.toFixed(4)),
             processor: debugRef.current.processor,
           });
+          */
           lastLoggedStateRef.current = decision.state;
           lastLogAtRef.current = now;
         }
@@ -359,14 +365,16 @@ export default function useVoiceActivity(
         // Resume before wiring analysis so VAD sees real microphone samples.
         if (ctx.state === 'suspended') {
           await ctx.resume();
-          console.log('[VAD] AudioContext resumed from suspended state');
+          // console.log('[VAD] AudioContext resumed from suspended state');
         }
-        console.log('[VAD] AudioContext state:', ctx.state);
+        // console.log('[VAD] AudioContext state:', ctx.state);
 
+        /*
         console.log('[VAD] audio graph setup', {
           contextState: ctx.state,
           processorType: 'audio-worklet' in ctx && typeof AudioWorkletNode !== 'undefined' ? 'AudioWorklet' : 'ScriptProcessor'
         });
+        */
 
         if (cancelled) {
           void ctx.close();
@@ -379,18 +387,20 @@ export default function useVoiceActivity(
           bridge.cleanup();
           return;
         }
+        /*
         console.log('[VAD] audio graph connected', {
           sourceId: source.mediaStream.id,
           processor: bridge.processor,
           contextState: ctx.state
         });
+        */
         debugRef.current = {
           ...debugRef.current,
           processor: bridge.processor,
         };
         teardownProcessor = bridge.cleanup;
       } catch (err) {
-        console.error('[VAD] Failed to initialize voice activity detector', err);
+        // console.error('[VAD] Failed to initialize voice activity detector', err);
         teardown();
       }
     })();
