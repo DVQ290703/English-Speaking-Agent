@@ -29,6 +29,7 @@ import { useTopics } from '../hooks/useTopics';
 import { useT } from '../i18n/useLanguage';
 import { computeBadges, computePeriodDelta } from '../lib/gamification';
 import { useDarkMode } from '../theme/useDarkMode';
+import QuickAccessFlashcardWidget from '../components/dashboard/QuickAccessFlashcardWidget';
 
 function formatDuration(ms) {
   if (!ms || ms <= 0) return '0m';
@@ -830,7 +831,7 @@ export default function DashboardPage() {
 
       {/* Choose a topic */}
       <section className="mb-10">
-        <div className="flex items-end justify-between mb-5">
+        <div className="flex items-center justify-between mb-5 gap-4">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-slate-100">
               {t('dash.topics.title')}
@@ -839,6 +840,7 @@ export default function DashboardPage() {
               {t('dash.topics.subtitle')}
             </p>
           </div>
+          <QuickAccessFlashcardWidget />
         </div>
         {topicsLoading && apiCategories.length === 0 ? (
           <div className="flex gap-4 overflow-x-auto pb-2">

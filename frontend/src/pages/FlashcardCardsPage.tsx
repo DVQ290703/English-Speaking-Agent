@@ -273,6 +273,8 @@ function CardFormDialog({
   asDropdownItem = false,
   isVi = false,
   trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   mode: 'create' | 'edit';
   deckId: string;
@@ -280,8 +282,12 @@ function CardFormDialog({
   asDropdownItem?: boolean;
   isVi?: boolean;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setUncontrolledOpen;
   const [frontText, setFrontText] = useState(card?.front_text || '');
   const [backText, setBackText] = useState(card?.back_text || '');
   const [tags, setTags] = useState(card?.tags?.join(', ') || '');
@@ -415,6 +421,8 @@ function CardFormDialog({
     >
       <Edit className="mr-2 h-4 w-4" /> {isVi ? 'Sửa thẻ' : 'Edit Card'}
     </DropdownMenuItem>
+  ) : controlledOpen !== undefined ? (
+    null
   ) : (
     <Button className="gap-2 transition-all hover:scale-105 active:scale-95 shadow-sm">
       <Plus className="h-4 w-4" /> {isVi ? 'Thêm thẻ' : 'Add Card'}
@@ -423,7 +431,7 @@ function CardFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{TriggerButton}</DialogTrigger>
+      {TriggerButton && <DialogTrigger asChild>{TriggerButton}</DialogTrigger>}
       <DialogContent className="max-w-3xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
@@ -544,27 +552,22 @@ function DeleteCardDialog({
   cardId,
   deckId,
   isVi,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: {
   cardId: string;
   deckId: string;
   isVi?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const setOpen = controlledOnOpenChange !== undefined ? controlledOnOpenChange : setUncontrolledOpen;
   const { toast } = useToast();
   const deleteMut = useDeleteCard();
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
-            setOpen(true);
-          }}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash className="mr-2 h-4 w-4" /> {isVi ? 'Xóa thẻ' : 'Delete Card'}
-        </DropdownMenuItem>
-      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isVi ? 'Xóa thẻ' : 'Delete Card'}</DialogTitle>
@@ -622,6 +625,9 @@ function FlashcardListItem({
   const frontMedia = card.media?.filter((m: MediaFile) => m.side === 'front') || [];
   const backMedia = card.media?.filter((m: MediaFile) => m.side === 'back') || [];
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
   return (
     <CardUI className="overflow-hidden border-none shadow-sm hover:shadow-md transition-shadow group bg-card/50">
       <div className="flex flex-col md:flex-row min-h-[140px]">
@@ -656,16 +662,34 @@ function FlashcardListItem({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <CardFormDialog
-                  mode="edit"
-                  deckId={deckId}
-                  card={card}
-                  asDropdownItem
-                  isVi={isVi}
-                />
-                <DeleteCardDialog cardId={card.id} deckId={deckId} isVi={isVi} />
+                <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                  <Edit className="mr-2 h-4 w-4" /> {isVi ? 'Sửa thẻ' : 'Edit Card'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setDeleteOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash className="mr-2 h-4 w-4" /> {isVi ? 'Xóa thẻ' : 'Delete Card'}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Dialogs outside the dropdown to ensure proper menu closing and unmounting behavior */}
+            <CardFormDialog
+              mode="edit"
+              deckId={deckId}
+              card={card}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              isVi={isVi}
+            />
+            <DeleteCardDialog
+              cardId={card.id}
+              deckId={deckId}
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+              isVi={isVi}
+            />
           </div>
           <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">
             {isVi ? 'MẶT SAU' : 'BACK'}

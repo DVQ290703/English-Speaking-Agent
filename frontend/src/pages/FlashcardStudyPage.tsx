@@ -446,6 +446,11 @@ export default function FlashcardStudyPage() {
   const backAudio =
     currentCard?.media?.filter((m) => m.side === 'back' && m.media_type === 'audio') || [];
 
+  const hasFrontText = !!(currentCard?.front_text && currentCard.front_text.trim());
+  const hasFrontImage = !!frontImage;
+  const hasBackText = !!(currentCard?.back_text && currentCard.back_text.trim());
+  const hasBackImage = !!backImage;
+
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-background transition-colors duration-300"
@@ -497,11 +502,10 @@ export default function FlashcardStudyPage() {
                 { duration: 1500 },
               );
             }}
-            className={`rounded-full transition-all duration-300 ${
-              autoPlay
+            className={`rounded-full transition-all duration-300 ${autoPlay
                 ? 'text-primary bg-primary/10 hover:bg-primary/20'
                 : 'text-muted-foreground hover:bg-muted/20'
-            }`}
+              }`}
             title={
               isVi
                 ? autoPlay
@@ -526,11 +530,10 @@ export default function FlashcardStudyPage() {
                 { duration: 1500, icon: <Zap className="w-4 h-4 text-yellow-500" /> },
               );
             }}
-            className={`rounded-full transition-all duration-300 ${
-              autoNext
+            className={`rounded-full transition-all duration-300 ${autoNext
                 ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
                 : 'text-muted-foreground hover:bg-muted/20'
-            }`}
+              }`}
             title={
               isVi
                 ? autoNext
@@ -627,8 +630,8 @@ export default function FlashcardStudyPage() {
                   </div>
 
                   <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-                    {frontImage ? (
-                      <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    {hasFrontText && hasFrontImage ? (
+                      <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center px-4">
                         <div className="flex items-center justify-center h-full w-full">
                           <div className="text-3xl md:text-4xl font-semibold text-slate-800 dark:text-slate-200 text-center wrap-break-word">
                             {currentCard.front_text}
@@ -636,7 +639,7 @@ export default function FlashcardStudyPage() {
                         </div>
                         <div className="flex items-center justify-center h-full w-full">
                           <div
-                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
+                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative shadow-sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomedImage(sanitizeMediaUrl(frontImage.public_url));
@@ -651,8 +654,27 @@ export default function FlashcardStudyPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-4xl md:text-5xl font-semibold text-slate-800 dark:text-slate-200 text-center whitespace-pre-wrap wrap-break-word">
-                        {currentCard.front_text}
+                      <div className="flex flex-col items-center justify-center w-full h-full text-center px-4 gap-6">
+                        {hasFrontText && (
+                          <div className="text-4xl md:text-5xl font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap wrap-break-word">
+                            {currentCard.front_text}
+                          </div>
+                        )}
+                        {hasFrontImage && (
+                          <div
+                            className="w-full max-w-sm md:max-w-md h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative shadow-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoomedImage(sanitizeMediaUrl(frontImage.public_url));
+                            }}
+                          >
+                            <img
+                              src={sanitizeMediaUrl(frontImage.public_url)}
+                              alt=""
+                              className="w-full h-full object-contain transition-transform duration-300 group-hover/img:scale-105"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -696,8 +718,8 @@ export default function FlashcardStudyPage() {
                   </div>
 
                   <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-                    {backImage ? (
-                      <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    {hasBackText && hasBackImage ? (
+                      <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center px-4">
                         <div className="flex items-center justify-center h-full w-full">
                           <div className="text-2xl md:text-3xl font-medium text-slate-700 dark:text-slate-300 text-center wrap-break-word">
                             {currentCard.back_text}
@@ -705,7 +727,7 @@ export default function FlashcardStudyPage() {
                         </div>
                         <div className="flex items-center justify-center h-full w-full">
                           <div
-                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative"
+                            className="w-full h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative shadow-sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomedImage(sanitizeMediaUrl(backImage.public_url));
@@ -720,8 +742,27 @@ export default function FlashcardStudyPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-3xl md:text-4xl font-medium text-slate-700 dark:text-slate-300 text-center whitespace-pre-wrap wrap-break-word">
-                        {currentCard.back_text}
+                      <div className="flex flex-col items-center justify-center w-full h-full text-center px-4 gap-6">
+                        {hasBackText && (
+                          <div className="text-3xl md:text-4xl font-medium text-slate-700 dark:text-slate-300 whitespace-pre-wrap wrap-break-word">
+                            {currentCard.back_text}
+                          </div>
+                        )}
+                        {hasBackImage && (
+                          <div
+                            className="w-full max-w-sm md:max-w-md h-48 md:h-64 bg-slate-50 dark:bg-black/20 rounded-xl overflow-hidden border border-slate-100 dark:border-white/5 p-4 cursor-zoom-in group/img relative shadow-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoomedImage(sanitizeMediaUrl(backImage.public_url));
+                            }}
+                          >
+                            <img
+                              src={sanitizeMediaUrl(backImage.public_url)}
+                              alt=""
+                              className="w-full h-full object-contain transition-transform duration-300 group-hover/img:scale-105"
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
