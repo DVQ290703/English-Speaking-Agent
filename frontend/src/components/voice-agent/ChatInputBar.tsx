@@ -63,7 +63,7 @@ export default function ChatInputBar({
                   ? 'bg-red-100 text-red-600 animate-pulse ring-2 ring-red-300 scale-110'
                   : 'bg-red-50 text-red-500 ring-1 ring-red-200'
                 : micEnabled
-                  ? 'bg-blue-100 text-blue-600'
+                  ? 'bg-blue-100 text-blue-600 animate-pulse ring-2 ring-blue-200'
                   : 'bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
             }`}
           >

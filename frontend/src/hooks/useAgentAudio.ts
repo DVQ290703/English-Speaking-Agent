@@ -147,22 +147,15 @@ export default function useAgentAudio({
   useEffect(() => {
     const players = audioPlayersRef.current;
     return () => {
-      console.log('[AgentAudio] cleanup: running full teardown on unmount');
-      try {
-        stopAllAudio();
-      } catch {
-        /* ignore */
-      }
       Object.keys(players).forEach((k) => {
         try {
           stopAndCleanupAudio(Number(k));
         } catch {
-          /* ignore */
+          // noop
         }
       });
-      console.log('[AgentAudio] cleanup: playback stopped');
     };
-  }, [stopAllAudio, stopAndCleanupAudio]);
+  }, [stopAndCleanupAudio]);
 
   const speakText = useCallback(
     (text: string) => {
@@ -201,12 +194,10 @@ export default function useAgentAudio({
           utt.onend = () => {
             ttsActiveRef.current = false;
             setAgentSpeaking(false);
-            if (userMicIntentRef.current) setMicEnabled(true);
           };
           utt.onerror = () => {
             ttsActiveRef.current = false;
             setAgentSpeaking(false);
-            if (userMicIntentRef.current) setMicEnabled(true);
           };
           window.speechSynthesis.speak(utt);
         };
@@ -249,20 +240,17 @@ export default function useAgentAudio({
           if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
         };
         audio.onerror = () => {
           if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
           speakText(text);
         };
         void audio.play().catch(() => {
           if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          if (userMicIntentRef.current) setMicEnabled(true);
           speakText(text);
         });
       } catch {

@@ -760,17 +760,31 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [clearTimers, clearLocalAudioUrls, releaseMediaStream]);
 
+  // Notify user to speak when agent finishes
+  useEffect(() => {
+    if (!agentSpeaking && status === 'connected') {
+      const isVi = lang === 'vi';
+      const timer = setTimeout(() => {
+        toast.info(isVi ? 'Đến lượt bạn nói!' : 'Your turn to speak!', {
+          duration: 3000,
+          position: 'top-center',
+          icon: '🎙️',
+        });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [agentSpeaking, status, lang]);
+
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting';
 
   // Auto-enable microphone when we transition to 'connected'.
   useEffect(() => {
     if (status !== 'connected') return;
-    // Mark that the user (or system) intends the mic to be on so other
-    // components (e.g. agent audio restoring behavior) can respect it.
-    userMicIntentRef.current = true;
+    // By default, keep mic OFF until user explicitly enables it (Option 1)
+    userMicIntentRef.current = false;
     try {
-      setMicEnabled(true);
+      setMicEnabled(false);
     } catch {
       /* ignore */
     }
