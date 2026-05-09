@@ -1,7 +1,7 @@
 // frontend/src/hooks/useVoiceRecorder.ts
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type RecorderStatus = 'idle' | 'recording' | 'preview' | 'transcribing' | 'confirm' | 'done';
+type RecorderStatus = 'idle' | 'recording' | 'transcribing' | 'confirm' | 'done';
 type RecorderError = 'permission-denied' | 'mic-busy' | 'not-supported' | 'unknown' | null;
 
 type WindowWithWebkit = Window &
@@ -21,6 +21,7 @@ export interface UseVoiceRecorderResult {
   audioBlob: Blob | null;
   audioUrl: string | null;
   visualizerData: number[];
+  waveformData: number[];
   error: RecorderError;
   transcript: string;
   start: () => Promise<void>;
@@ -32,7 +33,35 @@ export interface UseVoiceRecorderResult {
   cancel: () => void;
 }
 
-const BAR_COUNT = 42;
+const LIVE_BAR_COUNT = 42;
+const WAVEFORM_BAR_COUNT = 80;
+
+/** Decode a recorded audio blob into normalized amplitude bars for waveform display. */
+async function decodeWaveform(blob: Blob, barCount: number): Promise<number[]> {
+  const w = window as WindowWithWebkit;
+  const Ctor = w.AudioContext || w.webkitAudioContext;
+  if (!Ctor) return Array(barCount).fill(0) as number[];
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new Ctor();
+  try {
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    const data = audioBuffer.getChannelData(0);
+    const blockSize = Math.floor(data.length / barCount);
+    if (blockSize === 0) return Array(barCount).fill(0.1) as number[];
+    const result: number[] = [];
+    for (let i = 0; i < barCount; i++) {
+      let sum = 0;
+      for (let j = 0; j < blockSize; j++) {
+        sum += Math.abs(data[i * blockSize + j] ?? 0);
+      }
+      result.push(sum / blockSize);
+    }
+    const max = Math.max(...result, 0.001);
+    return result.map((v) => v / max);
+  } finally {
+    void ctx.close();
+  }
+}
 
 export default function useVoiceRecorder({
   selectedMicId,
@@ -43,7 +72,8 @@ export default function useVoiceRecorder({
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [visualizerData, setVisualizerData] = useState<number[]>(Array(BAR_COUNT).fill(0));
+  const [visualizerData, setVisualizerData] = useState<number[]>(Array(LIVE_BAR_COUNT).fill(0));
+  const [waveformData, setWaveformData] = useState<number[]>(Array(WAVEFORM_BAR_COUNT).fill(0));
   const [error, setError] = useState<RecorderError>(null);
   const [transcript, setTranscriptState] = useState('');
 
@@ -60,6 +90,8 @@ export default function useVoiceRecorder({
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopFnRef = useRef<() => void>(() => {});
+  // Ref so handleStop can call transcribe without capturing a stale closure
+  const transcribeFnRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const stopVisualizer = useCallback(() => {
     if (rafRef.current !== null) {
@@ -80,7 +112,7 @@ export default function useVoiceRecorder({
     }
     analyserRef.current = null;
     audioCtxRef.current = null;
-    setVisualizerData(Array(BAR_COUNT).fill(0));
+    setVisualizerData(Array(LIVE_BAR_COUNT).fill(0));
   }, []);
 
   const stopTimer = useCallback(() => {
@@ -107,7 +139,10 @@ export default function useVoiceRecorder({
     cancelGenRef.current++;
     stopVisualizer();
     stopTimer();
-    if (maxDurationTimerRef.current !== null) { clearTimeout(maxDurationTimerRef.current); maxDurationTimerRef.current = null; }
+    if (maxDurationTimerRef.current !== null) {
+      clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
+    }
     try {
       recorderRef.current?.stop();
     } catch {
@@ -121,6 +156,7 @@ export default function useVoiceRecorder({
     setAudioBlob(null);
     setRecordingTime(0);
     setTranscriptState('');
+    setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
     setError(null);
     setStatus('idle');
   }, [stopVisualizer, stopTimer, releaseStream, revokeUrl]);
@@ -176,7 +212,7 @@ export default function useVoiceRecorder({
       if (!analyserRef.current) return;
       analyserRef.current.getByteFrequencyData(freqData);
       const bars: number[] = [];
-      for (let i = 0; i < BAR_COUNT; i++) {
+      for (let i = 0; i < LIVE_BAR_COUNT; i++) {
         bars.push(freqData[i * 3] ?? 0); // sample every 3rd bin → 42 bars
       }
       setVisualizerData(bars);
@@ -224,9 +260,9 @@ export default function useVoiceRecorder({
     if (!recorder) return;
 
     const handleStop = () => {
-      // Release stream here — after the recorder has flushed all buffered data —
-      // so we don't prematurely stop stream tracks (which can cause the recorder
-      // to auto-stop with an incomplete final chunk in some Chrome builds).
+      // Release stream after the recorder has flushed all buffered data so
+      // we don't prematurely stop tracks (which can produce an incomplete
+      // final chunk in some Chrome builds).
       releaseStream();
       const blob = new Blob(chunksRef.current, {
         type: recorder.mimeType || 'audio/webm',
@@ -238,7 +274,20 @@ export default function useVoiceRecorder({
       audioUrlRef.current = url;
       setAudioBlob(blob);
       setAudioUrl(url);
-      setStatus('preview');
+      // Skip separate preview step — go straight to transcribing
+      setStatus('transcribing');
+
+      const gen = cancelGenRef.current;
+
+      // Decode waveform in parallel with transcription (decorative, failure ignored)
+      void decodeWaveform(blob, WAVEFORM_BAR_COUNT)
+        .then((bars) => {
+          if (cancelGenRef.current === gen) setWaveformData(bars);
+        })
+        .catch(() => {});
+
+      // Auto-start transcription immediately
+      void transcribeFnRef.current();
     };
 
     if (recorder.state === 'inactive') {
@@ -253,16 +302,6 @@ export default function useVoiceRecorder({
     stopFnRef.current = stop;
   }, [stop]);
 
-  const retake = useCallback(() => {
-    revokeUrl();
-    audioBlobRef.current = null;
-    setAudioBlob(null);
-    setRecordingTime(0);
-    setTranscriptState('');
-    setError(null);
-    setStatus('idle');
-  }, [revokeUrl]);
-
   const transcribe = useCallback(async () => {
     const blob = audioBlobRef.current;
     if (!blob) return;
@@ -276,9 +315,27 @@ export default function useVoiceRecorder({
     } catch {
       if (gen !== cancelGenRef.current) return;
       setError('unknown');
-      setStatus('preview');
+      // Stay in confirm so user can see the audio + cancel or type manually
+      setStatus('confirm');
     }
   }, [onTranscribe]);
+
+  // Keep transcribeFnRef pointing to the latest transcribe callback
+  useEffect(() => {
+    transcribeFnRef.current = transcribe;
+  }, [transcribe]);
+
+  const retake = useCallback(() => {
+    cancelGenRef.current++; // abort any in-flight transcription
+    revokeUrl();
+    audioBlobRef.current = null;
+    setAudioBlob(null);
+    setRecordingTime(0);
+    setTranscriptState('');
+    setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
+    setError(null);
+    setStatus('idle');
+  }, [revokeUrl]);
 
   const setTranscript = useCallback((text: string) => {
     setTranscriptState(text);
@@ -296,6 +353,7 @@ export default function useVoiceRecorder({
       setAudioBlob(null);
       setRecordingTime(0);
       setTranscriptState('');
+      setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
       setStatus('idle');
     }, 800);
   }, [transcript, onSend, revokeUrl]);
@@ -330,6 +388,7 @@ export default function useVoiceRecorder({
     audioBlob,
     audioUrl,
     visualizerData,
+    waveformData,
     error,
     transcript,
     start,

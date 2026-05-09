@@ -30,6 +30,21 @@ function formatTime(s: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** Waveform bars decoded from the recorded blob — shown in review panel. */
+function Waveform({ data }: { data: number[] }) {
+  return (
+    <div className="flex items-center justify-center gap-px h-10 px-1">
+      {data.map((val, i) => (
+        <div
+          key={i}
+          className="w-[2px] rounded-full bg-blue-400 flex-shrink-0"
+          style={{ height: `${Math.max(2, val * 36)}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function VoiceRecorderComponent({
   inputRef,
   isConnected,
@@ -44,11 +59,25 @@ export default function VoiceRecorderComponent({
 }: VoiceRecorderComponentProps) {
   const t = useT();
 
-  const { status, recordingTime, audioUrl, visualizerData, error, transcript, start, stop, retake, transcribe, setTranscript, send, cancel } =
-    useVoiceRecorder({ selectedMicId, onTranscribe, onSend: onSendRecording });
+  const {
+    status,
+    recordingTime,
+    audioUrl,
+    visualizerData,
+    waveformData,
+    error,
+    transcript,
+    start,
+    stop,
+    retake,
+    transcribe,
+    setTranscript,
+    send,
+    cancel,
+  } = useVoiceRecorder({ selectedMicId, onTranscribe, onSend: onSendRecording });
 
   const isRecording = status === 'recording';
-  const isExpandedState = status === 'preview' || status === 'transcribing' || status === 'confirm' || status === 'done';
+  const isExpandedState = status === 'transcribing' || status === 'confirm' || status === 'done';
   const recordDisabled = agentTyping || isExpandedState;
 
   if (!isConnected) {
@@ -78,7 +107,7 @@ export default function VoiceRecorderComponent({
         </div>
       )}
 
-      {/* ── Recording: visualizer + timer ── */}
+      {/* ── Recording: live frequency visualizer + timer ── */}
       {isRecording && (
         <div className="mx-3 mt-3 rounded-lg bg-red-50 border border-red-100 px-3 py-3">
           <div className="text-center text-sm font-mono text-red-600 mb-2">
@@ -96,71 +125,78 @@ export default function VoiceRecorderComponent({
         </div>
       )}
 
-      {/* ── Preview ── */}
-      {status === 'preview' && (
+      {/* ── Review panel: audio player + waveform + transcript ──
+           Shown in both 'transcribing' and 'confirm' states. */}
+      {(status === 'transcribing' || status === 'confirm') && (
         <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-3 space-y-2">
-          <audio key={audioUrl} controls src={audioUrl ?? undefined} preload="auto" className="w-full" />
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">{formatTime(recordingTime)}</span>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <button
-              type="button"
-              onClick={retake}
-              className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
-            >
-              Retake
-            </button>
-            <button
-              type="button"
-              onClick={() => void transcribe()}
-              className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500"
-            >
-              Analyze →
-            </button>
-          </div>
-        </div>
-      )}
 
-      {/* ── Transcribing ── */}
-      {status === 'transcribing' && (
-        <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-4 flex items-center gap-3">
-          <div className="w-4 h-4 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin shrink-0" />
-          <span className="text-xs text-gray-500">Transcribing…</span>
-        </div>
-      )}
-
-      {/* ── Confirm ── */}
-      {status === 'confirm' && (
-        <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-3 space-y-2">
-          <p className="text-[10px] text-gray-400">Edit transcript if needed before sending</p>
-          <textarea
-            autoFocus
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-            rows={3}
-            className="w-full resize-none rounded border border-gray-200 px-2 py-1.5 text-sm text-gray-800 outline-none focus:ring-1 focus:ring-blue-200"
+          {/* Audio playback */}
+          <audio
+            key={audioUrl}
+            controls
+            src={audioUrl ?? undefined}
+            preload="auto"
+            className="w-full"
           />
-          <div className="flex gap-2 justify-end">
+
+          {/* Decoded waveform */}
+          <Waveform data={waveformData} />
+
+          {/* Duration */}
+          <div className="text-[10px] text-gray-400 text-right">{formatTime(recordingTime)}</div>
+
+          {/* Transcript area — spinner while transcribing, textarea once ready */}
+          {status === 'transcribing' ? (
+            <div className="flex items-center gap-2 py-1">
+              <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin shrink-0" />
+              <span className="text-xs text-gray-400">Transcribing…</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-[10px] text-gray-400">Edit if needed, then send</p>
+              <textarea
+                autoFocus
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                rows={3}
+                className="w-full resize-none rounded border border-gray-200 px-2 py-1.5 text-sm text-gray-800 outline-none focus:ring-1 focus:ring-blue-200"
+              />
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 justify-between">
             <button
               type="button"
-              onClick={cancel}
+              onClick={status === 'transcribing' ? cancel : retake}
               className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
             >
-              Cancel
+              {status === 'transcribing' ? 'Cancel' : 'Retake'}
             </button>
-            <button
-              type="button"
-              onClick={send}
-              disabled={!transcript.trim()}
-              className={`px-3 py-1.5 rounded text-xs ${
-                transcript.trim()
-                  ? 'bg-blue-600 text-white hover:bg-blue-500'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Send
-            </button>
+            {status === 'confirm' && (
+              <button
+                type="button"
+                onClick={send}
+                disabled={!transcript.trim()}
+                className={`px-3 py-1.5 rounded text-xs ${
+                  transcript.trim()
+                    ? 'bg-blue-600 text-white hover:bg-blue-500'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Send
+              </button>
+            )}
+            {status === 'transcribing' && (
+              <button
+                type="button"
+                onClick={() => void transcribe()}
+                className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-400 cursor-not-allowed"
+                disabled
+              >
+                Transcribing…
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -225,7 +261,7 @@ export default function VoiceRecorderComponent({
               />
             )}
 
-            {/* Send button — only for text input (not in recording/expanded states) */}
+            {/* Send button — only for text input */}
             {!isRecording && !isExpandedState && (
               <button
                 data-testid="button-send-chat"
