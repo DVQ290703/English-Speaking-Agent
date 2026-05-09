@@ -16,9 +16,6 @@ interface LeftAudioPanelProps {
   micDevices: MicDevice[];
   selectedMicId: string;
   onSelectMic: (deviceId: string) => void;
-  isRecording: boolean;
-  micEnabled: boolean;
-  isSpeaking: boolean;
   currentUser: AuthUser | null;
 }
 
@@ -41,9 +38,6 @@ export default function LeftAudioPanel({
   micDevices,
   selectedMicId,
   onSelectMic,
-  isRecording,
-  micEnabled,
-  isSpeaking,
   currentUser,
 }: LeftAudioPanelProps) {
   const t = useT();
@@ -100,11 +94,7 @@ export default function LeftAudioPanel({
 
         <div className="bg-linear-to-r from-violet-50 to-purple-50 rounded-md border border-gray-200 flex items-center gap-2.5 px-2 py-2">
           <div
-            className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 ${
-              isRecording
-                ? 'bg-violet-600/30 border-2 border-violet-500/60 shadow-lg shadow-violet-200'
-                : 'bg-violet-100 border border-violet-200'
-            }`}
+            className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-all duration-500 bg-violet-100 border border-violet-200"
           >
             {currentUser?.display_name?.[0] ? (
               <span className="text-sm font-semibold text-violet-700">
@@ -119,7 +109,7 @@ export default function LeftAudioPanel({
               {currentUser?.display_name || t('common.you')}
             </div>
             {isConnected || isConnecting ? (
-              <MicWaveform active={micEnabled && isConnected} speaking={isSpeaking} />
+              <MicWaveform active={false} speaking={false} />
             ) : (
               <InactiveDots dotClass="bg-violet-500/30" />
             )}

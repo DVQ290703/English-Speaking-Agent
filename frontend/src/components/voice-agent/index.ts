@@ -10,5 +10,6 @@ export { default as SelectDropdown } from './SelectDropdown';
 export { default as SessionSummaryModal } from './SessionSummaryModal';
 export type { SessionSummary } from './SessionSummaryModal';
 export { default as VoiceAgentHeader } from './VoiceAgentHeader';
+export { default as VoiceRecorderComponent } from './VoiceRecorderComponent';
 export { default as ConversationSidebar } from './ConversationSidebar';
 export { AgentWaveform, MicWaveform } from './Waveforms';
