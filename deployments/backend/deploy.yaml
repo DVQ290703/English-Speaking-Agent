@@ -1,0 +1,171 @@
+# =============================================================================
+# Backend Deployment Manifest — English Speaking Agent
+# Apply  : kubectl apply -f deployments/backend/deploy.yaml
+# Status : kubectl get pods -l app=backend-agent -n english-speaking-agent
+# =============================================================================
+# ── Namespace ─────────────────────────────────────────────────────────────────
+# Shared with frontend. Idempotent — safe to re-apply.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: english-speaking-agent
+  labels:
+    project: english-speaking-agent
+
+---
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-agent
+  namespace: english-speaking-agent
+  labels:
+    app: backend-agent
+    tier: backend
+    project: english-speaking-agent
+spec:
+  replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0    # zero-downtime: never kill a pod before a new one is ready
+
+  selector:
+    matchLabels:
+      app: backend-agent
+      tier: backend
+
+  template:
+    metadata:
+      labels:
+        app: backend-agent
+        tier: backend
+        project: english-speaking-agent
+    spec:
+      # Allow scheduling on control-plane nodes (single-node/dev clusters).
+      # Remove once dedicated worker nodes are available.
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: backend-agent
+
+      containers:
+        - name: backend
+          image: vinai-registry.duckdns.org/english-speaking-agent/backend:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # All sensitive env vars (Postgres, MinIO, JWT, API keys, SMTP reset-email settings)
+          # come from the backend-secret K8s Secret. Create it once with:
+          #   kubectl create secret generic backend-secret \
+          #     --from-env-file=.env.prod -n english-speaking-agent
+          envFrom:
+            - secretRef:
+                name: backend-secret
+          env:
+            - name: LOG_DIR
+              value: /tmp/logs
+            # Public MinIO endpoint — browsers resolve this via the ingress /storage/* rule.
+            # Presigned URLs are signed against this host so they work from outside the cluster.
+            - name: MINIO_PUBLIC_ENDPOINT
+              value: "a20-app-014.duckdns.org/storage"
+            - name: MINIO_PUBLIC_SECURE
+              value: "true"
+            - name: APP_BASE_URL
+              value: "https://a20-app-014.duckdns.org"
+            - name: FRONTEND_URL
+              value: "https://a20-app-014.duckdns.org"
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # ── Readiness Probe ────────────────────────────────────────────────
+          # Pod only receives traffic once /health returns 200.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Liveness Probe ─────────────────────────────────────────────────
+          # Restarts the container if uvicorn stops responding.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+
+          # ── Security Context ───────────────────────────────────────────────
+          # Dockerfile already runs as non-root user 'app'.
+          securityContext:
+            allowPrivilegeEscalation: false
+
+          # ── Prompt Mount ───────────────────────────────────────────────────
+          # All prompt .md files are managed via ConfigMap (agent-prompts) so they
+          # can be updated without a rebuild.
+          # See deployments/backend/prompts-configmap.yaml.
+          # Deploy prompt changes: kubectl apply -f deployments/backend/prompts-configmap.yaml
+          volumeMounts:
+            - name: agent-prompts
+              mountPath: /app/app/prompts/system_prompt.md
+              subPath: system_prompt.md
+
+      volumes:
+        - name: agent-prompts
+          configMap:
+            name: agent-prompts
+
+      # Pull from the private Harbor registry.
+      imagePullSecrets:
+        - name: harbor-registry-secret
+
+---
+# Build
+# ── Service ───────────────────────────────────────────────────────────────────
+# ClusterIP: internal only. Frontend reaches backend via this DNS name:
+#   http://backend-agent-service.english-speaking-agent.svc.cluster.local:8000
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-agent-service
+  namespace: english-speaking-agent
+  labels:
+    app: backend-agent
+    tier: backend
+    project: english-speaking-agent
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: backend-agent
+    tier: backend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: http
