@@ -22,6 +22,7 @@ export default function ReasoningSteps({ steps, defaultOpen = false }: Reasoning
       {/* Collapsed bar */}
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors dark:border-slate-700 dark:bg-slate-800/50 dark:hover:bg-slate-800 dark:text-slate-400"
       >
