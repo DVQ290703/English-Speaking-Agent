@@ -84,6 +84,11 @@ function MediaBadge({
   );
 }
 
+const sanitizeMediaUrl = (url: string | null) => {
+  if (!url) return '';
+  return url.replace('http://minio:9000', '');
+};
+
 export default function FlashcardCardsPage() {
   const params = useParams();
   const deckId = params?.deckId || '';
@@ -104,11 +109,6 @@ export default function FlashcardCardsPage() {
   const parentRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-
-  const sanitizeMediaUrl = (url: string | null) => {
-    if (!url) return '';
-    return url.replace('http://minio:9000', '');
-  };
 
   const playAudio = (url: string) => {
     if (audioRef.current) {
@@ -158,7 +158,13 @@ export default function FlashcardCardsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <CardFormDialog mode="create" deckId={deckId} isVi={isVi} />
+        <CardFormDialog
+          mode="create"
+          deckId={deckId}
+          isVi={isVi}
+          onPreview={(url) => setZoomedImage(url)}
+          onPlay={playAudio}
+        />
       </div>
 
       {cardsLoading ? (
@@ -201,57 +207,56 @@ export default function FlashcardCardsPage() {
             ))}
           </div>
         </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-dashed rounded-xl space-y-4">
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-              <Layers className="h-8 w-8 text-muted-foreground/40" />
-            </div>
-            <div className="text-center">
-              <h3 className="font-semibold text-lg">
-                {isVi ? 'Chưa có thẻ nào' : 'No cards found'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {isVi
-                  ? 'Hãy thêm thẻ đầu tiên để bắt đầu học tập.'
-                  : 'Add your first card to start studying.'}
-              </p>
-            </div>
-            <CardFormDialog mode="create" deckId={deckId} isVi={isVi} />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-dashed rounded-xl space-y-4">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+            <Layers className="h-8 w-8 text-muted-foreground/40" />
           </div>
-        )}
+          <div className="text-center">
+            <h3 className="font-semibold text-lg">
+              {isVi ? 'Chưa có thẻ nào' : 'No cards found'}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {isVi
+                ? 'Hãy thêm thẻ đầu tiên để bắt đầu học tập.'
+                : 'Add your first card to start studying.'}
+            </p>
+          </div>
+          <CardFormDialog
+            mode="create"
+            deckId={deckId}
+            isVi={isVi}
+            onPreview={(url) => setZoomedImage(url)}
+            onPlay={playAudio}
+          />
+        </div>
+      )}
 
-        {/* Media elements */}
-        <audio ref={audioRef} className="hidden" />
+      {/* Media elements */}
+      <audio ref={audioRef} className="hidden" />
 
-        {/* Zoom Image Overlay */}
-        {zoomedImage && (
-          <div
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-300 cursor-zoom-out"
+      <Dialog open={!!zoomedImage} onOpenChange={(open) => !open && setZoomedImage(null)}>
+        <DialogContent className="max-w-none w-screen h-screen p-0 bg-black/90 border-none flex items-center justify-center z-[1000]">
+          <div 
+            className="w-full h-full flex items-center justify-center p-4 md:p-12 cursor-zoom-out relative"
             onClick={() => setZoomedImage(null)}
           >
-            <button
-              className="absolute top-6 right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoomedImage(null);
-              }}
-            >
-              <X className="h-6 w-6" />
-            </button>
             <img
               src={sanitizeMediaUrl(zoomedImage)}
               alt="Zoomed"
               className="max-w-full max-h-full object-contain rounded-lg shadow-2xl shadow-black/50 animate-in zoom-in-95 duration-300"
-              onClick={(e) => e.stopPropagation()}
             />
           </div>
-        )}
+        </DialogContent>
+      </Dialog>
       {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <CardFormDialog
           mode="create"
           deckId={deckId}
           isVi={isVi}
+          onPreview={(url) => setZoomedImage(url)}
+          onPlay={playAudio}
           trigger={
             <Button
               size="icon"
@@ -275,6 +280,8 @@ function CardFormDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  onPreview,
+  onPlay,
 }: {
   mode: 'create' | 'edit';
   deckId: string;
@@ -284,6 +291,8 @@ function CardFormDialog({
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onPreview?: (url: string) => void;
+  onPlay?: (url: string) => void;
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
@@ -471,6 +480,8 @@ function CardFormDialog({
                 onRemovePending={(idx) => setFrontMedia((prev) => prev.filter((_, i) => i !== idx))}
                 onDeleteExisting={(id) => setDeletedMediaIds((prev) => [...prev, id])}
                 deletedIds={deletedMediaIds}
+                onPreview={onPreview}
+                onPlay={onPlay}
               />
             </div>
             <div className="space-y-4" onPaste={(e) => handlePaste(e, 'back')}>
@@ -498,6 +509,8 @@ function CardFormDialog({
                 onRemovePending={(idx) => setBackMedia((prev) => prev.filter((_, i) => i !== idx))}
                 onDeleteExisting={(id) => setDeletedMediaIds((prev) => [...prev, id])}
                 deletedIds={deletedMediaIds}
+                onPreview={onPreview}
+                onPlay={onPlay}
               />
             </div>
           </div>
@@ -682,6 +695,8 @@ function FlashcardListItem({
               open={editOpen}
               onOpenChange={setEditOpen}
               isVi={isVi}
+              onPreview={onPreview}
+              onPlay={onPlay}
             />
             <DeleteCardDialog
               cardId={card.id}
@@ -715,6 +730,8 @@ function MediaManagerSection({
   onRemovePending,
   onDeleteExisting,
   deletedIds,
+  onPreview,
+  onPlay,
 }: {
   side: 'front' | 'back';
   isVi: boolean;
@@ -724,6 +741,8 @@ function MediaManagerSection({
   onRemovePending: (idx: number) => void;
   onDeleteExisting: (id: string) => void;
   deletedIds: string[];
+  onPreview?: (url: string) => void;
+  onPlay?: (url: string) => void;
 }) {
   const inputId = `media-upload-${side}`;
   return (
@@ -741,52 +760,75 @@ function MediaManagerSection({
       <div className="flex flex-wrap gap-2">
         {existingMedia
           .filter((m) => !deletedIds.includes(m.id))
-          .map((m) => (
+          .map((m) => {
+            const isImage = m.media_type === 'image';
+            const isAudio = m.media_type === 'audio';
+            return (
+              <div
+                key={m.id}
+                onClick={() => {
+                  if (isImage) onPreview?.(m.public_url);
+                  else if (isAudio) onPlay?.(m.public_url);
+                }}
+                className="relative group rounded-lg border bg-card p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in fade-in duration-300 cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                {isAudio ? (
+                  <Volume2 className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                )}
+                <span className="text-[9px] truncate flex-1 uppercase font-bold tracking-tighter">
+                  {m.media_type}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteExisting(m.id);
+                  }}
+                >
+                  <X className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            );
+          })}
+        {pendingFiles.map((file, idx) => {
+          const isImage = file.type.startsWith('image/');
+          const isAudio = file.type.startsWith('audio/');
+          return (
             <div
-              key={m.id}
-              className="relative group rounded-lg border bg-card p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in fade-in duration-300"
+              key={idx}
+              onClick={() => {
+                const url = URL.createObjectURL(file);
+                if (isImage) onPreview?.(url);
+                else if (isAudio) onPlay?.(url);
+              }}
+              className="relative group rounded-lg border border-primary/20 bg-primary/5 p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in zoom-in-95 duration-300 cursor-pointer hover:bg-primary/10 transition-colors"
             >
-              {m.media_type === 'audio' ? (
+              {isAudio ? (
                 <Volume2 className="h-3.5 w-3.5 text-primary" />
               ) : (
                 <ImageIcon className="h-3.5 w-3.5 text-primary" />
               )}
-              <span className="text-[9px] truncate flex-1 uppercase font-bold tracking-tighter">
-                {m.media_type}
+              <span className="text-[9px] truncate flex-1 font-bold tracking-tighter italic">
+                {file.name}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
-                onClick={() => onDeleteExisting(m.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemovePending(idx);
+                }}
               >
                 <X className="h-3 w-3 text-destructive" />
               </Button>
             </div>
-          ))}
-        {pendingFiles.map((file, idx) => (
-          <div
-            key={idx}
-            className="relative group rounded-lg border border-primary/20 bg-primary/5 p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in zoom-in-95 duration-300"
-          >
-            {file.type.startsWith('audio/') ? (
-              <Volume2 className="h-3.5 w-3.5 text-primary" />
-            ) : (
-              <ImageIcon className="h-3.5 w-3.5 text-primary" />
-            )}
-            <span className="text-[9px] truncate flex-1 font-bold tracking-tighter italic">
-              {file.name}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
-              onClick={() => onRemovePending(idx)}
-            >
-              <X className="h-3 w-3 text-destructive" />
-            </Button>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div
         className="border-2 border-dashed border-muted-foreground/10 rounded-lg p-4 transition-all hover:border-primary/40 hover:bg-primary/5 cursor-pointer text-center group"

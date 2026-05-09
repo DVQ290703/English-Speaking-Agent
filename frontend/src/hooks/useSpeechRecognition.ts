@@ -9,10 +9,9 @@ import {
 import type { VADSessionQuality } from '../lib/vad/VADTypes';
 import { isHallucinatedTranscript } from '../lib/vad/hallucinationFilter';
 
-const VAD_GATE_MIN_SPEECH_RATIO = 0.1; // was 0.15
-const VAD_GATE_MIN_PEAK_RMS = 0.005; // new: explicit energy floor
-const VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT = 0.008; // stricter floor for browser-side STT
-const VAD_GATE_MIN_DURATION_MS = 400;
+const VAD_GATE_MIN_SPEECH_RATIO = 0.07; // was 0.1
+const VAD_GATE_MIN_PEAK_RMS = 0.003; // was 0.005
+const VAD_GATE_MIN_DURATION_MS = 400; // was 400
 
 export interface UseSpeechRecognitionParams {
   status: ConnectionStatus;
@@ -107,7 +106,7 @@ export default function useSpeechRecognition({
   }, [getLastSessionQuality]);
 
   useEffect(() => {
-    const passesVADQualityGate = (): boolean => {
+    const passesVADQualityGate = (hasTranscript = false): boolean => {
       const quality = getLastSessionQualityRef.current();
 
       /*
@@ -125,20 +124,12 @@ export default function useSpeechRecognition({
         quality.speechDetected && quality.speechFrameRatio >= VAD_GATE_MIN_SPEECH_RATIO;
       const hasAudioEnergy = quality.peakRMS >= VAD_GATE_MIN_PEAK_RMS;
 
-      if (!hasRealSpeech && !hasAudioEnergy) {
+      if (!hasRealSpeech && !hasAudioEnergy && !hasTranscript) {
         // Genuine silence — reject
-        /*
-        console.warn('[Speech] VAD gate: rejected — silence', {
-          speechDetected: quality.speechDetected,
-          speechFrameRatio: quality.speechFrameRatio,
-          peakRMS: quality.peakRMS,
-          reason: 'no speech signal and no audio energy',
-        });
-        */
         return false;
       }
 
-      if (!hasRealSpeech) {
+      if (!hasRealSpeech && !hasTranscript) {
         /*
         console.warn('[Speech] VAD gate: rejected — breath/noise', {
           reason: !quality.speechDetected
@@ -151,6 +142,10 @@ export default function useSpeechRecognition({
         */
         return false;
       }
+
+      // If the browser already produced a transcript, we trust it and pass the gate 
+      // immediately to ensure the user's message is sent automatically.
+      if (hasTranscript) return true;
 
       if (
         quality.durationMs < VAD_GATE_MIN_DURATION_MS &&
@@ -189,6 +184,7 @@ export default function useSpeechRecognition({
         }
 
         if (!passesVADQualityGate()) {
+          setChatInput('');
           return;
         }
 
@@ -253,6 +249,7 @@ export default function useSpeechRecognition({
     let stopped = false;
     let consecutiveErrors = 0;
     let restartTimer: ReturnType<typeof setTimeout> | null = null;
+    let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
     const ensureMicPermission = (): Promise<boolean> => {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -336,19 +333,24 @@ export default function useSpeechRecognition({
       const recognition = new SpeechRecognitionAPI!();
       recognition.lang = LANGUAGE_CODES[language];
       recognition.interimResults = true;
-      recognition.continuous = false;
+      let hasSentAny = false;
+      recognition.continuous = true;
       recognitionRef.current = recognition;
       let hasSentFinal = false;
       let finalTranscript = '';
       let interimTranscript = '';
 
       const stopAndSend = async () => {
-        if (isHandlingEndRef.current) {
-          return;
-        }
+        if (isHandlingEndRef.current) return;
+        if (hasSentAny) return;
+        hasSentAny = true;
 
         // Edge: prevent double-stop race condition
         isHandlingEndRef.current = true;
+
+        const safetyTimer = setTimeout(() => {
+          isHandlingEndRef.current = false;
+        }, 5000);
 
         try {
           // console.log('[Speech] calling stopRecording, blob expected next');
@@ -365,22 +367,13 @@ export default function useSpeechRecognition({
             return;
           }
 
-          const quality = getLastSessionQualityRef.current();
-          if (!passesVADQualityGate()) {
-            return;
-          }
-
           const messageText = (finalTranscript.trim() || interimTranscript.trim()).trim();
+          const quality = getLastSessionQualityRef.current();
 
-          // Hallucination Guard: Browser-side STT is prone to "hearing things" in noise.
-          // Require higher peak energy if we got a transcript from the browser.
-          if (messageText && quality.peakRMS < VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT) {
-            /*
-            console.warn('[Speech] low energy + browser STT — hallucination risk, aborted', {
-              peakRMS: quality.peakRMS,
-              transcript: messageText,
-            });
-            */
+          if (!passesVADQualityGate(!!messageText)) {
+            // Only clear input if we didn't get any transcript from the browser.
+            // If the browser heard something, we keep it visible even if audio gate failed.
+            if (!messageText) setChatInput('');
             return;
           }
 
@@ -391,6 +384,7 @@ export default function useSpeechRecognition({
               transcript: messageText,
             });
             */
+            setChatInput('');
             return;
           }
           if (!messageText && !recordedAudio) {
@@ -423,7 +417,9 @@ export default function useSpeechRecognition({
           await Promise.resolve(sendChatMessageRef.current(messageText, recordedAudio));
         } catch (err) {
           // console.error('[Speech] stop/send flow failed', err);
+          hasSentAny = false;
         } finally {
+          clearTimeout(safetyTimer);
           isHandlingEndRef.current = false;
         }
       };
@@ -433,12 +429,12 @@ export default function useSpeechRecognition({
         isHandlingEndRef.current = false;
         finalTranscript = '';
         interimTranscript = '';
+        if (silenceTimer) clearTimeout(silenceTimer);
         setIsRecording(true);
         void startUserAudioCapture();
       };
 
       recognition.onresult = async (event: SpeechRecognitionEvent) => {
-        // console.log('[Speech] recognition ended, triggering stop flow');
         interimTranscript = '';
         let finalChunk = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -446,15 +442,20 @@ export default function useSpeechRecognition({
           if (event.results[i].isFinal) finalChunk += transcript;
           else interimTranscript += transcript;
         }
+
         if (finalChunk) {
           finalTranscript = `${finalTranscript} ${finalChunk}`.trim();
         }
-        if (finalChunk && !hasSentFinal) {
-          hasSentFinal = true;
-          await stopAndSend();
-        } else {
-          setChatInput(interimTranscript);
-        }
+
+        setChatInput(interimTranscript || finalTranscript);
+
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          if (!hasSentFinal && (finalTranscript || interimTranscript)) {
+            hasSentFinal = true;
+            void stopAndSend();
+          }
+        }, 5000);
       };
 
       recognition.onerror = (event: Event) => {
@@ -481,8 +482,12 @@ export default function useSpeechRecognition({
       recognition.onend = async () => {
         // console.log('[Speech] recognition ended, triggering stop flow');
         setIsRecording(false);
-        // ⚠️ RACE CONDITION: on Edge, speech end fires before blob resolves
-        if (!isHandlingEndRef.current) {
+        // ⚠️ RACE CONDITION: Edge fires onend BEFORE onresult, opposite of Chrome.
+        // Wait 80ms to give onresult a chance to arrive and call stopAndSend() first
+        // with the actual transcript. If onresult wins, hasSentAny will be true and
+        // the stopAndSend() call below will be a no-op.
+        await new Promise<void>((r) => setTimeout(r, 150));
+        if (!isHandlingEndRef.current && !hasSentAny) {
           try {
             await stopAndSend();
           } catch (err) {
@@ -516,6 +521,7 @@ export default function useSpeechRecognition({
     return () => {
       stopped = true;
       if (restartTimer) clearTimeout(restartTimer);
+      if (silenceTimer) clearTimeout(silenceTimer);
       recognitionRef.current?.stop();
       recognitionRef.current = null;
       if (!isHandlingEndRef.current) {

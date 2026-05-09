@@ -1,4 +1,4 @@
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { assessPronunciation, chatRespond, fetchGrammarFeedback } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
 import { LANGUAGE_CODES, type Gender, type Language } from '../components/voice-agent/constants';
@@ -71,6 +71,18 @@ export default function useSendChatMessage({
   setAgentSpeaking,
   setMicEnabled,
 }: UseSendChatMessageParams) {
+  // Refs to avoid stale closures inside sendChatMessage.
+  // agentTyping and messages change frequently; reading them via ref ensures
+  // the callback always sees the latest value without needing to be recreated.
+  const agentTypingRef = useRef(agentTyping);
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    agentTypingRef.current = agentTyping;
+  }, [agentTyping]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // topic is already the DB code (e.g. "academic", "daily_conversation")
   const sendChatMessage = useCallback(
     async (text: string, audioBlob?: Blob) => {
@@ -88,7 +100,10 @@ export default function useSendChatMessage({
         console.warn('[SendMessage] nothing to send — no text and no blob');
         return;
       }
-      if (agentTyping) {
+      // Use ref so we always read the latest value, not the stale closure value.
+      // Without this, rapid double-sends (e.g. Edge onend+onresult race) can
+      // both pass the check because React hasn't re-rendered yet.
+      if (agentTypingRef.current) {
         console.log('[SendMessage] SKIPPED send — reason:', 'agentTyping in progress');
         return;
       }
@@ -115,7 +130,7 @@ export default function useSendChatMessage({
       if (audioBlob) audioBlobsRef.current[userId] = audioBlob;
 
       const historyPayload: { role: string; text: string }[] = [
-        ...messages
+        ...messagesRef.current
           .filter((message) => !message.typing)
           .map((message) => ({
             role: message.role === 'agent' ? 'assistant' : 'user',
@@ -169,22 +184,22 @@ export default function useSendChatMessage({
                   const raw = item as Record<string, unknown>;
                   const wrong = String(
                     item.wrong ??
-                      item.original_text ??
-                      item.original ??
-                      raw.original ??
-                      raw.text ??
-                      raw.error_text ??
-                      raw.incorrect ??
-                      '',
+                    item.original_text ??
+                    item.original ??
+                    raw.original ??
+                    raw.text ??
+                    raw.error_text ??
+                    raw.incorrect ??
+                    '',
                   ).trim();
                   const correct = String(
                     item.correct ??
-                      item.corrected_text ??
-                      item.corrected ??
-                      raw.corrected ??
-                      raw.suggestion ??
-                      raw.fix ??
-                      '',
+                    item.corrected_text ??
+                    item.corrected ??
+                    raw.corrected ??
+                    raw.suggestion ??
+                    raw.fix ??
+                    '',
                   ).trim();
                   const note = String(
                     item.note ?? item.explanation ?? raw.reason ?? raw.detail ?? raw.message ?? '',
@@ -227,10 +242,10 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === typingId
                   ? {
-                      ...message,
-                      text: "Sorry, I couldn't get a response. Please try again.",
-                      typing: false,
-                    }
+                    ...message,
+                    text: "Sorry, I couldn't get a response. Please try again.",
+                    typing: false,
+                  }
                   : message,
               ),
             );
@@ -252,21 +267,21 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === userId
                   ? {
-                      ...message,
-                      backendMessageId: userMessageId ?? message.backendMessageId,
-                      // Keep the local blob URL (created before the API call).
-                      // MinIO presigned URLs use the internal Docker hostname and
-                      // are unreachable from the browser.
-                      userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
-                    }
+                    ...message,
+                    backendMessageId: userMessageId ?? message.backendMessageId,
+                    // Keep the local blob URL (created before the API call).
+                    // MinIO presigned URLs use the internal Docker hostname and
+                    // are unreachable from the browser.
+                    userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
+                  }
                   : message.id === typingId
                     ? {
-                        ...message,
-                        text: responseText,
-                        typing: false,
-                        audioUrl: playedUrl,
-                        minioUrl: data.assistant_audio_url || undefined,
-                      }
+                      ...message,
+                      text: responseText,
+                      typing: false,
+                      audioUrl: playedUrl,
+                      minioUrl: data.assistant_audio_url || undefined,
+                    }
                     : message,
               ),
             );
@@ -332,8 +347,8 @@ export default function useSendChatMessage({
               const phonemeNote =
                 lowPhonemes.length > 0
                   ? ` Phonemes: ${lowPhonemes
-                      .map((p) => `${p.phoneme} ${p.accuracy_score}%`)
-                      .join(', ')}`
+                    .map((p) => `${p.phoneme} ${p.accuracy_score}%`)
+                    .join(', ')}`
                   : '';
 
               if (err && err !== 'None') {
@@ -367,15 +382,15 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === userId
                   ? {
-                      ...message,
-                      scoreDetails,
-                      mistakes: [
-                        ...mistakes,
-                        ...((message.mistakes ?? []).filter((m) => m.type === 'Grammar') ?? []),
-                      ],
-                      score: overall,
-                      assessmentStatus: 'available',
-                    }
+                    ...message,
+                    scoreDetails,
+                    mistakes: [
+                      ...mistakes,
+                      ...((message.mistakes ?? []).filter((m) => m.type === 'Grammar') ?? []),
+                    ],
+                    score: overall,
+                    assessmentStatus: 'available',
+                  }
                   : message,
               ),
             );
@@ -398,10 +413,10 @@ export default function useSendChatMessage({
           prev.map((message) =>
             message.id === typingId
               ? {
-                  ...message,
-                  text: `Agent error: ${errorMessage}`,
-                  typing: false,
-                }
+                ...message,
+                text: `Agent error: ${errorMessage}`,
+                typing: false,
+              }
               : message,
           ),
         );
@@ -412,8 +427,8 @@ export default function useSendChatMessage({
       }
     },
     [
-      agentTyping,
-      messages,
+      // agentTyping and messages are intentionally excluded — they are read
+      // via agentTypingRef / messagesRef to avoid stale closure bugs.
       playAgentAudio,
       topic,
       category,
