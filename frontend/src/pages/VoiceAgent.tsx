@@ -13,12 +13,11 @@ import { toast } from 'sonner';
 import { SiOpenai } from 'react-icons/si';
 
 import { clearAuthSession, getAuthSession } from '../auth/tokenStorage';
-import { fetchGrammarFeedback } from '../api/chat';
+import { assessPronunciation, fetchGrammarFeedback } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
   AiFeedbackPanel,
-  ChatInputBar,
   ConversationSidebar,
   LeftAudioPanel,
   LogoutConfirmModal,
@@ -27,6 +26,7 @@ import {
   SessionSummaryModal,
   VoiceAgentHeader,
 } from '../components/voice-agent';
+import VoiceRecorderComponent from '../components/voice-agent/VoiceRecorderComponent';
 import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
 import {
   LANGUAGES,
@@ -41,12 +41,9 @@ import { useTopics } from '../hooks/useTopics';
 import { getInitialSessionState } from '../components/voice-agent/sessionRestore';
 import { useLanguage } from '../i18n/useLanguage';
 import useAgentAudio from '../hooks/useAgentAudio';
-import useAudioCapture from '../hooks/useAudioCapture';
 import useMicDevices from '../hooks/useMicDevices';
 import useSendChatMessage from '../hooks/useSendChatMessage';
 import useSessionPersistence from '../hooks/useSessionPersistence';
-import useSpeechRecognition from '../hooks/useSpeechRecognition';
-import useVoiceActivity from '../hooks/useVoiceActivity';
 import { useDarkMode } from '../theme/useDarkMode';
 
 interface VoiceAgentProps {
@@ -174,11 +171,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const initialState = useMemo(() => getInitialSessionState(), []);
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const [micEnabled, setMicEnabled] = useState(false);
-  // Tracks whether the user has explicitly turned the mic on. Used so the
-  // auto-mute-during-TTS logic doesn't accidentally turn the mic on when the
-  // user never asked for it (push-to-talk behaviour).
-  const userMicIntentRef = useRef(false);
   const [gender, setGender] = useState<Gender>('Male');
   const [language, setLanguage] = useState<Language>(lang === 'vi' ? 'Vietnamese' : 'English');
 
@@ -283,7 +275,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [grammarCorrectedSentence, setGrammarCorrectedSentence] = useState('');
   const [isGrammarLoading, setIsGrammarLoading] = useState(false);
 
-  const [isRecording, setIsRecording] = useState(false);
   const [showLeftPanelMobile, setShowLeftPanelMobile] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -346,13 +337,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   }, [messages, sessionSummary, topic, customTopicLabel]);
   /* eslint-enable react-hooks/immutability */
 
-  const { mediaStreamRef, startUserAudioCapture, stopUserAudioCapture, releaseMediaStream } =
-    useAudioCapture(selectedMicIdRef);
-
-  // Detects whether the user's voice is currently above the noise floor.
-  // Drives mic-button + waveform animations so they only animate during
-  // actual speech (not just because the mic is open).
-  const isSpeaking = useVoiceActivity(mediaStreamRef, isRecording);
+  // No-op stubs — VoiceRecorderComponent manages its own mic lifecycle now.
+  const noopSetMicEnabled = useCallback((_: boolean) => {}, []);
+  const noopUserMicIntentRef = useRef(false);
 
   const {
     ttsActiveRef,
@@ -363,27 +350,16 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     trimLocalAudioUrls,
     clearLocalAudioUrls,
   } = useAgentAudio({
-    setMicEnabled,
+    setMicEnabled: noopSetMicEnabled,
     setAgentSpeaking,
     languageRef,
     genderRef,
-    userMicIntentRef,
+    userMicIntentRef: noopUserMicIntentRef,
     messagesRef,
     timersRef,
   });
 
-  // Single source of truth for toggling the mic — used by both the mic
-  // button and the global Space-key shortcut so behaviour stays in sync.
-  const toggleMic = useCallback(() => {
-    setMicEnabled((prev) => {
-      const next = !prev;
-      userMicIntentRef.current = next;
-      return next;
-    });
-  }, []);
-
   // Global keyboard shortcuts:
-  //   Space  — toggle mic (ignored while typing in inputs/textareas)
   //   Esc    — close any open modal/menu, top-most first
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -400,34 +376,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         }
         return;
       }
-      if (e.code === 'Space' || e.key === ' ') {
-        // Ignore auto-repeat so holding Space doesn't rapid-toggle the mic.
-        if (e.repeat) return;
-        const target = e.target as HTMLElement | null;
-        const tag = target?.tagName?.toLowerCase();
-        // Don't hijack Space when focus is on any interactive control —
-        // text fields, native buttons/links, or anything ARIA-flagged as
-        // interactive. This keeps native keyboard activation working.
-        if (
-          tag === 'input' ||
-          tag === 'textarea' ||
-          tag === 'select' ||
-          tag === 'button' ||
-          tag === 'a' ||
-          target?.isContentEditable ||
-          target?.closest(
-            'button, a, [role="button"], [role="menuitem"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [tabindex]:not([tabindex="-1"])',
-          )
-        ) {
-          return;
-        }
-        e.preventDefault();
-        toggleMic();
-      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [showLogoutConfirm, showUserMenu, toggleMic]);
+  }, [showLogoutConfirm, showUserMenu]);
 
   const scrollToBottom = useCallback(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -468,24 +420,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setChatInput,
     setAgentTyping,
     setAgentSpeaking,
-    setMicEnabled,
-  });
-
-  useSpeechRecognition({
-    status,
-    micEnabled,
-    language,
-    selectedMicId,
-    selectedMicIdRef,
-    mediaStreamRef,
-    refreshMicDevicesRef,
-    setIsRecording,
-    setMicEnabled,
-    setChatInput,
-    startUserAudioCapture,
-    stopUserAudioCapture,
-    sendChatMessage,
-    t,
+    setMicEnabled: noopSetMicEnabled,
   });
 
   const handleKeyDown = useCallback(
@@ -593,10 +528,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           toast.error(t('va.sidebar.limitReached'));
           return;
         }
-        // Auto-enable mic for a brand-new session so Connect immediately
-        // opens the microphone (user intent persisted via the ref).
-        userMicIntentRef.current = true;
-        setMicEnabled(true);
       }
       setSummaryDismissed(true);
       clearTimers();
@@ -626,7 +557,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     t,
     topic,
     ttsActiveRef,
-    setMicEnabled,
   ]);
 
   // Validate the initial topic code against the loaded DB topics. If the code
@@ -713,25 +643,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     return () => {
       clearTimers();
       clearLocalAudioUrls();
-      releaseMediaStream();
     };
-  }, [clearTimers, clearLocalAudioUrls, releaseMediaStream]);
+  }, [clearTimers, clearLocalAudioUrls]);
 
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting';
-
-  // Auto-enable microphone when we transition to 'connected'.
-  useEffect(() => {
-    if (status !== 'connected') return;
-    // Mark that the user (or system) intends the mic to be on so other
-    // components (e.g. agent audio restoring behavior) can respect it.
-    userMicIntentRef.current = true;
-    try {
-      setMicEnabled(true);
-    } catch {
-      /* ignore */
-    }
-  }, [status, setMicEnabled]);
 
   // Load a DB conversation in-place (no full page reload): reset all local
   // state, restore conversationIdRef, update the URL, then fetch messages.
@@ -912,6 +828,20 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
   }, [agentTyping, chatInput, sendChatMessage]);
 
+  const onTranscribe = useCallback(async (blob: Blob): Promise<string> => {
+    const session = getAuthSession();
+    if (!session?.token) throw new Error('Not authenticated');
+    const result = await assessPronunciation({ token: session.token, audioBlob: blob });
+    return result.recognized_text;
+  }, []);
+
+  const onSendRecording = useCallback(
+    (text: string, blob: Blob) => {
+      sendChatMessage(text, blob);
+    },
+    [sendChatMessage],
+  );
+
   return (
     <div
       data-va="root"
@@ -1058,9 +988,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               micDevices={micDevices}
               selectedMicId={selectedMicId}
               onSelectMic={setSelectedMicId}
-              isRecording={isRecording}
-              micEnabled={micEnabled}
-              isSpeaking={isSpeaking}
               currentUser={currentUser}
             />
 
@@ -1202,18 +1129,17 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               <div ref={chatBottomRef} />
             </div>
 
-            <ChatInputBar
+            <VoiceRecorderComponent
               inputRef={inputRef}
               isConnected={isConnected}
-              isRecording={isRecording}
-              isSpeaking={isSpeaking}
-              micEnabled={micEnabled}
               agentTyping={agentTyping}
               chatInput={chatInput}
-              onToggleMic={toggleMic}
+              selectedMicId={selectedMicId}
               onChangeInput={setChatInput}
               onKeyDown={handleKeyDown}
-              onSend={handleSendChat}
+              onSendText={handleSendChat}
+              onTranscribe={onTranscribe}
+              onSendRecording={onSendRecording}
             />
           </div>
         </div>
