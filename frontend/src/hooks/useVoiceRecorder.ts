@@ -214,12 +214,20 @@ export default function useVoiceRecorder({
   const stop = useCallback(() => {
     stopVisualizer();
     stopTimer();
-    releaseStream();
+    // Clear max-duration timer so it doesn't fire after recording ends
+    if (maxDurationTimerRef.current !== null) {
+      clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
+    }
 
     const recorder = recorderRef.current;
     if (!recorder) return;
 
     const handleStop = () => {
+      // Release stream here — after the recorder has flushed all buffered data —
+      // so we don't prematurely stop stream tracks (which can cause the recorder
+      // to auto-stop with an incomplete final chunk in some Chrome builds).
+      releaseStream();
       const blob = new Blob(chunksRef.current, {
         type: recorder.mimeType || 'audio/webm',
       });
