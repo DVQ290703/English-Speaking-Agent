@@ -35,31 +35,35 @@ export interface UseVoiceRecorderResult {
 const LIVE_BAR_COUNT = 42;
 const WAVEFORM_BAR_COUNT = 150;
 
-/** Decode a recorded audio blob into normalized amplitude bars for waveform display. */
-async function decodeWaveform(blob: Blob, barCount: number): Promise<number[]> {
+/** Decode a Blob into an AudioBuffer. Throws if AudioContext is unavailable. */
+async function decodeAudioBuffer(blob: Blob): Promise<AudioBuffer> {
   const w = window as WindowWithWebkit;
   const Ctor = w.AudioContext || w.webkitAudioContext;
-  if (!Ctor) return Array(barCount).fill(0) as number[];
+  if (!Ctor) throw new Error('AudioContext not supported');
   const arrayBuffer = await blob.arrayBuffer();
   const ctx = new Ctor();
   try {
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    const data = audioBuffer.getChannelData(0);
-    const blockSize = Math.floor(data.length / barCount);
-    if (blockSize === 0) return Array(barCount).fill(0.1) as number[];
-    const result: number[] = [];
-    for (let i = 0; i < barCount; i++) {
-      let sum = 0;
-      for (let j = 0; j < blockSize; j++) {
-        sum += Math.abs(data[i * blockSize + j] ?? 0);
-      }
-      result.push(sum / blockSize);
-    }
-    const max = Math.max(...result, 0.001);
-    return result.map((v) => v / max);
+    return await ctx.decodeAudioData(arrayBuffer);
   } finally {
     void ctx.close();
   }
+}
+
+/** Compute normalized amplitude bars from a decoded AudioBuffer. */
+function computeWaveformBars(audioBuffer: AudioBuffer, barCount: number): number[] {
+  const data = audioBuffer.getChannelData(0);
+  const blockSize = Math.floor(data.length / barCount);
+  if (blockSize === 0) return Array(barCount).fill(0.1) as number[];
+  const result: number[] = [];
+  for (let i = 0; i < barCount; i++) {
+    let sum = 0;
+    for (let j = 0; j < blockSize; j++) {
+      sum += Math.abs(data[i * blockSize + j] ?? 0);
+    }
+    result.push(sum / blockSize);
+  }
+  const max = Math.max(...result, 0.001);
+  return result.map((v) => v / max);
 }
 
 export default function useVoiceRecorder({
@@ -278,10 +282,11 @@ export default function useVoiceRecorder({
 
       const gen = cancelGenRef.current;
 
-      // Decode waveform in parallel with transcription (decorative, failure ignored)
-      void decodeWaveform(blob, WAVEFORM_BAR_COUNT)
-        .then((bars) => {
-          if (cancelGenRef.current === gen) setWaveformData(bars);
+      // Decode audio buffer once — used for waveform display (and cleanBlob in Task 3)
+      void decodeAudioBuffer(blob)
+        .then((audioBuf) => {
+          if (cancelGenRef.current !== gen) return;
+          setWaveformData(computeWaveformBars(audioBuf, WAVEFORM_BAR_COUNT));
         })
         .catch(() => {});
 
