@@ -108,7 +108,7 @@ class VoiceAgentPipeline:
         return {**state, "audio_bytes": audio_bytes}
 
     def _build_graph(self):
-        tool_node = ToolNode(FLASHCARD_TOOLS)
+        tool_node = ToolNode(FLASHCARD_TOOLS, handle_tool_errors=True)
         graph = StateGraph(AgentState)
         graph.add_node("respond", self._respond_node)
         graph.add_node("tools", tool_node)

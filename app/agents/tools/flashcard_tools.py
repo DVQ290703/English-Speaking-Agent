@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Literal
+from uuid import UUID
 
 from langchain_core.tools import tool
 
 from app.core.database import get_connection
 from app.core.logger import logger
 from app.services.flashcard_service import calculate_sm2
+
+
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
 
 
 @tool
@@ -68,6 +77,9 @@ def create_card(
         dict with card_id, deck_name, front_text.
     """
     logger.debug("create_card enter user_id=%s deck_id=%s front=%r", user_id, deck_id, front_text)
+    if not _is_valid_uuid(deck_id):
+        logger.warning("create_card invalid deck_id=%r — not a UUID", deck_id)
+        return {"error": f"deck_id '{deck_id}' is not a valid UUID. Call list_decks first to get the correct deck UUID."}
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -125,6 +137,9 @@ def update_card(
         dict with card_id and updated fields, or error.
     """
     logger.debug("update_card enter user_id=%s card_id=%s", user_id, card_id)
+    if not _is_valid_uuid(card_id):
+        logger.warning("update_card invalid card_id=%r — not a UUID", card_id)
+        return {"error": f"card_id '{card_id}' is not a valid UUID. Call search_cards first to get the correct card UUID."}
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -229,6 +244,9 @@ def get_due_cards(
     where = " AND ".join(conditions)
 
     logger.debug("get_due_cards enter user_id=%s deck_id=%s limit=%d", user_id, deck_id, limit)
+    if deck_id is not None and not _is_valid_uuid(deck_id):
+        logger.warning("get_due_cards invalid deck_id=%r — not a UUID", deck_id)
+        return []
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -271,6 +289,9 @@ def submit_card_review(
         dict with card_id, new due_date, interval_days, ease_factor, repetitions.
     """
     logger.debug("submit_card_review enter user_id=%s card_id=%s rating=%s", user_id, card_id, rating)
+    if not _is_valid_uuid(card_id):
+        logger.warning("submit_card_review invalid card_id=%r — not a UUID", card_id)
+        return {"error": f"card_id '{card_id}' is not a valid UUID. Call get_due_cards or search_cards first to get the correct card UUID."}
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -329,6 +350,9 @@ def get_deck_stats(user_id: str, deck_id: str) -> dict:
         dict with total_cards, due_today, learned, retention_rate (0.0-1.0).
     """
     logger.debug("get_deck_stats enter user_id=%s deck_id=%s", user_id, deck_id)
+    if not _is_valid_uuid(deck_id):
+        logger.warning("get_deck_stats invalid deck_id=%r — not a UUID", deck_id)
+        return {"error": f"deck_id '{deck_id}' is not a valid UUID. Call list_decks first to get the correct deck UUID."}
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
