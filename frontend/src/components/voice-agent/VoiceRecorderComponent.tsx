@@ -279,18 +279,23 @@ export default function VoiceRecorderComponent({
               onClick={isRecording ? stop : () => void start()}
               disabled={recordDisabled}
               title={isRecording ? 'Stop recording' : 'Record voice message'}
-              className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
+              className={`shrink-0 relative w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
                 isRecording
                   ? 'bg-red-100 text-red-600 animate-pulse ring-2 ring-red-300 scale-110'
                   : recordDisabled
                     ? 'bg-transparent text-gray-300 cursor-not-allowed'
-                    : 'bg-transparent text-gray-500 hover:bg-red-50 hover:text-red-500'
+                    : 'bg-indigo-50 text-indigo-600 ring-2 ring-indigo-200 hover:bg-indigo-100'
               }`}
             >
               {isRecording ? (
                 <Square className="w-4 h-4 fill-current" />
               ) : (
-                <Mic className="w-4 h-4" />
+                <>
+                  {!recordDisabled && (
+                    <span className="absolute inset-0 rounded-full ring-2 ring-indigo-300 animate-ping opacity-30" />
+                  )}
+                  <Mic className="w-4 h-4" />
+                </>
               )}
             </button>
 
