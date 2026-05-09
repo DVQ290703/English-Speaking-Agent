@@ -1,4 +1,6 @@
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+import json
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -11,12 +13,41 @@ from app.agents.state import AgentState
 _TOOL_CALL_CAP = 5
 
 
+def _sanitize_tool_messages(messages: list) -> list:
+    """Ensure all ToolMessages have non-empty string content.
+
+    Groq rejects requests where a tool-role message has content that is either
+    None, an empty string, or an empty list.  LangGraph's ToolNode may produce
+    ToolMessage(content=[]) when a tool returns an empty Python list, which
+    triggers a 400 Bad Request from Groq.
+    """
+    result = []
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            content = msg.content
+            if not content:  # None, "", or []
+                content = "[]"
+            elif not isinstance(content, str):
+                content = json.dumps(content)
+            if content is not msg.content:
+                msg = ToolMessage(content=content, tool_call_id=msg.tool_call_id, name=msg.name)
+        result.append(msg)
+    return result
+
+
 def _route_after_respond(state: AgentState) -> str:
     last = state["messages"][-1] if state.get("messages") else None
     if last and getattr(last, "tool_calls", None):
         if state.get("_tool_call_iterations", 0) >= _TOOL_CALL_CAP:
-            logger.warning("respond_node tool_call_loop_cap_reached iterations=%d, forcing tts", _TOOL_CALL_CAP)
-            return "tts"
+            # Loop back to respond WITHOUT going through tools — _respond_node
+            # will detect the cap and invoke the plain client (no tools bound)
+            # to force a text reply instead of silently routing to TTS with
+            # an empty response_text.
+            logger.warning(
+                "respond_node tool_call_loop_cap_reached iterations=%d — forcing final plain response",
+                _TOOL_CALL_CAP,
+            )
+            return "respond"
         return "tools"
     return "tts"
 
@@ -52,11 +83,15 @@ class VoiceAgentPipeline:
 
         messages_to_send.append(HumanMessage(content=state["user_input"]))
 
-        # Append any ToolMessages from previous iterations in this turn
+        # Append any ToolMessages from previous iterations in this turn.
+        # Sanitize first: Groq rejects ToolMessages with empty/None/[] content.
         if state.get("messages"):
-            messages_to_send.extend(state["messages"])
+            messages_to_send.extend(_sanitize_tool_messages(state["messages"]))
 
-        ai_msg: AIMessage = self.llm_service.tool_client.invoke(messages_to_send)
+        # When the tool-call cap is reached, use the plain client (no tools bound)
+        # so the LLM is forced to produce a text reply instead of another tool call.
+        llm = self.llm_service.client if iterations >= _TOOL_CALL_CAP else self.llm_service.tool_client
+        ai_msg: AIMessage = llm.invoke(messages_to_send)
 
         if ai_msg.tool_calls:
             tool_names = [tc["name"] for tc in ai_msg.tool_calls]
@@ -114,7 +149,7 @@ class VoiceAgentPipeline:
         graph.add_node("tools", tool_node)
         graph.add_node("tts", self._tts_node)
         graph.set_entry_point("respond")
-        graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts"})
+        graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts", "respond": "respond"})
         graph.add_edge("tools", "respond")
         graph.add_edge("tts", END)
         logger.debug("pipeline graph built nodes=[respond, tools, tts]")

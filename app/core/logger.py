@@ -73,20 +73,20 @@ class IndustryLogger:
     # ------------------------------------------------------------------
 
     def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self.logger.debug(msg, *args, **kwargs)
+        self.logger.debug(msg, *args, stacklevel=2, **kwargs)
 
     def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self.logger.info(msg, *args, **kwargs)
+        self.logger.info(msg, *args, stacklevel=2, **kwargs)
 
     def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self.logger.warning(msg, *args, **kwargs)
+        self.logger.warning(msg, *args, stacklevel=2, **kwargs)
 
     def error(self, msg: str, *args: Any, exc_info: bool = False, **kwargs: Any) -> None:
-        self.logger.error(msg, *args, exc_info=exc_info, **kwargs)
+        self.logger.error(msg, *args, stacklevel=2, exc_info=exc_info, **kwargs)
 
     def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
         """Log at ERROR level and automatically attach the current exception traceback."""
-        self.logger.exception(msg, *args, **kwargs)
+        self.logger.exception(msg, *args, stacklevel=2, **kwargs)
 
 
 # ---------------------------------------------------------------------------
