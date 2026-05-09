@@ -1,5 +1,6 @@
 import { Bot, Play, User } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
+import ReasoningSteps from './ReasoningSteps';
 import type { ToolCallStep } from '../../api/chat';
 export type { ToolCallStep };
 
@@ -280,6 +281,9 @@ export default function MessageBubble({
         >
           {message.typing ? <TypingIndicator /> : message.text}
         </button>
+        {isAgent && !message.typing && (message.toolSteps?.length ?? 0) > 0 && (
+          <ReasoningSteps steps={message.toolSteps!} />
+        )}
       </div>
     </div>
   );
