@@ -98,7 +98,9 @@ async function createAudioFrameBridge(
     try {
       const processorName = `vad-frame-processor-${++workletModuleCounter}`;
       const moduleUrl = URL.createObjectURL(
-        new Blob([buildWorkletSource(processorName, VAD_CONFIG.analysisBufferSize)], { type: 'application/javascript' }),
+        new Blob([buildWorkletSource(processorName, VAD_CONFIG.analysisBufferSize)], {
+          type: 'application/javascript',
+        }),
       );
 
       try {
@@ -129,11 +131,11 @@ async function createAudioFrameBridge(
       return {
         processor: 'audio-worklet',
         cleanup: () => {
-        cleanupNodes(() => {
-          node.port.onmessage = null;
-          source.disconnect(node);
-          node.disconnect();
-        });
+          cleanupNodes(() => {
+            node.port.onmessage = null;
+            source.disconnect(node);
+            node.disconnect();
+          });
         },
       };
     } catch (err) {
@@ -296,8 +298,7 @@ export default function useVoiceActivity(
       }
 
       if (
-        isDev &&
-        decision.shouldStop ||
+        (isDev && decision.shouldStop) ||
         (isDev && decision.state !== lastLoggedStateRef.current) ||
         (isDev && now - lastLogAtRef.current >= VAD_CONFIG.debugLogIntervalMs)
       ) {
@@ -357,7 +358,7 @@ export default function useVoiceActivity(
       cancelled = true;
       teardown();
     };
-  }, [active, streamRef]);
+  }, [active, streamRef, isDev]);
 
   // Gate the returned value on `active` so consumers see `false` instantly
   // when activation flips off — without us having to call setState inside

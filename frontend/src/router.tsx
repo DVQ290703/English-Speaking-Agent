@@ -23,107 +23,110 @@ function PageFallback() {
   );
 }
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <App />,
+      children: [
+        {
+          index: true,
+          element: <Navigate to="/chat" replace />,
+        },
+        {
+          element: <PublicRoute />,
+          children: [
+            {
+              path: 'login',
+              element: <LoginPage />,
+            },
+            {
+              path: 'register',
+              element: (
+                <Suspense fallback={<PageFallback />}>
+                  <RegisterPage />
+                </Suspense>
+              ),
+            },
+          ],
+        },
+        {
+          path: 'VoiceAgent',
+          element: <Navigate to="/chat" replace />,
+        },
+        {
+          element: <MainLayout />,
+          children: [
+            {
+              path: 'chat',
+              element: (
+                <Suspense fallback={<PageFallback />}>
+                  <VoiceAgent />
+                </Suspense>
+              ),
+            },
+            {
+              element: <ProtectedRoute />,
+              children: [
+                {
+                  path: 'dashboard',
+                  element: (
+                    <Suspense fallback={<PageFallback />}>
+                      <DashboardPage />
+                    </Suspense>
+                  ),
+                },
+                {
+                  path: 'flashcards',
+                  element: <FlashcardLayout />,
+                  children: [
+                    {
+                      index: true,
+                      element: <Navigate to="decks" replace />,
+                    },
+                    {
+                      path: 'decks',
+                      element: (
+                        <Suspense fallback={<PageFallback />}>
+                          <FlashcardDecksPage />
+                        </Suspense>
+                      ),
+                    },
+                    {
+                      path: 'decks/:deckId/cards',
+                      element: (
+                        <Suspense fallback={<PageFallback />}>
+                          <FlashcardCardsPage />
+                        </Suspense>
+                      ),
+                    },
+                    {
+                      path: 'decks/:deckId/study',
+                      element: (
+                        <Suspense fallback={<PageFallback />}>
+                          <FlashcardStudyPage />
+                        </Suspense>
+                      ),
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          path: '*',
+          element: <Navigate to="/" replace />,
+        },
+      ],
+    },
+  ],
   {
-    path: '/',
-    element: <App />,
-    children: [
-      {
-        index: true,
-        element: <Navigate to="/dashboard" replace />,
-      },
-      {
-        element: <PublicRoute />,
-        children: [
-          {
-            path: 'login',
-            element: <LoginPage />,
-          },
-          {
-            path: 'register',
-            element: (
-              <Suspense fallback={<PageFallback />}>
-                <RegisterPage />
-              </Suspense>
-            ),
-          },
-        ],
-      },
-      {
-        path: 'VoiceAgent',
-        element: <Navigate to="/chat" replace />,
-      },
-      {
-        element: <ProtectedRoute />,
-        children: [
-          {
-            element: <MainLayout />,
-            children: [
-              {
-                path: 'dashboard',
-                element: (
-                  <Suspense fallback={<PageFallback />}>
-                    <DashboardPage />
-                  </Suspense>
-                ),
-              },
-              {
-                path: 'chat',
-                element: (
-                  <Suspense fallback={<PageFallback />}>
-                    <VoiceAgent />
-                  </Suspense>
-                ),
-              },
-              {
-                path: 'flashcards',
-                element: <FlashcardLayout />,
-                children: [
-                  {
-                    index: true,
-                    element: <Navigate to="decks" replace />,
-                  },
-                  {
-                    path: 'decks',
-                    element: (
-                      <Suspense fallback={<PageFallback />}>
-                        <FlashcardDecksPage />
-                      </Suspense>
-                    ),
-                  },
-                  {
-                    path: 'decks/:deckId/cards',
-                    element: (
-                      <Suspense fallback={<PageFallback />}>
-                        <FlashcardCardsPage />
-                      </Suspense>
-                    ),
-                  },
-                  {
-                    path: 'decks/:deckId/study',
-                    element: (
-                      <Suspense fallback={<PageFallback />}>
-                        <FlashcardStudyPage />
-                      </Suspense>
-                    ),
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-      {
-        path: '*',
-        element: <Navigate to="/" replace />,
-      },
-    ],
+    future: {
+      v7_normalizeFormMethod: true,
+      v7_partialHydration: true,
+      v7_relativeSplatPath: true,
+      v7_skipActionErrorRevalidation: true,
+    },
   },
-], {
-  future: {
-    v7_normalizeFormMethod: true,
-    v7_partialHydration: true,
-    v7_relativeSplatPath: true,
-    v7_skipActionErrorRevalidation: true,
-  }
-});
+);

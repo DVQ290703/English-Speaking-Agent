@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
 
 import { AuthProvider } from './auth/AuthContext';
@@ -61,4 +61,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

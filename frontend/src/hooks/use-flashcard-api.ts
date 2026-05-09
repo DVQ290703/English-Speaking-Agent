@@ -2,13 +2,51 @@
  * TanStack Query hooks wrapping the existing flashcard API functions.
  * This replaces @workspace/api-client-react from the standalone project.
  */
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getAuthSession } from "@/auth/tokenStorage";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAuthSession } from '@/auth/tokenStorage';
 import {
-  listDecks, createDeck, updateDeck, deleteDeck, getDeckStats,
-  listCards, createCard, createCardWithMedia, updateCard, deleteCard,
-  getDueCards, submitReview, uploadCardMedia, deleteCardMedia
-} from "@/api/flashcards";
+  listDecks,
+  createDeck,
+  updateDeck,
+  deleteDeck,
+  getDeckStats,
+  listCards,
+  createCard,
+  createCardWithMedia,
+  updateCard,
+  deleteCard,
+  getDueCards,
+  submitReview,
+  uploadCardMedia,
+  deleteCardMedia,
+} from '@/api/flashcards';
+
+export interface Deck {
+  id: string;
+  name: string;
+  description?: string;
+  card_count?: number;
+  due_count?: number;
+}
+
+export interface MediaFile {
+  id: string;
+  side: 'front' | 'back';
+  media_type: 'image' | 'audio';
+  public_url: string;
+  mime_type?: string;
+  file_name?: string;
+}
+
+export interface Card {
+  id: string;
+  deck_id: string;
+  front_text: string;
+  back_text: string;
+  tags?: string[];
+  media?: MediaFile[];
+  deck_name?: string;
+}
 
 function useToken() {
   return getAuthSession()?.token ?? null;
@@ -16,10 +54,10 @@ function useToken() {
 
 // ── Query keys ────────────────────────────────────────────────────────────────
 
-export const getListDecksQueryKey = () => ["/api/flashcards/decks"];
-export const getGetDeckQueryKey = (deckId: string) => ["/api/flashcards/decks", deckId];
-export const getListCardsQueryKey = (deckId: string) => ["/api/flashcards/decks", deckId, "cards"];
-export const getGetDueCardsQueryKey = (deckId?: string) => ["/api/flashcards/reviews/due", deckId];
+export const getListDecksQueryKey = () => ['/api/flashcards/decks'];
+export const getGetDeckQueryKey = (deckId: string) => ['/api/flashcards/decks', deckId];
+export const getListCardsQueryKey = (deckId: string) => ['/api/flashcards/decks', deckId, 'cards'];
+export const getGetDueCardsQueryKey = (deckId?: string) => ['/api/flashcards/reviews/due', deckId];
 
 // ── Deck hooks ────────────────────────────────────────────────────────────────
 
@@ -36,7 +74,8 @@ export function useCreateDeck() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; description?: string }) => createDeck(token!, data as any),
+    mutationFn: (data: { name: string; description?: string }) =>
+      createDeck(token!, data as { name: string; description: string }),
     onSuccess: () => qc.invalidateQueries({ queryKey: getListDecksQueryKey() }),
   });
 }
@@ -46,7 +85,7 @@ export function useUpdateDeck() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ deckId, ...data }: { deckId: string; name: string; description?: string }) =>
-      updateDeck(token!, deckId, data as any),
+      updateDeck(token!, deckId, data as { name: string; description: string }),
     onSuccess: () => qc.invalidateQueries({ queryKey: getListDecksQueryKey() }),
   });
 }
@@ -63,7 +102,7 @@ export function useDeleteDeck() {
 export function useGetDeckStats(deckId: string) {
   const token = useToken();
   return useQuery({
-    queryKey: ["/api/flashcards/decks", deckId, "stats"],
+    queryKey: ['/api/flashcards/decks', deckId, 'stats'],
     queryFn: () => getDeckStats(token!, deckId),
     enabled: !!token && !!deckId,
   });
@@ -77,7 +116,7 @@ export function useGetDeck(deckId: string) {
     queryKey: getGetDeckQueryKey(deckId),
     queryFn: async () => {
       const decks = await listDecks(token!);
-      return decks.find((d: any) => d.id === deckId) ?? null;
+      return (decks as Deck[]).find((d) => d.id === deckId) ?? null;
     },
     enabled: !!token && !!deckId,
   });
@@ -96,11 +135,37 @@ export function useCreateCard() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ deckId, ...data }: { deckId: string; front_text: string; back_text: string; tags?: string[]; mediaFiles?: any[] }) => {
+    mutationFn: ({
+      deckId,
+      ...data
+    }: {
+      deckId: string;
+      front_text: string;
+      back_text: string;
+      tags?: string[];
+      mediaFiles?: { file: File; side: string; media_type: string }[];
+    }) => {
       if (data.mediaFiles?.length) {
-        return createCardWithMedia(token!, deckId, data as any);
+        return createCardWithMedia(
+          token!,
+          deckId,
+          data as unknown as {
+            front_text: string;
+            back_text: string;
+            tags: string[];
+            mediaFiles: { file: File; side: string; media_type: string }[];
+          },
+        );
       }
-      return createCard(token!, deckId, data as any);
+      return createCard(
+        token!,
+        deckId,
+        data as unknown as {
+          front_text: string;
+          back_text: string;
+          tags: string[];
+        },
+      );
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
@@ -113,8 +178,26 @@ export function useUpdateCard() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cardId, deckId, ...data }: { cardId: string; deckId: string; front_text: string; back_text: string; tags?: string[] }) =>
-      updateCard(token!, cardId, data as any),
+    mutationFn: ({
+      cardId,
+      deckId: _deckId,
+      ...data
+    }: {
+      cardId: string;
+      deckId: string;
+      front_text: string;
+      back_text: string;
+      tags?: string[];
+    }) =>
+      updateCard(
+        token!,
+        cardId,
+        data as unknown as {
+          front_text: string;
+          back_text: string;
+          tags: string[];
+        },
+      ),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
     },
@@ -125,7 +208,8 @@ export function useDeleteCard() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cardId, deckId }: { cardId: string; deckId: string }) => deleteCard(token!, cardId),
+    mutationFn: ({ cardId, deckId: _deckId }: { cardId: string; deckId: string }) =>
+      deleteCard(token!, cardId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getListDecksQueryKey() });
@@ -151,7 +235,7 @@ export function useSubmitReview() {
     mutationFn: ({ cardId, rating }: { cardId: string; rating: string }) =>
       submitReview(token!, cardId, rating),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/flashcards/reviews/due"] });
+      qc.invalidateQueries({ queryKey: ['/api/flashcards/reviews/due'] });
       qc.invalidateQueries({ queryKey: getListDecksQueryKey() });
     },
   });
@@ -162,8 +246,17 @@ export function useUploadMedia() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cardId, deckId, ...data }: { cardId: string; deckId: string; side: string; media_type: string; file: File }) =>
-      uploadCardMedia(token!, cardId, data as any),
+    mutationFn: ({
+      cardId,
+      deckId: _deckId,
+      ...data
+    }: {
+      cardId: string;
+      deckId: string;
+      side: string;
+      media_type: string;
+      file: File;
+    }) => uploadCardMedia(token!, cardId, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getGetDeckQueryKey(variables.deckId) });
@@ -175,7 +268,7 @@ export function useDeleteMedia() {
   const token = useToken();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ mediaId, deckId }: { mediaId: string; deckId: string }) =>
+    mutationFn: ({ mediaId, deckId: _deckId }: { mediaId: string; deckId: string }) =>
       deleteCardMedia(token!, mediaId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });

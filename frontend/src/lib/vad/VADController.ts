@@ -43,9 +43,10 @@ export class VADController {
   }
 
   get sessionQuality(): VADSessionQuality {
-    const durationMs = this.startedAt > 0 && this.lastFrameAt >= this.startedAt
-      ? this.lastFrameAt - this.startedAt
-      : 0;
+    const durationMs =
+      this.startedAt > 0 && this.lastFrameAt >= this.startedAt
+        ? this.lastFrameAt - this.startedAt
+        : 0;
 
     return {
       speechDetected: this.hadSpeech,
@@ -120,7 +121,10 @@ export class VADController {
     if (this.state === 'speech' || this.state === 'pause') {
       this.consecutiveSilenceFrames += 1;
 
-      if (this.state === 'speech' && this.consecutiveSilenceFrames >= this.config.silenceFramesToPause) {
+      if (
+        this.state === 'speech' &&
+        this.consecutiveSilenceFrames >= this.config.silenceFramesToPause
+      ) {
         this.state = 'pause';
         this.pauseStartedAt = nowMs;
       }
@@ -129,7 +133,8 @@ export class VADController {
         const pauseDurationMs = nowMs - this.pauseStartedAt;
         if (pauseDurationMs >= this.config.endOfSpeechMs) {
           const speechDurationMs = this.speechStartedAt === null ? 0 : nowMs - this.speechStartedAt;
-          const speechFrameRatio = this.totalFrames === 0 ? 0 : this.speechFrames / this.totalFrames;
+          const speechFrameRatio =
+            this.totalFrames === 0 ? 0 : this.speechFrames / this.totalFrames;
 
           if (
             !this.stopIssued &&
@@ -168,7 +173,8 @@ export class VADController {
   ): VADDecision {
     const snr = metrics.rms / Math.max(this.noiseFloor, this.config.minimumNoiseFloor);
     const speechFrameRatio = this.totalFrames === 0 ? 0 : this.speechFrames / this.totalFrames;
-    const threshold = Math.max(this.noiseFloor, this.config.minimumNoiseFloor) * this.config.snrRatio;
+    const threshold =
+      Math.max(this.noiseFloor, this.config.minimumNoiseFloor) * this.config.snrRatio;
 
     return {
       state: this.state,

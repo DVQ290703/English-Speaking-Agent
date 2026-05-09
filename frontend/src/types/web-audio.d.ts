@@ -14,6 +14,6 @@ declare global {
     /**
      * Augmenting the state property to include 'closed' per W3C spec.
      */
-    readonly state: "suspended" | "running" | "closed" | "interrupted";
+    readonly state: 'suspended' | 'running' | 'closed' | 'interrupted';
   }
 }

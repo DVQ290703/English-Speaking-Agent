@@ -72,9 +72,7 @@ export default function ConfirmModal({
           {icon && (
             <div
               className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                isDestructive
-                  ? 'bg-red-100 dark:bg-red-900/30'
-                  : 'bg-blue-100 dark:bg-blue-900/30'
+                isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-blue-100 dark:bg-blue-900/30'
               }`}
             >
               {icon}

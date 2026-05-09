@@ -26,7 +26,6 @@ import {
   MessageBubble,
   SelectDropdown,
   SessionSummaryModal,
-  VoiceAgentHeader,
 } from '../components/voice-agent';
 import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
 import {
@@ -72,10 +71,7 @@ function areMistakesEqual(a: Mistake[], b: Mistake[]): boolean {
     const yp = y.phonemes ?? [];
     if (xp.length !== yp.length) return false;
     for (let j = 0; j < xp.length; j++) {
-      if (
-        xp[j].phoneme !== yp[j].phoneme ||
-        xp[j].accuracy_score !== yp[j].accuracy_score
-      ) {
+      if (xp[j].phoneme !== yp[j].phoneme || xp[j].accuracy_score !== yp[j].accuracy_score) {
         return false;
       }
     }
@@ -85,45 +81,46 @@ function areMistakesEqual(a: Mistake[], b: Mistake[]): boolean {
 
 function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
   const isAgent = m.role === 'assistant';
-  const mistakes: Mistake[] | undefined = m.score?.words.length
-    ? m.score.words.flatMap((w) => {
-      const err = w.error_type;
-      const acc = Math.round(w.accuracy_score ?? 0);
-      const phonemes = (w.phonemes ?? []).map((p) => ({
-        phoneme: p.phoneme,
-        accuracy_score: Math.round(p.accuracy_score ?? 0),
-      }));
-      const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-      const phonemeNote =
-        lowPhonemes.length > 0
-          ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-          : '';
-      if (err && err !== 'None') {
-        const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-        return [
-          {
-            wrong: w.word,
-            correct: w.word,
-            type: type as Mistake['type'],
-            note: `Accuracy ${acc}%${phonemeNote}`,
-            phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-          },
-        ];
-      }
-      if (acc < 90 || lowPhonemes.length > 0) {
-        return [
-          {
-            wrong: w.word,
-            correct: w.word,
-            type: 'Pronunciation' as Mistake['type'],
-            note: `Accuracy ${acc}%${phonemeNote}`,
-            phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-          },
-        ];
-      }
-      return [];
-    })
-    : undefined;
+  const mistakes: Mistake[] | undefined =
+    m.score?.words && m.score.words.length
+      ? m.score.words.flatMap((w) => {
+          const err = w.error_type;
+          const acc = Math.round(w.accuracy_score ?? 0);
+          const phonemes = (w.phonemes ?? []).map((p) => ({
+            phoneme: p.phoneme,
+            accuracy_score: Math.round(p.accuracy_score ?? 0),
+          }));
+          const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+          const phonemeNote =
+            lowPhonemes.length > 0
+              ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+              : '';
+          if (err && err !== 'None') {
+            const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+            return [
+              {
+                wrong: w.word,
+                correct: w.word,
+                type: type as Mistake['type'],
+                note: `Accuracy ${acc}%${phonemeNote}`,
+                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+              },
+            ];
+          }
+          if (acc < 90 || lowPhonemes.length > 0) {
+            return [
+              {
+                wrong: w.word,
+                correct: w.word,
+                type: 'Pronunciation' as Mistake['type'],
+                note: `Accuracy ${acc}%${phonemeNote}`,
+                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+              },
+            ];
+          }
+          return [];
+        })
+      : undefined;
 
   return {
     id: idx + 1,
@@ -136,15 +133,13 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
     assessmentStatus: m.score ? 'available' : 'unavailable',
     scoreDetails: m.score
       ? {
-        overall: Math.round(m.score.overall_score ?? 0),
-        pronunciation: Math.round(m.score.overall_score ?? 0),
-        fluency: Math.round(m.score.fluency_score ?? 0),
-        accuracy: Math.round(m.score.accuracy_score ?? 0),
-        completeness:
-          m.score.completeness_score != null
-            ? Math.round(m.score.completeness_score)
-            : undefined,
-      }
+          overall: Math.round(m.score.overall_score ?? 0),
+          pronunciation: Math.round(m.score.overall_score ?? 0),
+          fluency: Math.round(m.score.fluency_score ?? 0),
+          accuracy: Math.round(m.score.accuracy_score ?? 0),
+          completeness:
+            m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
+        }
       : undefined,
     mistakes,
   };
@@ -158,9 +153,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   }>();
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
-  const [isDark, toggleDark] = useDarkMode();
+  const [isDark] = useDarkMode();
 
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+  const [currentUser] = useState<AuthUser | null>(() => {
     if (initialUser) return initialUser;
     const session = getAuthSession();
     if (!session?.user) return null;
@@ -640,8 +635,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setStatusSync,
     t,
     topic,
-    ttsActiveRef,
     setMicEnabled,
+    stopAllAudio,
   ]);
 
   // Validate the initial topic code against the loaded DB topics. If the code
@@ -663,8 +658,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       }
     }
     // Only run when DB topics finish loading — don't run on every topic change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allDbTopics]);
+  }, [allDbTopics, topic]);
 
   // Fetch topic conversations from DB for the sidebar; re-runs whenever
   // convsRefreshKey is bumped or selected topic changes.
@@ -694,7 +688,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         );
         setIsTopicLimitReached(Boolean(data.limit_reached));
       })
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey, topic]);
 
@@ -719,8 +713,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         /* silently ignore — user can still start fresh */
       });
     // Run only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialState.conversationId]);
 
   // Final unmount cleanup — flush in-flight timers and stream after the
   // session-persistence hook has saved the latest snapshot.
@@ -789,7 +782,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         })
         .finally(() => setHistoryLoading(false));
     },
-    [startNewSession, setTopic, setMessages],
+    [startNewSession, setTopic, setMessages, stopAllAudio],
   );
 
   // When the page loads with a ?topic= but no ?session= (e.g. navigating from
@@ -811,7 +804,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       // Use in-place loading to avoid a full page reload (SPA navigation).
       loadConversationInPlace(latest.id, topic);
     }
-  }, [conversations, topic, loadConversationInPlace]);
+  }, [conversations, topic, loadConversationInPlace, initialState.conversationId]);
 
   const handleTopicSelect = useCallback(
     (code: string) => {
@@ -945,9 +938,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <span className="text-gray-400">·</span>
             <span className="text-gray-700">
               {customTopicLabel ??
-                (topic
-                  ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic)
-                  : '')}
+                (topic ? (allDbTopics.find((tp) => tp.code === topic)?.title ?? topic) : '')}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -977,12 +968,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               data-testid="button-connect"
               onClick={handleConnect}
               disabled={isConnecting}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
-                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
-                : isConnecting
-                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-                }`}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                isConnected
+                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                  : isConnecting
+                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+              }`}
             >
               {isConnected
                 ? t('va.connect.disconnect')
@@ -1046,8 +1038,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           )}
           <div
             data-va="left"
-            className={`${showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-              } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
+            className={`${
+              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
             <LeftAudioPanel
               gender={gender}
@@ -1130,7 +1123,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                   {!isAuthenticated ? (
                     /* Welcome Screen for Guests (PLG) */
                     <div className="h-full flex flex-col items-center justify-center text-center gap-6 max-w-md mx-auto animate-in fade-in zoom-in duration-500">
-                      <div className="w-24 h-24 rounded-[2rem] bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
+                      <div className="w-24 h-24 rounded-4xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
                         <img
                           src="/src/public/audio-waves.png"
                           alt="Logo"
@@ -1224,10 +1217,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
             {!isAuthenticated ? (
               <div className="px-4 py-6 border-t border-gray-100 bg-white/80 backdrop-blur-md">
-                <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100/50 shadow-sm">
+                <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 p-6 bg-linear-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100/50 shadow-sm">
                   <div className="flex flex-col items-center gap-1">
-                    <p className="text-base font-bold text-gray-900">Sign in or Sign up to start talking</p>
-                    <p className="text-xs text-gray-500">Join thousands of learners improving their English every day.</p>
+                    <p className="text-base font-bold text-gray-900">
+                      Sign in or Sign up to start talking
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Join thousands of learners improving their English every day.
+                    </p>
                   </div>
                   <div className="flex gap-3 w-full sm:w-auto">
                     <button

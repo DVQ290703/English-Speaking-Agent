@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Mic, Library } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   LineChart,
@@ -28,9 +27,7 @@ import CountUp from '../components/ui/CountUp';
 import Skeleton from '../components/ui/Skeleton';
 import { useTopics } from '../hooks/useTopics';
 import { useT } from '../i18n/useLanguage';
-import LanguageToggle from '../i18n/LanguageToggle';
 import { computeBadges, computePeriodDelta } from '../lib/gamification';
-import ThemeToggle from '../theme/ThemeToggle';
 import { useDarkMode } from '../theme/useDarkMode';
 
 function formatDuration(ms) {
@@ -176,10 +173,11 @@ function CategoryTabsRow({ categories, onStart }) {
             <button
               key={cat.name}
               onClick={() => setActiveIdx(i)}
-              className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${activeIdx === i
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
+              className={`whitespace-nowrap text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
+                activeIdx === i
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+              }`}
             >
               {cat.displayName ?? t(`category.${cat.name}.name`)}
             </button>
@@ -323,11 +321,11 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
   // Median band — robust to outliers (1 session điểm thấp không kéo cả nhóm xuống)
   const medianBand = chartData.length
     ? (() => {
-      const sorted = chartData.map((d) => d.band).sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-      return +med.toFixed(1);
-    })()
+        const sorted = chartData.map((d) => d.band).sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const med = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        return +med.toFixed(1);
+      })()
     : 0;
   const avgBand = medianBand;
   const avgBandColor = bandColor(avgBand);
@@ -573,11 +571,11 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
                   contentStyle={
                     dark
                       ? {
-                        background: '#1e293b',
-                        border: '1px solid #334155',
-                        borderRadius: 12,
-                        color: '#e2e8f0',
-                      }
+                          background: '#1e293b',
+                          border: '1px solid #334155',
+                          borderRadius: 12,
+                          color: '#e2e8f0',
+                        }
                       : undefined
                   }
                   itemStyle={dark ? { color: '#e2e8f0' } : undefined}
@@ -612,12 +610,10 @@ export default function DashboardPage() {
   const t = useT();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [error, setError] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [apiSessions, setApiSessions] = useState([]);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [dark, toggleDark] = useDarkMode();
+  const [dark] = useDarkMode();
   const session = useMemo(() => getAuthSession(), []);
 
   const { categories: apiCategories, loading: topicsLoading } = useTopics();
@@ -675,7 +671,7 @@ export default function DashboardPage() {
       corrections: 0,
       scores:
         s.scores &&
-          (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
+        (s.scores.pronunciation != null || s.scores.fluency != null || s.scores.accuracy != null)
           ? s.scores
           : null,
     }));
@@ -683,13 +679,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!session?.token) return;
-    
+
     // Use locally stored user info if present to avoid an unnecessary API hit
     if (session.user) {
       setProfile(session.user);
       return;
     }
-    
+
     fetchMe(session.token)
       .then((user) => setProfile(user))
       .catch(() => {
@@ -749,24 +745,6 @@ export default function DashboardPage() {
     }
     return count;
   }, [allSessions]);
-
-  if (error) {
-    return (
-      <div className={dark ? 'dark' : ''}>
-        <div className="min-h-screen bg-[#f5f7fa] dark:bg-slate-950 flex items-center justify-center">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-200 dark:border-slate-800 p-8 text-center shadow-sm">
-            <p className="text-gray-600 dark:text-slate-300 mb-4">{error}</p>
-            <button
-              className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-medium"
-              onClick={() => navigate('/login', { replace: true })}
-            >
-              {t('dash.error.back')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (!profile) {
     return (

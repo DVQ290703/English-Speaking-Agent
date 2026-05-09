@@ -593,7 +593,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'va.sidebar.deleteFailed': 'Không thể xóa cuộc hội thoại.',
     'va.sidebar.close': 'Đóng thanh bên',
     'va.sidebar.limitReached': 'Topic này đã đạt giới hạn 5 phiên. Xóa phiên cũ để tạo phiên mới.',
-    'va.sidebar.limitWarningAlert': 'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
+    'va.sidebar.limitWarningAlert':
+      'Đã đạt giới hạn phiên (5/5). Xóa một phiên cũ để bắt đầu phiên mới.',
     'va.sidebar.limitBadge': '5/5',
     'va.sidebar.noTopicSelected': 'Chọn một topic trước để xem lịch sử hội thoại.',
     'va.sidebar.emptyTopic': 'Chưa có hội thoại nào cho topic này.',

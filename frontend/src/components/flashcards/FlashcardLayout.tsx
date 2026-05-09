@@ -1,22 +1,15 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
-import { LogOut, Mic, Library } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useEffect } from 'react';
+import { useNavigate, Outlet } from 'react-router-dom';
 
-import { useLanguage } from "../../i18n/useLanguage";
-import LanguageToggle from "../../i18n/LanguageToggle";
-import ThemeToggle from "../../theme/ThemeToggle";
-import { useDarkMode } from "../../theme/useDarkMode";
-import { getAuthSession, clearAuthSession } from "../../auth/tokenStorage";
-import { fetchMe } from "../../api/auth";
+import { useLanguage } from '../../i18n/useLanguage';
+import { getAuthSession, clearAuthSession } from '../../auth/tokenStorage';
+import { fetchMe } from '../../api/auth';
+import { User } from '../../auth/AuthContext';
 
 export function FlashcardLayout() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const { lang, t } = useLanguage();
-  const [dark, toggleDark] = useDarkMode();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+  useLanguage();
+  const [, setProfile] = useState<User | null>(null);
 
   useEffect(() => {
     const session = getAuthSession();
@@ -28,19 +21,13 @@ export function FlashcardLayout() {
       setProfile(session.user);
       return;
     }
-    fetchMe(session.token).then(user => setProfile(user)).catch(() => {
-      clearAuthSession();
-      navigate('/', { replace: true });
-    });
+    fetchMe(session.token)
+      .then((user) => setProfile(user))
+      .catch(() => {
+        clearAuthSession();
+        navigate('/', { replace: true });
+      });
   }, [navigate]);
-
-  const handleLogout = () => {
-    clearAuthSession();
-    toast.success(t('toast.signedOut'));
-    navigate('/', { replace: true });
-  };
-
-  const displayName = profile?.display_name || profile?.email || t('dash.fallbackName');
 
   return (
     <div className="max-w-screen-xl mx-auto px-4 py-6 md:px-6 md:py-8">

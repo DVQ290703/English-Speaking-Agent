@@ -25,7 +25,8 @@ export const ENDPOINTS = {
     categories: '/api/topics/get_categories_topics',
   },
   grammar: {
-    detailFeedback: (messageId: string) => `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
+    detailFeedback: (messageId: string) =>
+      `/api/grammar/detail_grammar_fb/${encodeURIComponent(messageId)}`,
   },
   flashcards: {
     decks: '/api/flashcards/decks',

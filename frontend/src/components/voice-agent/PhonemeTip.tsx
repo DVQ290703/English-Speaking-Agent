@@ -19,11 +19,11 @@ export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }
   useLayoutEffect(() => {
     const tipWidth = 400; // More compact width
     const margin = 20;
-    
+
     // Calculate horizontal center
     let left = triggerRect.left + triggerRect.width / 2;
     const halfWidth = Math.min(tipWidth, window.innerWidth - margin * 2) / 2;
-    
+
     // Boundary check for horizontal
     if (left - halfWidth < margin) {
       left = halfWidth + margin;
@@ -33,7 +33,7 @@ export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }
 
     // Position below the trigger
     const top = triggerRect.bottom + 10;
-    
+
     setCoords({ top, left });
 
     const onPointerDown = (e: MouseEvent) => {
@@ -49,7 +49,7 @@ export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }
   useEffect(() => {
     const modalContent = document.querySelector('[data-va="combined-modal-content"]');
     if (!modalContent) return;
-    
+
     const onScroll = () => onClose();
     modalContent.addEventListener('scroll', onScroll, { passive: true });
     return () => modalContent.removeEventListener('scroll', onScroll);
@@ -68,11 +68,11 @@ export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }
       className="z-[9999] w-[400px] max-w-[calc(100vw-2rem)] rounded-2xl border border-amber-300/90 bg-amber-50 p-5 shadow-2xl ring-1 ring-amber-200/70 transition-all duration-200 ease-in-out dark:border-amber-400/40 dark:bg-amber-950 dark:ring-amber-400/20"
       onClick={(e) => e.stopPropagation()}
     >
-      <div 
-        className="absolute -top-1.5 h-3 w-3 rotate-45 border-l border-t border-amber-300/90 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-950" 
+      <div
+        className="absolute -top-1.5 h-3 w-3 rotate-45 border-l border-t border-amber-300/90 bg-amber-50 dark:border-amber-400/40 dark:bg-amber-950"
         style={{
           left: `calc(50% + ${triggerRect.left + triggerRect.width / 2 - coords.left}px)`,
-          transform: 'translateX(-50%) rotate(45deg)'
+          transform: 'translateX(-50%) rotate(45deg)',
         }}
       />
 
@@ -111,6 +111,6 @@ export default function PhonemeTip({ phoneme, score, tip, triggerRect, onClose }
         </p>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

@@ -46,24 +46,26 @@ export default function ChatInputBar({
       <div className="flex items-center gap-2">
         <div
           data-va="input-inner"
-          className={`flex items-center gap-2 w-full rounded-xl border px-2 py-1 bg-[#f1f5f9] transition-colors ${agentTyping
+          className={`flex items-center gap-2 w-full rounded-xl border px-2 py-1 bg-[#f1f5f9] transition-colors ${
+            agentTyping
               ? 'opacity-60 cursor-not-allowed'
               : 'focus-within:ring-1 focus-within:ring-blue-200'
-            }`}
+          }`}
         >
           <button
             data-testid="button-mic-toggle"
             type="button"
             onClick={onToggleMic}
             title={micEnabled ? t('va.input.listening') : t('va.left.microphone')}
-            className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${isRecording
+            className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${
+              isRecording
                 ? isSpeaking
                   ? 'bg-red-100 text-red-600 animate-pulse ring-2 ring-red-300 scale-110'
                   : 'bg-red-50 text-red-500 ring-1 ring-red-200'
                 : micEnabled
                   ? 'bg-blue-100 text-blue-600'
                   : 'bg-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-              }`}
+            }`}
           >
             {micEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
           </button>
@@ -96,10 +98,11 @@ export default function ChatInputBar({
             data-testid="button-send-chat"
             onClick={onSend}
             disabled={!chatInput.trim() || agentTyping}
-            className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${chatInput.trim() && !agentTyping
+            className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
+              chatInput.trim() && !agentTyping
                 ? 'bg-blue-600 hover:bg-blue-500 text-gray-900 shadow-md shadow-blue-200'
                 : 'bg-gray-100 text-gray-500 cursor-not-allowed'
-              }`}
+            }`}
           >
             <SendHorizontal className="w-4 h-4" />
           </button>

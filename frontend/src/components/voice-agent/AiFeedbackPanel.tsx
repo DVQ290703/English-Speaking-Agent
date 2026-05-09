@@ -38,7 +38,6 @@ export default function AiFeedbackPanel({
   const pronunciationErrors: Mistake[] = mistakes.filter((m) => m.type === 'Pronunciation');
   const effectiveGrammarErrors = grammarErrors;
   const hasCombinedErrors = pronunciationErrors.length > 0 || effectiveGrammarErrors.length > 0;
-  const canShowGreatJob = !isPronunciationLoading && !isGrammarLoading && !hasCombinedErrors;
   return (
     <div className="px-2 mt-3 flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-2">
@@ -133,9 +132,12 @@ export default function AiFeedbackPanel({
             )}
 
             <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 block px-1">
-              {(pronunciationErrors.length > 0 || (effectiveGrammarErrors.length > 0 && !isGrammarLoading))
+              {pronunciationErrors.length > 0 ||
+              (effectiveGrammarErrors.length > 0 && !isGrammarLoading)
                 ? t('va.left.errorsCount', {
-                    n: pronunciationErrors.length + (isGrammarLoading ? 0 : effectiveGrammarErrors.length),
+                    n:
+                      pronunciationErrors.length +
+                      (isGrammarLoading ? 0 : effectiveGrammarErrors.length),
                   })
                 : t('va.left.errors')}
             </span>

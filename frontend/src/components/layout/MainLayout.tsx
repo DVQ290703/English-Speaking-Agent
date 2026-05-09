@@ -1,24 +1,22 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
-import { LogOut, Mic, Library, HelpCircle, Menu } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, Outlet } from 'react-router-dom';
+import { LogOut, Mic, Library, HelpCircle, Menu } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { useLanguage } from "../../i18n/useLanguage";
-import LanguageToggle from "../../i18n/LanguageToggle";
-import ThemeToggle from "../../theme/ThemeToggle";
-import { useDarkMode } from "../../theme/useDarkMode";
-import { useAuth } from "../../auth/AuthContext";
-import { fetchMe } from "../../api/auth";
-import { useShortcutsToggle } from "../ui/ShortcutsModal";
+import { useLanguage } from '../../i18n/useLanguage';
+import LanguageToggle from '../../i18n/LanguageToggle';
+import ThemeToggle from '../../theme/ThemeToggle';
+import { useDarkMode } from '../../theme/useDarkMode';
+import { useAuth, User } from '../../auth/AuthContext';
+import { useShortcutsToggle } from '../ui/ShortcutsModal';
 
 export function MainLayout() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const { logout, user: authUser } = useAuth();
   const [dark, toggleDark] = useDarkMode();
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<User | null>(null);
   const { setOpen: setShortcutsOpen } = useShortcutsToggle();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -48,7 +46,11 @@ export function MainLayout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <Link to="/dashboard" viewTransition className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+          <Link
+            to="/dashboard"
+            viewTransition
+            className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          >
             <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
               <span className="text-[10px] font-black text-white leading-none">VIN</span>
             </div>
@@ -62,31 +64,40 @@ export function MainLayout() {
           <LanguageToggle />
           <ThemeToggle dark={dark} onToggle={toggleDark} />
           <div className="relative">
-            <button
-              onClick={() => setShowUserMenu((v) => !v)}
-              className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
-              title={displayName}
-            >
-              <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
-                {displayName?.[0]?.toUpperCase() ?? '?'}
-              </div>
-              <span className="text-xs text-gray-700 dark:text-slate-200 hidden sm:inline">
-                {displayName}
-              </span>
-              <svg
-                className={`w-3 h-3 text-gray-500 dark:text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
-                viewBox="0 0 20 20"
-                fill="currentColor"
+            {profile ? (
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
+                title={displayName}
               >
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
+                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
+                  {displayName?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <span className="text-xs text-gray-700 dark:text-slate-200 hidden sm:inline">
+                  {displayName}
+                </span>
+                <svg
+                  className={`w-3 h-3 text-gray-500 dark:text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className="text-xs font-bold px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-200 dark:shadow-none transition-all active:scale-95"
+              >
+                {t('common.signIn')}
+              </Link>
+            )}
 
-            {showUserMenu && (
+            {showUserMenu && profile && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
                 <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg dark:shadow-black/50 z-40 overflow-hidden animate-fadeIn">
@@ -138,7 +149,7 @@ export function MainLayout() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden relative">
+      <main className="flex-1 overflow-y-auto relative">
         <Outlet context={{ sidebarOpen, setSidebarOpen, toggleSidebar }} />
       </main>
 

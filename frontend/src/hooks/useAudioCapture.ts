@@ -241,7 +241,9 @@ export default function useAudioCapture(
         };
 
         stopWaitTimeoutRef.current = setTimeout(() => {
-          blobResolversRef.current = blobResolversRef.current.filter((resolver) => resolver !== resolveWhenReady);
+          blobResolversRef.current = blobResolversRef.current.filter(
+            (resolver) => resolver !== resolveWhenReady,
+          );
           stopWaitTimeoutRef.current = null;
           console.error('[AudioCapture] stopRecording: timed out waiting for onstop blob');
           reject(new Error('Timed out waiting for blob after recorder inactive'));

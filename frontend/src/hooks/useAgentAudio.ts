@@ -129,7 +129,7 @@ export default function useAgentAudio({
     if (currentAgentAudioRef.current) {
       try {
         currentAgentAudioRef.current.pause();
-        currentAgentAudioRef.current.src = "";
+        currentAgentAudioRef.current.src = '';
       } catch {
         /* ignore */
       }

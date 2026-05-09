@@ -20,21 +20,17 @@ interface PronunciationIssueItemProps {
   m: Mistake;
   idx: number;
   isLast: boolean;
-  selectedPhoneme: SelectedPhoneme | null;
   onPhonemeClick: (e: React.MouseEvent, key: string, phoneme: string, score: number) => void;
-  onClosePhonemeTip: () => void;
+  _onClosePhonemeTip: () => void;
 }
 
 function PronunciationIssueItem({
   m,
   idx,
   isLast,
-  selectedPhoneme,
   onPhonemeClick,
-  onClosePhonemeTip,
+  _onClosePhonemeTip,
 }: PronunciationIssueItemProps) {
-  const activeTipForItem = selectedPhoneme?.key.startsWith(`ph-${idx}-`) ? selectedPhoneme : null;
-
   return (
     <div className="relative px-3 py-2.5 bg-violet-50/60 dark:bg-violet-950/20">
       <div className="flex items-center gap-2 text-xs mb-1.5">
@@ -70,9 +66,9 @@ function PronunciationIssueItem({
         </div>
       )}
 
-
-
-      {m.note && <p className="text-[11px] text-gray-700 dark:text-slate-300 leading-relaxed">{m.note}</p>}
+      {m.note && (
+        <p className="text-[11px] text-gray-700 dark:text-slate-300 leading-relaxed">{m.note}</p>
+      )}
       {!isLast && <hr className="mt-2.5 border-violet-200 dark:border-violet-700/40" />}
     </div>
   );
@@ -101,9 +97,7 @@ export default function CombinedFeedbackModal({
 
   const onPhonemeClick = (e: React.MouseEvent, key: string, phoneme: string, score: number) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setSelectedPhoneme((prev) =>
-      prev?.key === key ? null : { key, phoneme, score, rect },
-    );
+    setSelectedPhoneme((prev) => (prev?.key === key ? null : { key, phoneme, score, rect }));
   };
 
   useEffect(() => {
@@ -185,9 +179,8 @@ export default function CombinedFeedbackModal({
                     m={m}
                     idx={idx}
                     isLast={idx === pronunciationErrors.length - 1}
-                    selectedPhoneme={selectedPhoneme}
                     onPhonemeClick={onPhonemeClick}
-                    onClosePhonemeTip={() => setSelectedPhoneme(null)}
+                    _onClosePhonemeTip={() => setSelectedPhoneme(null)}
                   />
                 ))}
               </div>
@@ -201,7 +194,10 @@ export default function CombinedFeedbackModal({
               </h4>
               <div className="rounded-xl border border-fuchsia-200 dark:border-fuchsia-700/40 overflow-hidden">
                 {grammarErrors.map((m, idx) => (
-                  <div key={`g-${idx}`} className="px-3 py-2.5 bg-fuchsia-50/60 dark:bg-fuchsia-950/20">
+                  <div
+                    key={`g-${idx}`}
+                    className="px-3 py-2.5 bg-fuchsia-50/60 dark:bg-fuchsia-950/20"
+                  >
                     <div className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                       {t('va.modal.original')}
                     </div>

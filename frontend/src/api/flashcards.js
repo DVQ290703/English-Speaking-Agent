@@ -57,7 +57,7 @@ export const createCardWithMedia = (token, deckId, { front_text, back_text, tags
   const form = new FormData();
   form.append('front_text', front_text);
   form.append('back_text', back_text);
-  (tags || []).forEach(t => form.append('tags', t));
+  (tags || []).forEach((t) => form.append('tags', t));
   (mediaFiles || []).forEach(({ file, side, media_type }) => {
     form.append('files', file);
     form.append('sides', side);
@@ -107,12 +107,9 @@ export const deleteCardMedia = (token, mediaId) =>
 // ── Reviews ───────────────────────────────────────────────────────────────────
 
 export const getDueCards = (token, deckId) =>
-  request(
-    deckId
-      ? `${ENDPOINTS.flashcards.due}?deck_id=${deckId}`
-      : ENDPOINTS.flashcards.due,
-    { headers: authHeaders(token) },
-  );
+  request(deckId ? `${ENDPOINTS.flashcards.due}?deck_id=${deckId}` : ENDPOINTS.flashcards.due, {
+    headers: authHeaders(token),
+  });
 
 export const submitReview = (token, cardId, rating) =>
   request(ENDPOINTS.flashcards.review(cardId), {

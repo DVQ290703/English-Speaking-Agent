@@ -1,11 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { assessPronunciation, chatRespond, fetchGrammarFeedback } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
-import {
-  LANGUAGE_CODES,
-  type Gender,
-  type Language,
-} from '../components/voice-agent/constants';
+import { LANGUAGE_CODES, type Gender, type Language } from '../components/voice-agent/constants';
 import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
 
 export interface UseSendChatMessageParams {
@@ -81,7 +77,11 @@ export default function useSendChatMessage({
       const trimmed = text.trim();
       const hasText = !!trimmed;
       const hasAudio = !!audioBlob && audioBlob.size > 0;
-      console.log('[SendMessage] called', { hasText, hasBlob: hasAudio, blobSize: audioBlob?.size });
+      console.log('[SendMessage] called', {
+        hasText,
+        hasBlob: hasAudio,
+        blobSize: audioBlob?.size,
+      });
       if (!hasText && !hasAudio) {
         // Edge: window.SpeechRecognition fires onend without onresult for some utterances.
         // Delegate transcription to backend Groq Whisper STT via audio_file upload.
@@ -166,42 +166,37 @@ export default function useSendChatMessage({
                 const items = data.errors || [];
                 setGrammarCorrectedSentence(data.corrected_sentence ?? '');
                 const grammarMistakes = items.reduce<Mistake[]>((acc, item) => {
-                    const raw = item as Record<string, unknown>;
-                    const wrong = String(
-                      item.wrong ??
-                        item.original_text ??
-                        item.original ??
-                        raw.original ??
-                        raw.text ??
-                        raw.error_text ??
-                        raw.incorrect ??
-                        '',
-                    ).trim();
-                    const correct = String(
-                      item.correct ??
-                        item.corrected_text ??
-                        item.corrected ??
-                        raw.corrected ??
-                        raw.suggestion ??
-                        raw.fix ??
-                        '',
-                    ).trim();
-                    const note = String(
-                      item.note ??
-                        item.explanation ??
-                        raw.reason ??
-                        raw.detail ??
-                        raw.message ??
-                        '',
-                    ).trim();
-                    acc.push({
-                      wrong: wrong || '—',
-                      correct: correct || '—',
-                      type: 'Grammar' as const,
-                      note: note || undefined,
-                    });
-                    return acc;
-                  }, []);
+                  const raw = item as Record<string, unknown>;
+                  const wrong = String(
+                    item.wrong ??
+                      item.original_text ??
+                      item.original ??
+                      raw.original ??
+                      raw.text ??
+                      raw.error_text ??
+                      raw.incorrect ??
+                      '',
+                  ).trim();
+                  const correct = String(
+                    item.correct ??
+                      item.corrected_text ??
+                      item.corrected ??
+                      raw.corrected ??
+                      raw.suggestion ??
+                      raw.fix ??
+                      '',
+                  ).trim();
+                  const note = String(
+                    item.note ?? item.explanation ?? raw.reason ?? raw.detail ?? raw.message ?? '',
+                  ).trim();
+                  acc.push({
+                    wrong: wrong || '—',
+                    correct: correct || '—',
+                    type: 'Grammar' as const,
+                    note: note || undefined,
+                  });
+                  return acc;
+                }, []);
 
                 setGrammarErrors(grammarMistakes);
                 setMessages((prev) =>
@@ -421,6 +416,7 @@ export default function useSendChatMessage({
       messages,
       playAgentAudio,
       topic,
+      category,
       subOption,
       gender,
       language,

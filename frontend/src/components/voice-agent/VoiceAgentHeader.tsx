@@ -118,7 +118,8 @@ export default function VoiceAgentHeader({
                     onClick={onRequestLogout}
                     className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors border-t border-gray-100"
                   >
-                    <LogOut className="w-3.5 h-3.5" /> <span className="ml-1">{t('common.signOut')}</span>
+                    <LogOut className="w-3.5 h-3.5" />{' '}
+                    <span className="ml-1">{t('common.signOut')}</span>
                   </button>
                 </div>
               </>

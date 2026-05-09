@@ -44,10 +44,10 @@ export const VAD_CONFIG = {
 
   /**
    * Lower bound of the zero-crossing-rate range treated as voiced speech.
-    * Increase to reject low-frequency rumble.
-    * Lower values are required for deep or strongly voiced speech.
+   * Increase to reject low-frequency rumble.
+   * Lower values are required for deep or strongly voiced speech.
    */
-    zcrSpeechMin: 0.01,
+  zcrSpeechMin: 0.01,
 
   /**
    * Upper bound of the zero-crossing-rate range treated as voiced speech.

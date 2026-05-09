@@ -132,7 +132,9 @@ export default function useSpeechRecognition({
 
         // Firefox and other non-Web-Speech browsers still capture audio via MediaRecorder.
         // Delegate transcription to backend Groq Whisper STT via audio_file upload.
-        console.log('[Speech] SpeechRecognition unavailable — delegating transcription to backend STT');
+        console.log(
+          '[Speech] SpeechRecognition unavailable — delegating transcription to backend STT',
+        );
         setChatInput('');
         await Promise.resolve(sendChatMessageRef.current('', recordedAudio));
       } finally {
