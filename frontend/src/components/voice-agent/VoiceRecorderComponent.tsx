@@ -44,7 +44,6 @@ function PlaybackWaveform({
 }) {
   const barRefs = useRef<HTMLDivElement[]>([]);
   const playheadRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -77,7 +76,6 @@ function PlaybackWaveform({
 
   return (
     <div
-      ref={containerRef}
       onClick={handleClick}
       className="relative flex items-center w-full h-12 cursor-pointer overflow-hidden"
       title="Click to seek"
@@ -87,6 +85,7 @@ function PlaybackWaveform({
           key={i}
           ref={(el) => {
             if (el) barRefs.current[i] = el;
+            else delete barRefs.current[i];
           }}
           className="flex-1 rounded-sm transition-none"
           style={{ height: `${Math.max(3, val * 44)}px`, background: '#cbd5e1' }}
