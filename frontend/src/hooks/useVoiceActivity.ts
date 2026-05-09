@@ -105,6 +105,7 @@ async function createAudioFrameBridge(
 
       try {
         await ctx.audioWorklet.addModule(moduleUrl);
+        console.log('[VAD] AudioWorklet module added successfully');
       } finally {
         URL.revokeObjectURL(moduleUrl);
       }
@@ -236,7 +237,21 @@ export default function useVoiceActivity(
   useEffect(() => {
     if (!active) return;
     const stream = streamRef.current;
+    console.log('[VAD] effect triggered', { active, hasStream: !!stream });
     if (!stream) return;
+
+    console.log('[VAD] stream diagnostic', {
+      streamId: stream?.id,
+      active: stream?.active,
+      trackCount: stream?.getTracks().length,
+      tracks: stream?.getTracks().map(t => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState,
+        label: t.label
+      }))
+    });
 
     const w = window as WindowWithWebkitAudio;
     const Ctor = w.AudioContext || w.webkitAudioContext;
@@ -255,6 +270,7 @@ export default function useVoiceActivity(
     lastLoggedStateRef.current = 'calibrating';
     debugRef.current = DEFAULT_VAD_DEBUG;
     setInternalSpeaking(false);
+    let frameCount = 0;
 
     const teardown = () => {
       teardownProcessor?.();
@@ -265,10 +281,14 @@ export default function useVoiceActivity(
         /* ignore */
       }
       try {
-        if (ctx && ctx.state !== 'closed') void ctx.close();
+        if (ctx && ctx.state !== 'closed') {
+          void ctx.close();
+          console.log('[VAD] cleanup: AudioContext closed');
+        }
       } catch {
         /* ignore */
       }
+      console.log('[VAD] cleanup: audio graph disconnected');
       source = null;
       ctx = null;
     };
@@ -276,6 +296,15 @@ export default function useVoiceActivity(
     const processSamples = (samples: Float32Array) => {
       if (cancelled || streamRef.current !== stream) {
         return;
+      }
+
+      if (frameCount < 3) {
+        console.log('[VAD] raw audio sample check', {
+          frameCount,
+          firstSample: samples[0],
+          allZero: samples.every(v => v === 0)
+        });
+        frameCount++;
       }
 
       const now = performance.now();
@@ -330,7 +359,14 @@ export default function useVoiceActivity(
         // Resume before wiring analysis so VAD sees real microphone samples.
         if (ctx.state === 'suspended') {
           await ctx.resume();
+          console.log('[VAD] AudioContext resumed from suspended state');
         }
+        console.log('[VAD] AudioContext state:', ctx.state);
+
+        console.log('[VAD] audio graph setup', {
+          contextState: ctx.state,
+          processorType: 'audio-worklet' in ctx && typeof AudioWorkletNode !== 'undefined' ? 'AudioWorklet' : 'ScriptProcessor'
+        });
 
         if (cancelled) {
           void ctx.close();
@@ -343,6 +379,11 @@ export default function useVoiceActivity(
           bridge.cleanup();
           return;
         }
+        console.log('[VAD] audio graph connected', {
+          sourceId: source.mediaStream.id,
+          processor: bridge.processor,
+          contextState: ctx.state
+        });
         debugRef.current = {
           ...debugRef.current,
           processor: bridge.processor,

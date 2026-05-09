@@ -48,17 +48,39 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-function MediaBadge({ media }: { media: MediaFile }) {
+function MediaBadge({
+  media,
+  onPreview,
+  onPlay,
+}: {
+  media: MediaFile;
+  onPreview?: (url: string) => void;
+  onPlay?: (url: string) => void;
+}) {
   const isImage = media.media_type === 'image';
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isImage) {
+      onPreview?.(media.public_url);
+    } else {
+      onPlay?.(media.public_url);
+    }
+  };
+
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-primary bg-primary/5 px-2 py-1 rounded-full border border-primary/10 h-fit max-w-[150px]">
+    <button
+      onClick={handleClick}
+      className="inline-flex items-center gap-1.5 text-[10px] text-primary bg-primary/5 px-2.5 py-1.5 rounded-full border border-primary/10 h-fit max-w-[150px] transition-all hover:bg-primary/10 hover:scale-105 active:scale-95 group/badge cursor-pointer"
+    >
       {isImage ? (
-        <ImageIcon className="h-3 w-3 shrink-0" />
+        <ImageIcon className="h-3 w-3 shrink-0 group-hover/badge:rotate-12 transition-transform" />
       ) : (
-        <Volume2 className="h-3 w-3 shrink-0" />
+        <Volume2 className="h-3 w-3 shrink-0 group-hover/badge:animate-pulse transition-transform" />
       )}
-      <span className="truncate font-medium">{media.file_name || media.media_type}</span>
-    </span>
+      <span className="truncate font-semibold tracking-tight">
+        {media.file_name || media.media_type}
+      </span>
+    </button>
   );
 }
 
@@ -80,6 +102,20 @@ export default function FlashcardCardsPage() {
   );
 
   const parentRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  const sanitizeMediaUrl = (url: string | null) => {
+    if (!url) return '';
+    return url.replace('http://minio:9000', '');
+  };
+
+  const playAudio = (url: string) => {
+    if (audioRef.current) {
+      audioRef.current.src = sanitizeMediaUrl(url);
+      audioRef.current.play().catch((e) => console.warn('Audio playback failed', e));
+    }
+  };
 
   const rowVirtualizer = useVirtualizer({
     count: filteredCards?.length || 0,
@@ -150,7 +186,7 @@ export default function FlashcardCardsPage() {
                   top: 0,
                   left: 0,
                   width: '100%',
-                  transform: `translateY(${virtualItem.start - rowVirtualizer.options.scrollMargin}px)`,
+                  transform: `translateY(${virtualItem.start - (rowVirtualizer.options.scrollMargin || 0)}px)`,
                   paddingBottom: '16px',
                 }}
               >
@@ -158,30 +194,59 @@ export default function FlashcardCardsPage() {
                   card={filteredCards[virtualItem.index]}
                   deckId={deckId}
                   isVi={isVi}
+                  onPreview={(url) => setZoomedImage(url)}
+                  onPlay={playAudio}
                 />
               </div>
             ))}
           </div>
         </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-16 text-center border rounded-lg border-dashed bg-card/50">
-          <Layers className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">
-            {isVi ? 'Không tìm thấy thẻ nào' : 'No cards found'}
-          </h3>
-          <p className="text-muted-foreground max-w-sm mb-4">
-            {search
-              ? isVi
-                ? 'Không có thẻ nào khớp với tìm kiếm của bạn.'
-                : 'No cards match your search.'
-              : isVi
-                ? 'Bộ thẻ này đang trống. Hãy thêm thẻ để bắt đầu học.'
-                : 'This deck is empty. Add some cards to start studying.'}
-          </p>
-          {!search && <CardFormDialog mode="create" deckId={deckId} isVi={isVi} />}
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 bg-card/50 border border-dashed rounded-xl space-y-4">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+              <Layers className="h-8 w-8 text-muted-foreground/40" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-semibold text-lg">
+                {isVi ? 'Chưa có thẻ nào' : 'No cards found'}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {isVi
+                  ? 'Hãy thêm thẻ đầu tiên để bắt đầu học tập.'
+                  : 'Add your first card to start studying.'}
+              </p>
+            </div>
+            <CardFormDialog mode="create" deckId={deckId} isVi={isVi} />
+          </div>
+        )}
 
+        {/* Media elements */}
+        <audio ref={audioRef} className="hidden" />
+
+        {/* Zoom Image Overlay */}
+        {zoomedImage && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-300 cursor-zoom-out"
+            onClick={() => setZoomedImage(null)}
+          >
+            <button
+              className="absolute top-6 right-6 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all"
+              onClick={(e) => {
+                e.stopPropagation();
+                setZoomedImage(null);
+              }}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={sanitizeMediaUrl(zoomedImage)}
+              alt="Zoomed"
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl shadow-black/50 animate-in zoom-in-95 duration-300"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
+      {/* Floating Action Button */}
       <div className="fixed bottom-8 right-8 z-50">
         <CardFormDialog
           mode="create"
@@ -242,9 +307,9 @@ function CardFormDialog({
     }
   }, [open, card]);
 
-  const validateAndAddFiles = (files: FileList | null, side: 'front' | 'back') => {
+  const validateAndAddFiles = (files: FileList | File[] | null, side: 'front' | 'back') => {
     if (!files) return;
-    const newFiles = Array.from(files);
+    const newFiles = Array.isArray(files) ? files : Array.from(files);
     const validFiles = newFiles.filter((file) => {
       if (file.size > (file.type.startsWith('audio/') ? 10 : 5) * 1024 * 1024) {
         toast({ title: isVi ? 'File quá lớn' : 'File too large', variant: 'destructive' });
@@ -257,6 +322,24 @@ function CardFormDialog({
       setFrontMedia((prev) => [...prev, ...validFiles].slice(0, 5));
     } else {
       setBackMedia((prev) => [...prev, ...validFiles].slice(0, 5));
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent, side?: 'front' | 'back') => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      const activeSide = side || (document.activeElement?.id === 'backText' ? 'back' : 'front');
+      validateAndAddFiles(imageFiles, activeSide);
     }
   };
 
@@ -355,7 +438,7 @@ function CardFormDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
+            <div className="space-y-4" onPaste={(e) => handlePaste(e, 'front')}>
               <div className="space-y-2">
                 <Label
                   htmlFor="frontText"
@@ -382,7 +465,7 @@ function CardFormDialog({
                 deletedIds={deletedMediaIds}
               />
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4" onPaste={(e) => handlePaste(e, 'back')}>
               <div className="space-y-2">
                 <Label
                   htmlFor="backText"
@@ -523,7 +606,19 @@ function DeleteCardDialog({
   );
 }
 
-function FlashcardListItem({ card, deckId, isVi }: { card: Card; deckId: string; isVi?: boolean }) {
+function FlashcardListItem({
+  card,
+  deckId,
+  isVi,
+  onPreview,
+  onPlay,
+}: {
+  card: Card;
+  deckId: string;
+  isVi?: boolean;
+  onPreview: (url: string) => void;
+  onPlay: (url: string) => void;
+}) {
   const frontMedia = card.media?.filter((m: MediaFile) => m.side === 'front') || [];
   const backMedia = card.media?.filter((m: MediaFile) => m.side === 'back') || [];
 
@@ -536,7 +631,7 @@ function FlashcardListItem({ card, deckId, isVi }: { card: Card; deckId: string;
           </div>
           <div className="flex flex-wrap gap-2 mb-3">
             {frontMedia.map((m: MediaFile) => (
-              <MediaBadge key={m.id} media={m} />
+              <MediaBadge key={m.id} media={m} onPreview={onPreview} onPlay={onPlay} />
             ))}
           </div>
           <div className="text-sm font-medium flex-1 pr-4 whitespace-pre-wrap">
@@ -577,7 +672,7 @@ function FlashcardListItem({ card, deckId, isVi }: { card: Card; deckId: string;
           </div>
           <div className="flex flex-wrap gap-2 mb-3">
             {backMedia.map((m: MediaFile) => (
-              <MediaBadge key={m.id} media={m} />
+              <MediaBadge key={m.id} media={m} onPreview={onPreview} onPlay={onPlay} />
             ))}
           </div>
           <div className="text-sm flex-1 pr-8 whitespace-pre-wrap">{card.back_text}</div>

@@ -191,8 +191,9 @@ export default function useAudioCapture(
 
     const recorder = mediaRecorderRef.current;
     if (!recorder) {
-      console.error('[AudioCapture] stopRecording: inactive recorder and no cached blob');
-      throw new Error('No active recorder and no cached blob');
+      // Not an error — happens during cleanup or if start failed
+      console.log('[AudioCapture] stopRecording: no active recorder and no cached blob');
+      return undefined;
     }
 
     // PRIORITY 2: recorder active, stop and await onstop resolver queue.
@@ -269,10 +270,24 @@ export default function useAudioCapture(
         stopWaitTimeoutRef.current = null;
       }
       if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
+        try {
+          mediaRecorderRef.current.stop();
+          console.log('[AudioCapture] cleanup: MediaRecorder stopped');
+        } catch {
+          /* ignore */
+        }
       }
-      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+            console.log('[AudioCapture] cleanup: mic track stopped', track.label);
+          } catch {
+            /* ignore */
+          }
+        });
+        mediaStreamRef.current = null;
+      }
     };
   }, []);
 

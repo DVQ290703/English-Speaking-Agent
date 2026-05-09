@@ -133,6 +133,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.flashcardFlip': 'Flashcards',
     'shortcuts.flashcardRate': 'Rate card (1: Again, 2: Hard, 3: Good, 4: Easy)',
     'shortcuts.flashcardReplay': 'Replay audio',
+    'shortcuts.toggleAutoPlay': 'Toggle auto-play audio',
 
     // Badges / gamification
     'badges.title': 'Achievements',
@@ -530,6 +531,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'shortcuts.flashcardFlip': 'Flashcards',
     'shortcuts.flashcardRate': 'Đánh giá (1: Lại, 2: Khó, 3: Tốt, 4: Dễ)',
     'shortcuts.flashcardReplay': 'Nghe lại âm thanh',
+    'shortcuts.toggleAutoPlay': 'Bật/tắt tự động phát âm thanh',
 
     // Badges / gamification
     'badges.title': 'Thành tích',

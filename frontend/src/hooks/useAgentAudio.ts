@@ -147,15 +147,22 @@ export default function useAgentAudio({
   useEffect(() => {
     const players = audioPlayersRef.current;
     return () => {
+      console.log('[AgentAudio] cleanup: running full teardown on unmount');
+      try {
+        stopAllAudio();
+      } catch {
+        /* ignore */
+      }
       Object.keys(players).forEach((k) => {
         try {
           stopAndCleanupAudio(Number(k));
         } catch {
-          // noop
+          /* ignore */
         }
       });
+      console.log('[AgentAudio] cleanup: playback stopped');
     };
-  }, [stopAndCleanupAudio]);
+  }, [stopAllAudio, stopAndCleanupAudio]);
 
   const speakText = useCallback(
     (text: string) => {

@@ -1,13 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useGetDueCards, useSubmitReview, type Card } from '@/hooks/use-flashcard-api';
+import { useListCards, useSubmitReview, type Card } from '@/hooks/use-flashcard-api';
 import { useLanguage } from '@/i18n/useLanguage';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/primitives';
-import { X, CheckCircle2, Volume2, Star } from 'lucide-react';
+import {
+  X,
+  CheckCircle2,
+  Volume2,
+  VolumeX,
+  Star,
+  Zap,
+  ZapOff,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ShortcutsModal, { useShortcutsToggle } from '@/components/ui/ShortcutsModal';
-import { HelpCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 type Rating = 'again' | 'hard' | 'good' | 'easy';
 
@@ -26,25 +36,39 @@ export default function FlashcardStudyPage() {
 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
-  const { data: dueCards, isLoading } = useGetDueCards(deckId);
+  const { data: allCards, isLoading } = useListCards(deckId);
 
   const submitReviewMut = useSubmitReview();
 
-  const [queue, setQueue] = useState<Card[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [direction, setDirection] = useState(0); // 1 for next, -1 for back
+  const [reviewedCardIds, setReviewedCardIds] = useState<Set<string>>(new Set());
   const [initialTotal, setInitialTotal] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [bgTint, setBgTint] = useState<string>('transparent');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    if (dueCards && dueCards.length > 0 && queue.length === 0 && initialTotal === 0) {
-      setQueue(dueCards);
-      setInitialTotal(dueCards.length);
+  const [autoPlay, setAutoPlay] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('flashcard_autoplay');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
     }
-  }, [dueCards, queue.length, initialTotal]);
+  });
+  const [autoNext, setAutoNext] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('flashcard_autonext');
+      return saved !== null ? JSON.parse(saved) : false;
+    } catch {
+      return false;
+    }
+  });
+  const [history, setHistory] = useState<Card[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const autoNextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const currentCard = queue[0];
-  const progress = initialTotal > 0 ? ((initialTotal - queue.length) / initialTotal) * 100 : 0;
+  const currentCard = cards[currentIndex];
+  const progress = initialTotal > 0 ? ((currentIndex + 1) / initialTotal) * 100 : 0;
 
   const playAudio = useCallback(
     (input: 'front' | 'back' | string) => {
@@ -60,22 +84,73 @@ export default function FlashcardStudyPage() {
       }
 
       if (urlToPlay && audioRef.current) {
+        // Reset and play
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
         audioRef.current.src = urlToPlay;
-        audioRef.current.play().catch((e) => console.warn('Audio playback failed', e));
+        audioRef.current.load();
+        audioRef.current.play().catch((e) => {
+          if (e.name === 'AbortError') return;
+          console.warn('Audio playback failed', e);
+        });
       }
     },
     [currentCard],
   );
 
+  useEffect(() => {
+    if (allCards && allCards.length > 0 && cards.length === 0 && initialTotal === 0) {
+      setCards(allCards);
+      setInitialTotal(allCards.length);
+    }
+  }, [allCards, cards.length, initialTotal]);
+
+  useEffect(() => {
+    localStorage.setItem('flashcard_autoplay', JSON.stringify(autoPlay));
+  }, [autoPlay]);
+
+  useEffect(() => {
+    localStorage.setItem('flashcard_autonext', JSON.stringify(autoNext));
+    if (!autoNext && autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+    }
+  }, [autoNext]);
+
   const handleFlip = useCallback(() => {
-    if (queue.length > 0) {
+    if (cards.length > 0) {
       setIsFlipped((prev) => !prev);
     }
-  }, [queue.length]);
+  }, [cards.length]);
+
+  const handleNext = useCallback(() => {
+    if (currentIndex < cards.length - 1) {
+      setDirection(1);
+      setCurrentIndex((prev) => prev + 1);
+      setIsFlipped(false);
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+      }
+    }
+  }, [currentIndex, cards.length]);
+
+  const handleBack = useCallback(() => {
+    if (currentIndex > 0) {
+      setDirection(-1);
+      setCurrentIndex((prev) => prev - 1);
+      setIsFlipped(false);
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+      }
+    }
+  }, [currentIndex]);
 
   const handleRating = useCallback(
     (rating: Rating) => {
       if (!currentCard || !isFlipped) return;
+
+      if (autoNextTimerRef.current) {
+        clearTimeout(autoNextTimerRef.current);
+      }
 
       // Haptic feedback
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -90,15 +165,98 @@ export default function FlashcardStudyPage() {
 
       setTimeout(() => setBgTint('transparent'), 500);
 
-      // Optimistic update — move to next card immediately
-      setQueue((prev) => prev.slice(1));
-      setIsFlipped(false);
+      // Mark as reviewed
+      setReviewedCardIds((prev) => new Set(prev).add(currentCard.id));
 
       // API call in background
       submitReviewMut.mutate({ cardId: currentCard.id, rating });
+
+      // Move to next card if available
+      if (currentIndex < cards.length - 1) {
+        handleNext();
+      } else {
+        // If last card, we might want to stay or show finished
+        // For simplicity, let's just toast
+        toast.success(isVi ? 'Đã hoàn thành thẻ cuối!' : 'Final card reviewed!');
+      }
     },
-    [currentCard, isFlipped, submitReviewMut],
+    [currentCard, isFlipped, submitReviewMut, currentIndex, cards.length, handleNext, isVi],
   );
+
+  const handleNextManual = useCallback(() => {
+    handleNext();
+  }, [handleNext]);
+
+  // Handle audio end for auto-next
+  const onAudioEnded = useCallback(() => {
+    if (!autoNext) return;
+
+    if (!isFlipped) {
+      // Front finished -> auto flip after more gap
+      autoNextTimerRef.current = setTimeout(() => {
+        handleFlip();
+      }, 2500);
+    } else {
+      // Back finished -> auto next after longer gap
+      autoNextTimerRef.current = setTimeout(() => {
+        if (currentIndex < cards.length - 1) {
+          handleNext();
+        }
+      }, 3500);
+    }
+  }, [autoNext, isFlipped, handleFlip, handleNext, currentIndex, cards.length]);
+
+  // Master Auto-play trigger & Auto-next fallback
+  useEffect(() => {
+    if (!currentCard) return;
+
+    if (autoNextTimerRef.current) {
+      clearTimeout(autoNextTimerRef.current);
+    }
+
+    const hasAudio = !isFlipped
+      ? currentCard.media?.some((m) => m.side === 'front' && m.media_type === 'audio')
+      : currentCard.media?.some((m) => m.side === 'back' && m.media_type === 'audio');
+
+    if (!isFlipped) {
+      // FRONT SIDE
+      if (autoPlay) {
+        const timer = setTimeout(() => playAudio('front'), 400);
+
+        // If NO audio on front, and autoNext is ON -> fallback timer
+        if (!hasAudio && autoNext) {
+          autoNextTimerRef.current = setTimeout(() => handleFlip(), 4500);
+        }
+        return () => clearTimeout(timer);
+      } else if (autoNext) {
+        // If autoNext is ON but autoPlay is OFF -> fallback timer
+        autoNextTimerRef.current = setTimeout(() => handleFlip(), 5000);
+      }
+    } else {
+      // BACK SIDE
+      if (autoPlay) {
+        playAudio('back');
+
+        // If NO audio on back, and autoNext is ON -> fallback timer to next card
+        if (!hasAudio && autoNext && currentIndex < cards.length - 1) {
+          autoNextTimerRef.current = setTimeout(() => handleNext(), 5000);
+        }
+      } else if (autoNext && currentIndex < cards.length - 1) {
+        // If autoNext is ON but autoPlay is OFF -> fallback timer
+        autoNextTimerRef.current = setTimeout(() => handleNext(), 6000);
+      }
+    }
+  }, [
+    currentCard?.id,
+    isFlipped,
+    autoPlay,
+    autoNext,
+    playAudio,
+    handleFlip,
+    handleNext,
+    currentIndex,
+    cards.length,
+  ]);
 
   // Keyboard controls
   useEffect(() => {
@@ -129,13 +287,60 @@ export default function FlashcardStudyPage() {
       }
 
       // 'R' to replay audio
-      if (e.key.toLowerCase() === 'r') {
+      if (key === 'r') {
         playAudio(isFlipped ? 'back' : 'front');
+      }
+
+      // 'A' to toggle auto-play
+      if (key === 'a') {
+        e.preventDefault();
+        setAutoPlay((prev) => {
+          const next = !prev;
+          toast.info(
+            isVi
+              ? `Tự động phát: ${next ? 'BẬT' : 'TẮT'}`
+              : `Auto-play: ${next ? 'ENABLED' : 'DISABLED'}`,
+            { duration: 1500 },
+          );
+          return next;
+        });
+      }
+
+      // 'Z' to toggle auto-next
+      if (key === 'z') {
+        e.preventDefault();
+        setAutoNext((prev) => {
+          const next = !prev;
+          toast.info(
+            isVi
+              ? `Tự động chuyển: ${next ? 'BẬT' : 'TẮT'}`
+              : `Auto-advance: ${next ? 'ENABLED' : 'DISABLED'}`,
+            { duration: 1500, icon: <Zap className="w-4 h-4 text-yellow-500" /> },
+          );
+          return next;
+        });
+      }
+
+      // Arrow keys for manual navigation
+      if (e.key === 'ArrowLeft') {
+        handleBack();
+      }
+      if (e.key === 'ArrowRight') {
+        handleNextManual();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleFlip, handleRating, isFlipped, playAudio, shortcutsOpen, zoomedImage]);
+  }, [
+    handleFlip,
+    handleRating,
+    handleBack,
+    handleNextManual,
+    isFlipped,
+    playAudio,
+    shortcutsOpen,
+    zoomedImage,
+  ]);
 
   // Touch swipe handling
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -165,7 +370,7 @@ export default function FlashcardStudyPage() {
   }
 
   // Session complete
-  if (queue.length === 0 && initialTotal > 0) {
+  if (reviewedCardIds.size === initialTotal && initialTotal > 0) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background p-6">
         <motion.div
@@ -246,7 +451,7 @@ export default function FlashcardStudyPage() {
       className="fixed inset-0 z-50 flex flex-col bg-background transition-colors duration-300"
       style={{ backgroundColor: bgTint !== 'transparent' ? bgTint : '' }}
     >
-      <audio ref={audioRef} className="hidden" />
+      <audio ref={audioRef} className="hidden" onEnded={onAudioEnded} />
 
       {/* Top Bar */}
       <div className="flex items-center justify-between p-4 bg-transparent">
@@ -263,41 +468,117 @@ export default function FlashcardStudyPage() {
         <div className="flex-1 max-sm:mx-4 mx-8">
           <div className="flex justify-between text-xs text-muted-foreground mb-2 font-medium">
             <span>
-              {initialTotal - queue.length} / {initialTotal}
+              {currentIndex + 1} / {initialTotal}
             </span>
             <span>
-              {queue.length} {isVi ? 'thẻ còn lại' : 'remaining'}
+              {reviewedCardIds.has(currentCard?.id) ? (
+                <span className="text-green-500 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> {isVi ? 'Đã ôn' : 'Reviewed'}
+                </span>
+              ) : (
+                <span>
+                  {initialTotal - reviewedCardIds.size} {isVi ? 'thẻ chưa ôn' : 'remaining'}
+                </span>
+              )}
             </span>
           </div>
           <Progress value={progress} className="h-1.5" />
         </div>
-        <div className="w-10">
+        <div className="flex items-center gap-1 md:gap-2">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setShortcutsOpen(true)}
-            className="rounded-full text-muted-foreground hover:bg-muted/20"
-            title={isVi ? 'Phím tắt' : 'Keyboard shortcuts'}
+            onClick={() => {
+              setAutoPlay(!autoPlay);
+              toast.info(
+                isVi
+                  ? `Tự động phát: ${!autoPlay ? 'BẬT' : 'TẮT'}`
+                  : `Auto-play: ${!autoPlay ? 'ENABLED' : 'DISABLED'}`,
+                { duration: 1500 },
+              );
+            }}
+            className={`rounded-full transition-all duration-300 ${
+              autoPlay
+                ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                : 'text-muted-foreground hover:bg-muted/20'
+            }`}
+            title={
+              isVi
+                ? autoPlay
+                  ? 'Tắt tự động phát (Phím A)'
+                  : 'Bật tự động phát (Phím A)'
+                : autoPlay
+                  ? 'Turn off auto-play (Key A)'
+                  : 'Turn on auto-play (Key A)'
+            }
           >
-            <HelpCircle className="w-5 h-5" />
+            {autoPlay ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setAutoNext(!autoNext);
+              toast.info(
+                isVi
+                  ? `Tự động chuyển: ${!autoNext ? 'BẬT' : 'TẮT'}`
+                  : `Auto-advance: ${!autoNext ? 'ENABLED' : 'DISABLED'}`,
+                { duration: 1500, icon: <Zap className="w-4 h-4 text-yellow-500" /> },
+              );
+            }}
+            className={`rounded-full transition-all duration-300 ${
+              autoNext
+                ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
+                : 'text-muted-foreground hover:bg-muted/20'
+            }`}
+            title={
+              isVi
+                ? autoNext
+                  ? 'Tắt tự động chuyển (Phím Z)'
+                  : 'Bật tự động chuyển (Phím Z)'
+                : autoNext
+                  ? 'Turn off auto-advance (Key Z)'
+                  : 'Turn on auto-advance (Key Z)'
+            }
+          >
+            {autoNext ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
           </Button>
         </div>
       </div>
 
+      {/* Auto-next Status Indicator */}
+      <AnimatePresence>
+        {autoNext && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex justify-center -mt-2"
+          >
+            <div className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 font-medium border border-yellow-500/20">
+              <Zap className="w-3 h-3 fill-current" />
+              {isVi ? 'CHẾ ĐỘ TỰ ĐỘNG ĐANG BẬT' : 'AUTO-ADVANCE ACTIVE'}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Card Area */}
       <div
-        className="flex-1 flex flex-col items-center justify-center p-4 overflow-hidden"
+        className="flex-1 flex flex-col items-center justify-center p-4 overflow-hidden relative"
         style={{ perspective: '1000px' }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout" custom={direction}>
           {currentCard && (
             <motion.div
               key={currentCard.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              custom={direction}
+              initial={{ x: direction > 0 ? '100%' : direction < 0 ? '-100%' : 0, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: direction > 0 ? '-100%' : direction < 0 ? '100%' : 0, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="w-full max-w-4xl min-h-100 h-[70vh] relative cursor-pointer"
               onClick={handleFlip}
             >
@@ -457,6 +738,31 @@ export default function FlashcardStudyPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Side Navigation Buttons (Desktop) */}
+        <div className="fixed left-4 top-1/2 -translate-y-1/2 z-40 hidden lg:block">
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={currentIndex === 0}
+            onClick={handleBack}
+            className="h-14 w-14 rounded-full bg-background/80 backdrop-blur-md border shadow-lg hover:bg-primary/5 hover:text-primary transition-all active:scale-95 disabled:opacity-30"
+          >
+            <ChevronLeft className="w-8 h-8" />
+          </Button>
+        </div>
+
+        <div className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden lg:block">
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={currentIndex === cards.length - 1}
+            onClick={handleNextManual}
+            className="h-14 w-14 rounded-full bg-background/80 backdrop-blur-md border shadow-lg hover:bg-primary/5 hover:text-primary transition-all active:scale-95 disabled:opacity-30"
+          >
+            <ChevronRight className="w-8 h-8" />
+          </Button>
+        </div>
       </div>
 
       {/* Controls Area */}
@@ -465,7 +771,7 @@ export default function FlashcardStudyPage() {
         style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
       >
         <AnimatePresence>
-          {isFlipped ? (
+          {isFlipped && !reviewedCardIds.has(currentCard.id) ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

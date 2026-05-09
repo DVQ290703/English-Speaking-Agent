@@ -480,7 +480,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setMicEnabled,
   });
 
-  useSpeechRecognition({
+  const { stopSpeechRecognition } = useSpeechRecognition({
     status,
     micEnabled,
     language,
@@ -497,6 +497,41 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     getLastSessionQuality,
     t,
   });
+
+  // Master cleanup effect — runs on component unmount (navigation away)
+  useEffect(() => {
+    return () => {
+      console.log('[VoiceAgent] unmounting — running full cleanup');
+      try {
+        // 1. Stop mic + recording (triggers hooks cleanup)
+        setMicEnabled(false);
+        // 2. Stop agent audio playback immediately
+        stopAllAudio();
+        // 3. Stop SpeechRecognition
+        stopSpeechRecognition();
+        console.log('[VoiceAgent] cleanup complete');
+      } catch (err) {
+        console.warn('[VoiceAgent] cleanup error', err);
+      }
+    };
+  }, []); // empty deps → runs only on unmount
+
+  // Handle browser tab close / page refresh (hard disconnect)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Synchronous cleanup only
+      try {
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        stopAllAudio();
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [mediaStreamRef, stopAllAudio]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {

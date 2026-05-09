@@ -56,6 +56,7 @@ const SHORTCUTS: { sectionKey: string; items: Shortcut[] }[] = [
     items: [
       { keys: ['F'], descKey: 'shortcuts.openFlashcards' },
       { keys: ['R'], descKey: 'shortcuts.flashcardReplay' },
+      { keys: ['A'], descKey: 'shortcuts.toggleAutoPlay' },
     ],
   },
 ];

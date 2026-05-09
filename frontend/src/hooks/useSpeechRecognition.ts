@@ -1,14 +1,18 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, useCallback, type MutableRefObject } from 'react';
 import {
   LANGUAGE_CODES,
   type ConnectionStatus,
   type ISpeechRecognition,
+  type SpeechRecognitionEvent,
   type Language,
 } from '../components/voice-agent/constants';
 import type { VADSessionQuality } from '../lib/vad/VADTypes';
+import { isHallucinatedTranscript } from '../lib/vad/hallucinationFilter';
 
-const VAD_GATE_MIN_SPEECH_RATIO = 0.15;
-const VAD_GATE_MIN_DURATION_MS = 400;
+const VAD_GATE_MIN_SPEECH_RATIO = 0.25; // was 0.15
+const VAD_GATE_MIN_PEAK_RMS = 0.01; // new: explicit energy floor
+const VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT = 0.015; // stricter floor for browser-side STT
+const VAD_GATE_MIN_DURATION_MS = 600;
 
 export interface UseSpeechRecognitionParams {
   status: ConnectionStatus;
@@ -26,6 +30,10 @@ export interface UseSpeechRecognitionParams {
   sendChatMessage: (text: string, audioBlob?: Blob) => void;
   getLastSessionQuality: () => VADSessionQuality;
   t: (key: string, params?: Record<string, string | number>) => string;
+}
+
+export interface UseSpeechRecognitionResult {
+  stopSpeechRecognition: () => void;
 }
 
 /**
@@ -52,8 +60,33 @@ export default function useSpeechRecognition({
   sendChatMessage,
   getLastSessionQuality,
   t,
-}: UseSpeechRecognitionParams) {
+}: UseSpeechRecognitionParams): UseSpeechRecognitionResult {
   const recognitionRef = useRef<ISpeechRecognition | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          console.log('[Speech] cleanup: aborting recognition on unmount');
+          recognitionRef.current.abort();
+          recognitionRef.current = null;
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, []);
+
+  const stopSpeechRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        console.log('[Speech] stopping recognition manually');
+        recognitionRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+  }, []);
   const micPermissionInFlightRef = useRef<Promise<boolean> | null>(null);
   const isHandlingEndRef = useRef(false);
   const backendOnlyCaptureRef = useRef(false);
@@ -84,8 +117,29 @@ export default function useSpeechRecognition({
         durationMs: quality.durationMs,
       });
 
-      if (!quality.speechDetected && quality.speechFrameRatio < VAD_GATE_MIN_SPEECH_RATIO) {
-        console.warn('[Speech] VAD quality gate: no speech detected — send aborted', {
+      // Bug 1 fix: Require BOTH confirmed speech state AND minimum speech frames
+      // Prevents breath sounds (detected as speech but ratio=0) from passing.
+      const hasRealSpeech =
+        quality.speechDetected && quality.speechFrameRatio >= VAD_GATE_MIN_SPEECH_RATIO;
+      const hasAudioEnergy = quality.peakRMS >= VAD_GATE_MIN_PEAK_RMS;
+
+      if (!hasRealSpeech && !hasAudioEnergy) {
+        // Genuine silence — reject
+        console.warn('[Speech] VAD gate: rejected — silence', {
+          speechDetected: quality.speechDetected,
+          speechFrameRatio: quality.speechFrameRatio,
+          peakRMS: quality.peakRMS,
+          reason: 'no speech signal and no audio energy',
+        });
+        return false;
+      }
+
+      if (!hasRealSpeech) {
+        console.warn('[Speech] VAD gate: rejected — breath/noise', {
+          reason: !quality.speechDetected
+            ? 'VAD never entered speech state'
+            : 'speech ratio too low — likely breath/noise',
+          speechDetected: quality.speechDetected,
           speechFrameRatio: quality.speechFrameRatio,
           peakRMS: quality.peakRMS,
         });
@@ -108,7 +162,9 @@ export default function useSpeechRecognition({
       try {
         return await stopUserAudioCaptureRef.current();
       } catch (err) {
-        console.error('[Speech] stopRecording threw:', { reason, err });
+        if (reason !== 'effect cleanup') {
+          console.error('[Speech] stopRecording threw:', { reason, err });
+        }
         return undefined;
       }
     };
@@ -299,11 +355,30 @@ export default function useSpeechRecognition({
             return;
           }
 
+          const quality = getLastSessionQualityRef.current();
           if (!passesVADQualityGate()) {
             return;
           }
 
-          const messageText = finalTranscript.trim() || interimTranscript.trim();
+          const messageText = (finalTranscript.trim() || interimTranscript.trim()).trim();
+
+          // Hallucination Guard: Browser-side STT is prone to "hearing things" in noise.
+          // Require higher peak energy if we got a transcript from the browser.
+          if (messageText && quality.peakRMS < VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT) {
+            console.warn('[Speech] low energy + browser STT — hallucination risk, aborted', {
+              peakRMS: quality.peakRMS,
+              transcript: messageText,
+            });
+            return;
+          }
+
+          // Hallucination Guard: Filter out garbled or known fake patterns.
+          if (messageText && isHallucinatedTranscript(messageText)) {
+            console.warn('[Speech] hallucination detected — send aborted', {
+              transcript: messageText,
+            });
+            return;
+          }
           if (!messageText && !recordedAudio) {
             console.warn('[Speech] no transcript and no blob — send aborted');
             return;
@@ -443,4 +518,6 @@ export default function useSpeechRecognition({
     selectedMicIdRef,
     t,
   ]);
+
+  return { stopSpeechRecognition };
 }

@@ -1,65 +1,62 @@
+// Tuned for: laptop/headset microphones in normal office environments
+// Re-tune snrRatio if deploying in noisy (café) or studio conditions
 export const VAD_CONFIG = {
-  /**
-   * Calibration phase duration (ms).
-   * Records background noise level before listening.
-   * Increase in noisy environments.
-   */
   calibrationMs: 500,
 
   /**
-   * Signal-to-noise ratio for speech detection.
-   * Speech energy must be this multiple above background noise.
-   * Increase to reduce false positives in noisy rooms.
-   * Range: 2.0 (sensitive) - 5.0 (strict)
+   * SNR ratio for speech detection.
+   * 3.0 = studio mic in silent room (too strict for production)
+   * 1.8 = laptop mic in normal office environment ← USE THIS
+   * 1.5 = noisy environment / cheap mic
+   * Decrease if quiet speakers are not detected.
+   * Increase if background noise triggers false positives.
    */
-  snrRatio: 1.25,
+  snrRatio: 1.8, // was 3.0 → too strict for laptop/headset mics
 
   /**
-   * Consecutive speech frames required to confirm speech started.
-   * Prevents background noise from triggering recording.
-   * At ~50fps analysis: 8 frames is roughly 160ms.
+   * Consecutive speech frames to confirm speech started.
+   * Lower = more responsive, higher = fewer false positives.
+   * At 50fps: 5 frames = 100ms of confirmed speech
    */
-  speechConfirmFrames: 8,
+  speechConfirmFrames: 5, // was 8 → lower for faster response
 
   /**
-   * Consecutive silence frames before entering PAUSE state.
-   * Allows natural word boundaries without stopping.
-   * At ~50fps: 15 frames is roughly 300ms.
+   * Consecutive silence frames before entering PAUSE.
+   * At 50fps: 12 frames = ~240ms
    */
-  silenceFramesToPause: 15,
+  silenceFramesToPause: 12, // was 15, slight reduction
 
   /**
-   * Sustained silence duration in PAUSE state before stopping (ms).
-   * Industry standard for dictation: 1000-1500ms.
-   * Increase for slow or deliberate speakers.
-   * Decrease for snappier conversational feel.
+   * Sustained silence before end-of-speech trigger (ms).
+   * 1200ms = comfortable pause for natural speech
    */
   endOfSpeechMs: 1200,
 
   /**
-   * Minimum recording duration before VAD can trigger stop (ms).
-   * Rejects accidental noise bursts and clipped starts.
+   * Minimum recording duration before VAD can stop (ms).
    */
-  minSpeechMs: 500,
+  minSpeechMs: 400,
 
   /**
-   * Lower bound of the zero-crossing-rate range treated as voiced speech.
-   * Increase to reject low-frequency rumble.
-   * Lower values are required for deep or strongly voiced speech.
+   * ZCR range for voiced speech.
+   * Widen slightly to catch more speech patterns.
    */
-  zcrSpeechMin: 0.01,
+  zcrSpeechMin: 0.05, // was 0.10 → catches low-frequency voiced speech
+  zcrSpeechMax: 0.50, // was 0.45 → slightly wider band
 
   /**
-   * Upper bound of the zero-crossing-rate range treated as voiced speech.
-   * Decrease to reject broadband hiss, fans, and keyboard noise.
+   * Minimum speech frame ratio to pass quality gate.
+   * 0.05 = only 5% of frames need speech signal
+   * Lower because with SNR=1.8, fewer frames will be classified as speech
+   * but they'll be genuine speech frames.
    */
-  zcrSpeechMax: 0.45,
+  minSpeechFrameRatio: 0.05, // was 0.15 → too strict for SNR=1.8
 
   /**
-   * Minimum ratio of speech frames in a capture to be worth sending.
-   * Recordings with a lower ratio are treated as noise and ignored.
+   * Minimum peak RMS to pass quality gate.
+   * Reject recordings with no meaningful audio energy at all.
    */
-  minSpeechFrameRatio: 0.3,
+  minPeakRMS: 0.003, // new: explicit peak energy gate
 
   /**
    * Web Audio processor buffer size in frames.
@@ -77,13 +74,13 @@ export const VAD_CONFIG = {
    * Absolute RMS floor that qualifies as plausible speech energy.
    * Increase to reject faint background noise; decrease for softer speakers.
    */
-  minimumSpeechRms: 0.01,
+  minimumSpeechRms: 0.003,
 
   /**
    * How quickly the background-noise estimate adapts during non-speech frames.
    * Increase to adapt faster in changing environments; decrease for stability.
    */
-  noiseAdaptationFactor: 0.08,
+  noiseAdaptationFactor: 0.05,
 
   /**
    * Minimum interval between debug log lines (ms).

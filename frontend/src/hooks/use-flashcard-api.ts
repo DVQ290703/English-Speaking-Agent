@@ -169,6 +169,7 @@ export function useCreateCard() {
     },
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDueCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getListDecksQueryKey() });
     },
   });
@@ -200,6 +201,7 @@ export function useUpdateCard() {
       ),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDueCardsQueryKey(variables.deckId) });
     },
   });
 }
@@ -212,6 +214,7 @@ export function useDeleteCard() {
       deleteCard(token!, cardId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDueCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getListDecksQueryKey() });
     },
   });
@@ -259,6 +262,7 @@ export function useUploadMedia() {
     }) => uploadCardMedia(token!, cardId, data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDueCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getGetDeckQueryKey(variables.deckId) });
     },
   });
@@ -272,6 +276,7 @@ export function useDeleteMedia() {
       deleteCardMedia(token!, mediaId),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: getListCardsQueryKey(variables.deckId) });
+      qc.invalidateQueries({ queryKey: getGetDueCardsQueryKey(variables.deckId) });
       qc.invalidateQueries({ queryKey: getGetDeckQueryKey(variables.deckId) });
     },
   });
