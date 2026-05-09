@@ -11,7 +11,7 @@ import { isHallucinatedTranscript } from '../lib/vad/hallucinationFilter';
 
 const VAD_GATE_MIN_SPEECH_RATIO = 0.25; // was 0.15
 const VAD_GATE_MIN_PEAK_RMS = 0.01; // new: explicit energy floor
-const VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT = 0.015; // stricter floor for browser-side STT
+const VAD_GATE_MIN_PEAK_RMS_FOR_BROWSER_STT = 0.005; // stricter floor for browser-side STT
 const VAD_GATE_MIN_DURATION_MS = 600;
 
 export interface UseSpeechRecognitionParams {
