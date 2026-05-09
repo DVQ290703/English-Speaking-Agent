@@ -95,6 +95,9 @@ def create_deck(
                 (user_id, name, description),
             )
             row = cur.fetchone()
+    if row is None:
+        logger.warning("create_deck fetchone returned None — INSERT may have failed user_id=%s", user_id)
+        return {"error": "Deck creation failed — no row returned."}
     deck_id, deck_name, deck_desc = row
     logger.info("create_deck return deck_id=%s name=%r", deck_id, deck_name)
     logger.log_event(
