@@ -1,8 +1,8 @@
 # LLM Cost & Latency Optimization
 
-**Date:** 2026-05-10  
-**Status:** Approved  
-**Scope:** Parallelize backend grammar + main LLM calls; eliminate redundant frontend grammar fetch; fix secondary over-fetching patterns.
+**Date:** 2026-05-10
+**Status:** Approved
+**Scope:** Combine grammar + main LLM into one call using XML-delimited output; compact grammar format; eliminate redundant frontend grammar fetch; fix secondary over-fetching.
 
 ---
 
@@ -10,23 +10,24 @@
 
 Every user turn currently triggers:
 
-| Call | Where | Cost | Notes |
-|------|-------|------|-------|
-| Main LLM (Groq) | `pipeline.py:118` | ~600ms | Conversational response + tool loop |
-| Grammar LLM (Groq) | `pipeline.py:178` | ~500ms | Sequential, after main call |
-| `fetchGrammarFeedback` HTTP | `useSendChatMessage.ts:180` | ~100ms | Redundant — backend already returned grammar |
-| `fetchGrammarFeedback` HTTP | `VoiceAgent.tsx:774` | ~100ms | Fires on every message expand click |
+| Call | Where | Issue |
+|------|-------|-------|
+| Main LLM (Groq) | `pipeline.py:118` | Sequential, ~600ms |
+| Grammar LLM (Groq) | `pipeline.py:178` | Sequential after main, ~500ms, separate `json_client` |
+| `fetchGrammarFeedback` HTTP | `useSendChatMessage.ts:180` | Redundant — backend already has grammar result |
+| `fetchGrammarFeedback` HTTP | `VoiceAgent.tsx:774` | Fires on every message expand click, no cache check |
 
-The two backend LLM calls are sequential despite being independent (grammar only needs `user_input`, not the AI's reply). The frontend fires a separate grammar fetch even though the backend already computed and could return the full grammar inline.
+Additional: LLM character counting for `start_char`/`end_char` is unreliable. Grammar JSON is verbose — ~120 tokens for 2 errors.
 
 ---
 
 ## Goals
 
-- Reduce per-turn latency by parallelizing the two LLM calls.
-- Eliminate the redundant `fetchGrammarFeedback` call after every `chatRespond`.
-- Fix secondary over-fetching: grammar-on-click and topic-switch cascade.
-- Grammar analysis runs on **every** user turn — this is intentional and unchanged.
+- **1 LLM call per turn** instead of 2 — ~50% LLM cost reduction.
+- **~54% output token reduction** on grammar via compact format.
+- **Reliable character positions** — backend computes from inline annotations, not LLM.
+- **1 HTTP call per turn** from frontend instead of 2.
+- Grammar analysis runs on **every** user turn — intentional, unchanged.
 
 ---
 
@@ -36,141 +37,304 @@ The two backend LLM calls are sequential despite being independent (grammar only
 
 ```
 User input
-  │
   └─► pipeline._respond_node()
         ├─ LLM call #1: main response        (~600ms)
-        │    └─ [tool loop if needed]
-        └─ LLM call #2: grammar analysis     (~500ms, sequential)
-             └─ grammar_json → saved to DB
+        └─ LLM call #2: grammar (json_client) (~500ms, sequential)
 
-chat.py builds ChatResponse with GrammarSummary (stripped: error_count, spans only)
+chat.py → ChatResponse with GrammarSummary (stripped)
 
-Frontend useSendChatMessage:
+Frontend:
   chatRespond()           → response + stripped grammar_summary
-  fetchGrammarFeedback()  → full grammar from DB   ← REDUNDANT ROUND TRIP
+  fetchGrammarFeedback()  → full grammar from DB   ← REDUNDANT
 ```
 
 ### After
 
 ```
 User input
-  │
-  ├─► pipeline._respond_node()      ─────────────────────────────┐
-  │     ├─ LLM call #1: main response        (~600ms)            │  asyncio.gather
-  │     └─ [tool loop if needed + TTS]                           │
-  │                                                              │
-  └─► llm_service.generate_response_with_grammar()  (~500ms)    │
-        └─ grammar_json                              ────────────┘
+  └─► pipeline._respond_node()
+        └─ LLM call #1 only: response + grammar in one output (~700ms)
+             ├─ <response>…</response>   → conversational reply → TTS
+             └─ <grammar>…</grammar>     → compact JSON → parse → DB
 
-chat.py merges results, builds ChatResponse with full GrammarDetailResponse inline
+chat.py → ChatResponse with full grammar_detail inline
 
-Frontend useSendChatMessage:
-  chatRespond()  → response + full grammar_detail   ← single call, no follow-up
+Frontend:
+  chatRespond()  → response + full grammar_detail   ← single call, done
 ```
 
 ---
 
-## Detailed Changes
+## Design: Combined Output Format
 
-### 1. Extract grammar from `pipeline.py`
+### XML Delimiter Tags (Format B)
+
+The LLM is instructed via system prompt to always end its response with a `<grammar>` block:
+
+```
+<response>
+That's a great attempt! I noticed a couple of things we can work on.
+</response>
+<grammar>
+{"ann":"yesterday, i {go->went} to {cinema->the cinema} with {a->the} friend","err":[{"cat":"vt","sev":2,"msg":"Past simple for completed past actions.","eg":"I went to school yesterday."},{"cat":"art","sev":1,"msg":"'Cinema' needs the definite article in British English."},{"cat":"art","sev":1,"msg":"Definite article when noun is understood from context."}],"score":68}
+</grammar>
+```
+
+**Why XML tags over JSON schema mode:**
+Groq's `response_format: json_schema` conflicts with tool calls (flashcard operations). XML tags are prompt-level — no API constraint, tool calls continue to work unchanged.
+
+**Streaming behaviour:**
+- Stream starts → `<response>` section flows to frontend in real time (TTFT preserved)
+- `</response>` hit → slice: send `response_text` to TTS pipeline
+- `<grammar>` section buffered → JSON parsed after stream ends
+- `</grammar>` hit → grammar processing begins
+
+---
+
+## Design: Compact Grammar JSON
+
+### Schema
+
+```json
+{
+  "ann": "<annotated sentence with inline error markers>",
+  "err": [
+    {
+      "cat": "<category code>",
+      "sev": <1|2|3>,
+      "msg": "<one concise explanation sentence>",
+      "eg":  "<optional example sentence>"
+    }
+  ],
+  "score": <0-100>
+}
+```
+
+### Field Reference
+
+| Field | Full name | Type | Notes |
+|-------|-----------|------|-------|
+| `ann` | annotated | string | User's original sentence with `{wrong->correct}` markers |
+| `err` | errors | array | Ordered — `err[i]` matches the `i-th` annotation in `ann` |
+| `err[].cat` | category | string | Short code (see below) |
+| `err[].sev` | severity | int | `1` minor, `2` major, `3` critical |
+| `err[].msg` | message | string | One sentence — educational explanation |
+| `err[].eg` | example | string | Optional — omit for simple/obvious errors |
+| `score` | overall score | int | 0–100 |
+
+### Annotation Syntax in `ann`
+
+| Case | Syntax | Example |
+|------|--------|---------|
+| Word substitution | `{wrong->correct}` | `{go->went}` |
+| Multi-word substitution | `{wrong phrase->correct phrase}` | `{has been go->had gone}` |
+| Missing word (insertion) | `{->correct}` | `{->the} cinema` |
+| Extra word (deletion) | `{wrong->}` | `I {really->} went` |
+| No errors | plain sentence | `I went to school yesterday.` |
+
+### Category Codes
+
+| Code | Meaning |
+|------|---------|
+| `vt` | verb tense |
+| `art` | article (a/an/the) |
+| `prep` | preposition |
+| `sv` | subject-verb agreement |
+| `sp` | spelling |
+| `wc` | word choice |
+| `punc` | punctuation |
+| `wo` | word order |
+| `pl` | plural / singular |
+| `other` | catch-all |
+
+### Token Comparison
+
+| Format | Tokens (2 errors, ~15-word sentence) |
+|--------|--------------------------------------|
+| Previous verbose JSON | ~120 tokens |
+| Compact format | ~55 tokens |
+| Savings | **~54%** |
+
+---
+
+## Backend Parser: `parse_annotated_grammar()`
+
+New function in `app/services/grammar_parser.py`. Replaces the current LLM-JSON-to-GrammarData flow.
+
+### Algorithm
+
+```
+Input:  ann (annotated string), err (error list), user_input (original)
+Output: list[GrammarErrorDetail]
+
+1. Regex scan `ann` left-to-right:
+   pattern = \{([^}]*)->([^}]*)\}
+   collect list of (wrong_text, correct_text) tokens in order
+
+2. Derive corrected_sentence:
+   replace each {wrong->correct} with correct in ann → plain corrected text
+
+3. cursor = 0
+   For each token[i] paired with err[i]:
+     a. wrong_text = token.wrong  (empty string = insertion)
+     b. correct_text = token.correct  (empty string = deletion)
+
+     c. If wrong_text != "":
+          search original user_input for wrong_text (case-insensitive)
+          starting at cursor position
+          → start_char, end_char
+          cursor = end_char
+
+        Else (insertion — {->correct}):
+          find insertion point between surrounding words in original
+          start_char = end_char = cursor (zero-width span)
+
+     d. Build GrammarErrorDetail:
+          original    = wrong_text (or "" for insertion)
+          corrected   = correct_text (or "" for deletion)
+          start_char  = computed above
+          end_char    = computed above
+          category    = expand short code (vt → verb_tense, art → article, …)
+          severity    = expand int (1 → minor, 2 → major, 3 → critical)
+          explanation = err[i].msg
+          rule        = "" (no longer generated; absorbed into msg)
+          example     = err[i].eg or ""
+          id          = i + 1
+
+4. Return list[GrammarErrorDetail], corrected_sentence, overall_score
+```
+
+### Edge Cases
+
+| Case | Handling |
+|------|----------|
+| Same word appears twice as different errors | Cursor advances past first match; second search starts after it — order preserved |
+| Case mismatch (`Go` vs `{go->went}`) | Case-insensitive search; original casing preserved in `original` field |
+| `len(tokens) != len(err)` | Use `min(len(tokens), len(err))`; log warning |
+| `ann` missing or malformed | Fall back to `errors=[]`, `corrected_sentence=user_input`; `score` used if present |
+| Unclosed brace in `ann` | Regex only matches complete `{…->…}`; partial tokens ignored |
+| No errors | `ann` = plain sentence, `err=[]`, `score=100` |
+| Insertion at sentence start | `start_char=0`, `end_char=0` |
+| `<grammar>` tag missing from LLM output | `grammar_detail=None` in response; pipeline result unaffected |
+
+---
+
+## Detailed Code Changes
+
+### 1. `pipeline.py` — single combined LLM call
 
 **File:** `app/agents/pipeline.py`
 
-Remove the `generate_response_with_grammar()` call from `_respond_node` (currently lines 178–183). The pipeline state no longer carries `grammar_json`. The pipeline's return value from `run_langraph_agent` drops the grammar output — it returns `(response_text, audio_bytes, tool_steps)`.
+Remove the separate `generate_response_with_grammar()` call (lines 178–183). The `_respond_node` makes one LLM call whose system prompt instructs it to return `<response>…</response><grammar>…</grammar>` format.
 
-The `_TOOL_CALL_CAP` loop, TTS node, and all tool handling remain unchanged.
+After the LLM stream completes:
+- Split on `<response>` / `</response>` / `<grammar>` / `</grammar>` tags
+- `response_text` = content between `<response>` tags
+- `grammar_raw` = content between `<grammar>` tags (JSON string)
 
-### 2. New async runner in `ai_services.py`
+Pipeline state carries `grammar_raw` (raw JSON string) instead of the previous `grammar_json`.
+
+Pipeline returns `(response_text, audio_bytes, grammar_raw, tool_steps)`.
+
+**Tool call handling:** When the LLM emits tool calls, the tool loop executes normally. The system prompt instructs the LLM: *"Include the `<grammar>` block only in your final conversational reply. Do not include it when calling tools."* The pipeline only attempts to split and parse `<grammar>` on iterations where `ai_msg.tool_calls` is empty (i.e., the final response). Intermediate tool-call responses are passed through unchanged.
+
+### 2. `groq_llm.py` — update system prompt + remove `json_client`
+
+**File:** `app/services/groq_llm.py`
+
+- Remove `generate_response_with_grammar()` method entirely.
+- Remove `json_client` (the separate Groq client configured for JSON mode).
+- Update `generate_response()` system prompt to instruct combined output format (see prompt design below).
+
+**Prompt addition to system prompt:**
+
+```
+After your conversational reply, always append a grammar analysis block in this exact format:
+
+<response>
+[your conversational reply here]
+</response>
+<grammar>
+{"ann":"<user's sentence with {wrong->correct} markers>","err":[{"cat":"<code>","sev":<1|2|3>,"msg":"<explanation>","eg":"<optional example>"}],"score":<0-100>}
+</grammar>
+
+Category codes: vt=verb tense, art=article, prep=preposition, sv=subject-verb agreement,
+sp=spelling, wc=word choice, punc=punctuation, wo=word order, pl=plural/singular, other=catch-all
+Severity: 1=minor, 2=major, 3=critical
+If no grammar errors: use ann=<original sentence>, err=[], score=100
+```
+
+### 3. `grammar_parser.py` — new `parse_annotated_grammar()`
+
+**File:** `app/services/grammar_parser.py`
+
+Add `parse_annotated_grammar(ann: str, err: list, score: int, user_input: str) -> GrammarData` implementing the algorithm above.
+
+Remove `parse_grammar_response()` — it was only called from `chat.py` at write time. The `GET /grammar/detail_grammar_fb/:id` endpoint reads pre-parsed JSONB directly from the DB and does not use this function. Old DB records are already in expanded format and are unaffected.
+
+### 4. `ai_services.py` — remove grammar call, simplify
 
 **File:** `app/core/ai_services.py`
 
-Add `run_langraph_agent_async()` — an async wrapper that fires both tasks concurrently:
+Remove the standalone grammar call. `run_langraph_agent()` now returns `(response_text, audio_bytes, grammar_raw, tool_steps)` where `grammar_raw` is the raw JSON string extracted from the `<grammar>` tag.
 
-```python
-async def run_langraph_agent_async(
-    user_input: str,
-    history: list[str],
-    voice_gender: str | None,
-    category: str | None,
-    topic: str | None,
-    user_id: str,
-) -> tuple[str, bytes, dict | None, list]:
-    loop = asyncio.get_event_loop()
-
-    pipeline_task = loop.run_in_executor(
-        None,
-        lambda: _run_pipeline(user_input, history, voice_gender, category, topic, user_id),
-    )
-    grammar_task = loop.run_in_executor(
-        None,
-        lambda: llm_service.generate_response_with_grammar(
-            user_input=user_input,
-            history=history,
-            category=category,
-            topic=topic,
-        ),
-    )
-
-    (response_text, audio_bytes, tool_steps), (_, grammar_json) = await asyncio.gather(
-        pipeline_task, grammar_task
-    )
-    return response_text, audio_bytes, grammar_json, tool_steps
-```
-
-`_run_pipeline` is the extracted synchronous pipeline call (renamed from the current `run_langraph_agent` body, minus the grammar call).
-
-The existing synchronous `run_langraph_agent` is removed — `chat.py` calls `run_langraph_agent_async` directly via `await`. Any test that previously called `run_langraph_agent` synchronously must be updated to use `asyncio.run(run_langraph_agent_async(...))` or `pytest-asyncio`.
-
-### 3. `chat.py` — make endpoint async, include full grammar in response
+### 5. `chat.py` — parse inline, include full grammar in response
 
 **File:** `app/api/chat.py`
 
-- Change `def chat_respond(...)` → `async def chat_respond(...)`
-- Replace `run_langraph_agent(...)` call with `await run_langraph_agent_async(...)`
-- Extend `ChatResponse` return: replace `grammar_summary` with both `grammar_summary` (kept for backward compat) and a new `grammar_detail` field containing the full `GrammarDetailResponse`.
+Replace `parse_grammar_response(grammar_json, user_input)` with `parse_annotated_grammar(...)` using the new compact parser.
 
-`grammar_detail` is populated directly from the already-parsed `grammar_data` object — no extra DB query.
+Add `grammar_detail: GrammarDetailResponse | None` to the `ChatResponse` return — populated from parsed grammar data. No extra DB query needed.
 
-### 4. `schemas.py` — extend `ChatResponse`
+`grammar_summary` field kept for backward compatibility (derived from `grammar_detail`).
+
+### 6. `schemas.py` — extend `ChatResponse`
 
 **File:** `app/api/schemas.py`
 
 ```python
 class ChatResponse(BaseModel):
     ...
-    grammar_summary: GrammarSummary = ...       # kept for backward compat
-    grammar_detail: GrammarDetailResponse | None = None   # new: full inline detail
+    grammar_summary: GrammarSummary = ...                    # backward compat
+    grammar_detail: GrammarDetailResponse | None = None      # new: full inline
     tool_steps: list[ToolCallStep] = ...
 ```
 
-`grammar_detail` is `None` when grammar parsing fails (LLM returned invalid JSON).
-
-### 5. `useSendChatMessage.ts` — read inline grammar, remove fetch
+### 7. `useSendChatMessage.ts` — read inline grammar, remove fetch
 
 **File:** `frontend/src/hooks/useSendChatMessage.ts`
 
-Remove the `fetchGrammarFeedback` call (lines 178–237). Instead, after `chatRespond()` returns, read `data.grammar_detail` directly:
+Remove `fetchGrammarFeedback` call (lines 178–237). Read `data.grammar_detail` directly from `chatRespond()` response:
 
 ```typescript
 if (data.grammar_detail) {
   const items = data.grammar_detail.errors ?? [];
   setGrammarCorrectedSentence(data.grammar_detail.corrected_sentence ?? '');
-  const grammarMistakes = items.map(...); // same mapping logic as today
+  const grammarMistakes = items.map((item) => ({
+    wrong: item.original || '—',
+    correct: item.corrected || '—',
+    type: 'Grammar' as const,
+    note: item.explanation || undefined,
+  }));
   setGrammarErrors(grammarMistakes);
-  setMessages((prev) => prev.map((msg) => ...));
+  setMessages((prev) => prev.map((msg) =>
+    msg.id !== userId ? msg : {
+      ...msg,
+      mistakes: [...(msg.mistakes ?? []).filter(m => m.type !== 'Grammar'), ...grammarMistakes],
+      grammarChecked: true,
+    }
+  ));
 }
 setIsGrammarLoading(false);
 ```
 
-The `fetchGrammarFeedback` import is NOT removed from `chat.ts` — it is still used by `VoiceAgent.tsx` for historical message expansion.
+`fetchGrammarFeedback` import kept — still used by `VoiceAgent.tsx` for historical message expansion.
 
-### 6. `VoiceAgent.tsx` — skip fetch if grammar already in state
+### 8. `VoiceAgent.tsx` — skip fetch if grammar cached
 
 **File:** `frontend/src/pages/VoiceAgent.tsx`
 
-In the `useEffect` at lines 774–842 that fires `fetchGrammarFeedback` on message expand:
-
-Before firing the fetch, check if the selected message already has grammar mistakes loaded in its `message.mistakes` state (type `'Grammar'`). If so, set the grammar state from the cached data and return — skip the network call.
+In the `useEffect` at lines 774–842, check `displayMsg.grammarChecked` before firing network call:
 
 ```typescript
 useEffect(() => {
@@ -179,26 +343,18 @@ useEffect(() => {
     setIsGrammarLoading(false);
     return;
   }
-
-  // Use cached grammar if already loaded for this message
-  const cachedGrammar = displayMsg.mistakes?.filter((m) => m.type === 'Grammar') ?? [];
-  if (cachedGrammar.length > 0 || displayMsg.grammarChecked) {
-    setGrammarErrors(cachedGrammar);
+  // Skip fetch if grammar already loaded for this message
+  if (displayMsg.grammarChecked) {
+    const cached = displayMsg.mistakes?.filter(m => m.type === 'Grammar') ?? [];
+    setGrammarErrors(cached);
     setIsGrammarLoading(false);
     return;
   }
-
   // ... existing fetchGrammarFeedback logic unchanged
 }, [displayMsg, setMessages]);
 ```
 
-Add a `grammarChecked: boolean` field to the `Message` type so messages with zero errors (but grammar was confirmed checked) also skip re-fetching.
-
-### 7. `VoiceAgent.tsx` — guard topic-switch auto-load cascade
-
-**File:** `frontend/src/pages/VoiceAgent.tsx`
-
-In the auto-load effect (lines 718–743), skip auto-loading if `convsLoading` is still `true` (the conversations list fetch hasn't settled yet). The existing `convsLoading` state already tracks this — it just isn't used as a guard in the auto-load condition.
+### 9. `VoiceAgent.tsx` — guard topic-switch auto-load cascade
 
 ```typescript
 useEffect(() => {
@@ -211,53 +367,67 @@ useEffect(() => {
 }, [conversations, topic, convsLoading, loadConversationInPlace]);
 ```
 
+### 10. `MessageBubble.tsx` — add `grammarChecked` to `Message` type
+
+**File:** `frontend/src/components/voice-agent/MessageBubble.tsx`
+
+```typescript
+export interface Message {
+  ...
+  grammarChecked?: boolean;   // true once grammar has been loaded for this message
+}
+```
+
 ---
 
 ## Data Flow — Per Turn (After)
 
 ```
-1. HTTP POST /chat/respond
-   ├─ Async: pipeline (main LLM + TTS)    ~800ms
-   └─ Async: grammar LLM call             ~500ms
-        └─ both finish via asyncio.gather
+1. POST /chat/respond
 
-2. chat.py merges → ChatResponse {
-     response_text, audio_base64,
-     grammar_summary,          ← lightweight, backward compat
-     grammar_detail: {         ← new: full detail inline
-       errors: [...],
-       corrected_sentence,
-       overall_score
-     },
-     tool_steps
-   }
+2. pipeline._respond_node() — single LLM call
+   Stream output:
+     <response>
+     "That's a great attempt! ..."    ← TTFT here, frontend sees text
+     </response>
+     <grammar>
+     {"ann":"i {go->went}...","err":[...],"score":75}
+     </grammar>
 
-3. Frontend receives single response
-   ├─ Renders agent reply + audio
-   ├─ Reads grammar_detail → updates grammar state
-   └─ No follow-up API call needed
+3. Split on tags:
+   response_text → TTS → audio_bytes
+   grammar_raw   → parse_annotated_grammar() → GrammarDetailResponse
+
+4. chat.py builds ChatResponse:
+   { response_text, audio_base64, grammar_summary, grammar_detail, tool_steps }
+
+5. Frontend receives one response:
+   - Renders reply + plays audio
+   - Reads grammar_detail directly → no follow-up call
 ```
 
 ---
 
 ## Error Handling
 
-| Failure | Behavior |
-|---------|----------|
-| Grammar LLM call fails | `grammar_detail: null` in response; pipeline result unaffected |
-| Main pipeline fails | Exception propagates normally; grammar result discarded |
-| `asyncio.gather` partial failure | Each task wrapped in try/except; partial results returned |
-| Frontend `grammar_detail` is null | `setGrammarErrors([])` + `setIsGrammarLoading(false)` silently |
+| Failure | Behaviour |
+|---------|-----------|
+| `<grammar>` tag missing | `grammar_detail: null`; pipeline result unaffected |
+| Grammar JSON malformed | Parser returns `errors=[]`, `score=null`; logged as warning |
+| Main response missing `<response>` tag | Full raw output used as `response_text`; grammar tag still attempted |
+| `len(annotations) != len(err)` | Use `min()` of both; log warning |
+| Frontend `grammar_detail` is null | `setGrammarErrors([])`, `setIsGrammarLoading(false)` silently |
 
 ---
 
 ## What Does NOT Change
 
-- Grammar runs on every user turn — no opt-out flag added.
-- `GET /grammar/detail_grammar_fb/:id` endpoint is kept — used for historical message viewing.
-- Pronunciation assessment flow is unchanged.
-- Tool call cap (`_TOOL_CALL_CAP = 5`) and tool loop logic are unchanged.
-- `GrammarSummary` field in `ChatResponse` is kept for backward compatibility.
+- Grammar runs every turn — no opt-out flag.
+- `GET /grammar/detail_grammar_fb/:id` endpoint kept for historical message viewing.
+- Pronunciation assessment flow unchanged.
+- Tool call cap (`_TOOL_CALL_CAP = 5`) and tool loop logic unchanged.
+- `GrammarSummary` in `ChatResponse` kept for backward compatibility.
+- `parse_grammar_response()` removed — was only called at write time in `chat.py`; replaced by `parse_annotated_grammar()`.
 
 ---
 
@@ -265,14 +435,16 @@ useEffect(() => {
 
 | File | Change |
 |------|--------|
-| `app/agents/pipeline.py` | Remove grammar call from `_respond_node`; drop `grammar_json` from state/return |
-| `app/core/ai_services.py` | Add `run_langraph_agent_async()`; extract `_run_pipeline()` |
-| `app/api/chat.py` | `async def chat_respond`; call async runner; populate `grammar_detail` |
-| `app/api/schemas.py` | Add `grammar_detail: GrammarDetailResponse \| None` to `ChatResponse` |
+| `app/agents/pipeline.py` | Single combined LLM call; split `<response>`/`<grammar>` tags; drop separate grammar call |
+| `app/services/groq_llm.py` | Remove `generate_response_with_grammar()` and `json_client`; update system prompt |
+| `app/services/grammar_parser.py` | Add `parse_annotated_grammar()` for new compact format |
+| `app/core/ai_services.py` | Remove standalone grammar call; update return signature |
+| `app/api/chat.py` | Use new parser; add `grammar_detail` to `ChatResponse` |
+| `app/api/schemas.py` | Add `grammar_detail: GrammarDetailResponse \| None` to `ChatResponse`; make `GrammarErrorDetail.rule` and `.example` optional (`str \| None = None`) since LLM no longer generates `rule` |
 | `frontend/src/hooks/useSendChatMessage.ts` | Remove `fetchGrammarFeedback` call; read `data.grammar_detail` |
-| `frontend/src/pages/VoiceAgent.tsx` | Skip grammar fetch if cached; guard topic-switch auto-load |
-| `frontend/src/components/voice-agent/MessageBubble.tsx` | Add `grammarChecked` field to `Message` type |
-| `tests/test_ai_services/test_ai_services.py` | Update sync calls to use `asyncio.run(run_langraph_agent_async(...))` |
+| `frontend/src/pages/VoiceAgent.tsx` | Cache-check before grammar fetch; guard topic-switch auto-load |
+| `frontend/src/components/voice-agent/MessageBubble.tsx` | Add `grammarChecked` to `Message` type |
+| `tests/test_ai_services/test_ai_services.py` | Update to new return signature; test tag splitting |
 
 ---
 
@@ -280,8 +452,10 @@ useEffect(() => {
 
 | Metric | Before | After |
 |--------|--------|-------|
-| LLM calls per turn | 2 sequential | 2 parallel |
-| Turn latency (p50) | ~1.5s | ~900ms |
-| HTTP calls per turn (frontend) | 2 (chat + grammar) | 1 |
-| Grammar-on-click fetches | Every click | Only on cache miss |
-| Topic-switch fetches | 2 concurrent | 1 sequential |
+| LLM calls per turn | 2 | 1 |
+| Grammar output tokens (2 errors) | ~120 | ~55 (~54% less) |
+| Total LLM cost per turn | baseline | ~50–60% less |
+| Turn latency (p50) | ~1.5s | ~800ms |
+| HTTP calls per turn (frontend) | 2 | 1 |
+| Grammar-on-click fetches | every click | cache miss only |
+| Character position accuracy | LLM-counted (unreliable) | backend string search (reliable) |
