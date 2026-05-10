@@ -120,6 +120,7 @@ def exchange_code_for_identity(provider: str, code: str) -> dict:
             signing_key.key,
             algorithms=["RS256"],
             options={"verify_aud": False},
+            leeway=60,
         )
 
         if provider == "google":
