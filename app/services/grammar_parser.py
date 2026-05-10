@@ -1,17 +1,39 @@
-"""Parse the structured LLM JSON output into grammar domain objects.
+"""Parse the XML-delimited LLM output and compact grammar JSON into domain objects.
 
-The LLM marks errors with angle brackets in a `tagged_input` field, e.g.:
-  "I <go> to <store> yesterday"
+The LLM returns output in this format:
+    <response>conversational reply</response>
+    <grammar>{"ann":"sentence {wrong->correct}","err":[...],"score":85}</grammar>
 
-We parse those tags to derive exact character positions — no LLM character
-counting involved, which eliminates off-by-one hallucinations.
+split_combined_output() separates the two sections.
+parse_annotated_grammar() derives reliable char positions from the {wrong->correct}
+annotations — never trusting LLM character counts.
 """
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 
 from app.core.logger import logger
+
+_RESPONSE_TAG_RE = re.compile(r"<response>(.*?)</response>", re.DOTALL)
+_GRAMMAR_TAG_RE = re.compile(r"<grammar>(.*?)</grammar>", re.DOTALL)
+_ANNOTATION_RE = re.compile(r"\{([^}]*?)->([^}]*?)\}")
+
+_CAT_MAP: dict[str, str] = {
+    "vt": "verb_tense",
+    "art": "article",
+    "prep": "preposition",
+    "sv": "subject_verb_agreement",
+    "sp": "spelling",
+    "wc": "word_choice",
+    "punc": "punctuation",
+    "wo": "word_order",
+    "pl": "plural_singular",
+    "other": "other",
+}
+
+_SEV_MAP: dict[int, str] = {1: "minor", 2: "major", 3: "critical"}
 
 
 @dataclass
@@ -34,92 +56,92 @@ class GrammarData:
     overall_score: int = 100
 
 
-def _parse_tagged_input(tagged: str) -> list[tuple[str, int, int]]:
-    """Extract (original, start_char, end_char) spans from a <tagged> string.
+def split_combined_output(raw: str) -> tuple[str, str | None]:
+    """Split <response>…</response><grammar>…</grammar> LLM output.
 
-    Positions are offsets into the *clean* (tag-stripped) string, so
-    user_input[start_char:end_char] == original.
-
-    Example:
-        "Yes, I <will enjoy> today." → [("will enjoy", 7, 17)]
-
-    Malformed or unclosed tags are treated as plain text and skipped.
+    Returns (response_text, grammar_raw_json).
+    Falls back to (raw.strip(), None) when <response> tag is missing.
     """
-    spans: list[tuple[str, int, int]] = []
-    clean_offset = 0
-    i = 0
-    while i < len(tagged):
-        if tagged[i] == "<":
-            close = tagged.find(">", i + 1)
-            if close == -1:
-                # Unclosed tag — treat as literal text
-                clean_offset += 1
-                i += 1
-            else:
-                original = tagged[i + 1 : close]
-                if original:  # ignore empty <> tags
-                    spans.append((original, clean_offset, clean_offset + len(original)))
-                clean_offset += len(original)
-                i = close + 1
-        else:
-            clean_offset += 1
-            i += 1
-    return spans
+    response_match = _RESPONSE_TAG_RE.search(raw)
+    grammar_match = _GRAMMAR_TAG_RE.search(raw)
+    response_text = response_match.group(1).strip() if response_match else raw.strip()
+    grammar_raw = grammar_match.group(1).strip() if grammar_match else None
+    return response_text, grammar_raw
 
 
-def parse_grammar_response(
-    raw_json: str | None, user_input: str
-) -> tuple[str | None, GrammarData]:
-    """Parse the LLM JSON blob into (response_text, GrammarData).
+def parse_annotated_grammar(grammar_raw: str | None, user_input: str) -> GrammarData:
+    """Parse compact annotated grammar JSON into GrammarData.
 
-    Span positions are derived from the `tagged_input` field rather than
-    trusting LLM-supplied char offsets, eliminating hallucinated positions.
+    Expects: {"ann":"sentence {wrong->correct}","err":[...],"score":85}
 
-    Returns (None, empty GrammarData) when raw_json is None or malformed.
-    Never raises.
+    Character positions are computed by searching user_input for annotation
+    tokens left-to-right. Never raises — returns empty GrammarData on failure.
     """
-    empty = GrammarData()
-    if not raw_json:
-        return None, empty
+    if not grammar_raw:
+        return GrammarData()
     try:
-        data = json.loads(raw_json)
-        response_text = data.get("response_text", "").strip() or None
+        data = json.loads(grammar_raw)
+        ann: str = data.get("ann", "")
+        err_list: list = data.get("err", [])
+        score: int = int(data.get("score", 100))
 
-        # Derive reliable positions from the tagged string
-        tagged_input: str = data.get("tagged_input", "")
-        spans = _parse_tagged_input(tagged_input) if tagged_input else []
-        # Build a lookup keyed by original text; preserve insertion order so
-        # first-match wins when the same phrase appears more than once.
-        span_lookup: dict[str, tuple[int, int]] = {}
-        for original, start, end in spans:
-            span_lookup.setdefault(original, (start, end))
+        # Extract annotation tokens in left-to-right order
+        tokens = [(m.group(1), m.group(2)) for m in _ANNOTATION_RE.finditer(ann)]
 
-        errors: list[GrammarError] = []
-        for e in data.get("grammar_errors", []):
-            original = str(e["original"])
-            start_char, end_char = span_lookup.get(original, (0, 0))
-            errors.append(
-                GrammarError(
-                    original=original,
-                    corrected=str(e["corrected"]),
-                    start_char=start_char,
-                    end_char=end_char,
-                    category=str(e["category"]),
-                    severity=str(e["severity"]),
-                    explanation=str(e["explanation"]),
-                    rule=str(e["rule"]),
-                    example=str(e["example"]),
-                )
+        # Derive corrected_sentence: replace each {wrong->correct} with correct
+        corrected_sentence = _ANNOTATION_RE.sub(lambda m: m.group(2), ann).strip() or None
+
+        # Pair tokens with error detail items; use min length to handle mismatches
+        pairs = list(zip(tokens, err_list))
+        if len(tokens) != len(err_list):
+            logger.warning(
+                "parse_annotated_grammar annotation/error count mismatch tokens=%d errors=%d",
+                len(tokens),
+                len(err_list),
             )
 
-        return response_text, GrammarData(
+        errors: list[GrammarError] = []
+        cursor = 0  # tracks search position in user_input
+
+        for (wrong_text, correct_text), err_item in pairs:
+            start_char, end_char = 0, 0
+
+            if wrong_text:  # substitution or deletion
+                idx = user_input.lower().find(wrong_text.lower(), cursor)
+                if idx != -1:
+                    start_char = idx
+                    end_char = idx + len(wrong_text)
+                    cursor = end_char
+            else:
+                # Insertion {->word}: zero-width span at cursor position
+                start_char = cursor
+                end_char = cursor
+
+            cat_code = str(err_item.get("cat", "other"))
+            category = _CAT_MAP.get(cat_code, cat_code)
+            sev_raw = err_item.get("sev", 1)
+            severity = _SEV_MAP.get(int(sev_raw), "minor")
+
+            errors.append(GrammarError(
+                original=wrong_text,
+                corrected=correct_text,
+                start_char=start_char,
+                end_char=end_char,
+                category=category,
+                severity=severity,
+                explanation=str(err_item.get("msg", "")),
+                rule="",
+                example=str(err_item.get("eg", "")),
+            ))
+
+        return GrammarData(
             errors=errors,
-            corrected_sentence=data.get("corrected_sentence") or None,
-            overall_score=int(data.get("overall_score", 100)),
+            corrected_sentence=corrected_sentence,
+            overall_score=score,
         )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         logger.warning(
-            "grammar_parser: failed to parse LLM response user_input_length=%d",
+            "parse_annotated_grammar: failed to parse grammar_raw user_input_length=%d",
             len(user_input),
         )
-        return None, empty
+        return GrammarData()
