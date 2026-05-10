@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import json
+import json  # noqa: F401
 import secrets
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode  # quote: noqa: F401
 
-import httpx
-import jwt
-from jwt import PyJWKClient
+import httpx  # noqa: F401
+import jwt  # noqa: F401
+from jwt import PyJWKClient  # noqa: F401
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.core.database import get_connection
+from app.core.database import get_connection  # noqa: F401
 from app.core.logger import logger
-from app.core.security import create_access_token
+from app.core.security import create_access_token  # noqa: F401
 from app.core.settings import (
     APP_BASE_URL,
     FACEBOOK_CLIENT_ID,
@@ -92,5 +92,9 @@ def oauth_login(provider: str):
     if provider not in _PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
     state = secrets.token_hex(32)
-    _get_redis().setex(f"oauth_state:{state}", 600, provider)
+    try:
+        _get_redis().setex(f"oauth_state:{state}", 600, provider)
+    except Exception:
+        logger.warning("Redis unavailable for OAuth state storage provider=%s", provider)
+        raise HTTPException(status_code=503, detail="OAuth service temporarily unavailable")
     return {"auth_url": build_auth_url(provider, state)}
