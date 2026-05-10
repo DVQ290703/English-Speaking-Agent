@@ -10,8 +10,9 @@ class AgentState(TypedDict):
     audio_bytes: bytes   # raw MP3 bytes from TTS; empty on failure
     history: list[str]
     voice_gender: str | None
-    grammar_json: str | None  # raw JSON from LLM grammar call; None on failure
+    grammar_raw: str | None  # raw compact JSON from <grammar> tag; None on failure
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"
+    user_id: str | None       # authenticated user UUID — injected into system prompt for tool calls
     messages: Annotated[list[BaseMessage], add_messages]  # tool-calling sub-loop accumulator
     _tool_call_iterations: int                            # loop guard counter
