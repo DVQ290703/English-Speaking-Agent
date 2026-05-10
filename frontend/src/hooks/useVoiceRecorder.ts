@@ -372,7 +372,9 @@ export default function useVoiceRecorder({
 
       const gen = cancelGenRef.current;
 
-      // Decode audio buffer once — compute waveform bars + produce clean blob for sending
+      // Decode audio buffer once — compute waveform bars + produce clean blob,
+      // then kick off transcription with the clean WAV blob (no extra toWav
+      // conversion needed in the transcription path).
       void decodeAudioBuffer(blob)
         .then((audioBuf) => {
           if (cancelGenRef.current !== gen) return;
@@ -380,11 +382,13 @@ export default function useVoiceRecorder({
           const clean = trimGateEncode(audioBuf);
           cleanBlobRef.current = clean;
           setCleanBlob(clean);
+          void transcribeFnRef.current();
         })
-        .catch(() => {}); // silent — waveform stays zeros, send() falls back to raw blob
-
-      // Auto-start transcription immediately
-      void transcribeFnRef.current();
+        .catch(() => {
+          // Decode failed — transcribe with the raw blob as fallback.
+          if (cancelGenRef.current !== gen) return;
+          void transcribeFnRef.current();
+        });
     };
 
     if (recorder.state === 'inactive') {
@@ -400,7 +404,7 @@ export default function useVoiceRecorder({
   }, [stop]);
 
   const transcribe = useCallback(async () => {
-    const blob = audioBlobRef.current;
+    const blob = cleanBlobRef.current ?? audioBlobRef.current;
     if (!blob) return;
     const gen = cancelGenRef.current;
     setStatus('transcribing');

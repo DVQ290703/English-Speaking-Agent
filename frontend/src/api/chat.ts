@@ -257,6 +257,26 @@ export interface AssessPronunciationResult {
   words: WordResult[];
 }
 
+export async function transcribeAudio(token: string, audioBlob: Blob): Promise<string> {
+  // cleanBlob from useVoiceRecorder is already audio/wav — send as-is.
+  // Raw MediaRecorder blobs (webm/mp4/ogg) may have mismatched MIME types on
+  // some browsers (notably Safari), so convert to WAV before uploading.
+  const uploadBlob = audioBlob.type === 'audio/wav' ? audioBlob : await toWav(audioBlob);
+  const formData = new FormData();
+  formData.append('audio_file', uploadBlob, 'recording.wav');
+  const response = await fetch(`${API_BASE_URL}${ENDPOINTS.chat.transcribe}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error((data as { detail?: string }).detail || 'Transcription failed');
+  }
+  return (data as { text?: string }).text ?? '';
+}
+
+
 export async function assessPronunciation({
   token,
   audioBlob,

@@ -15,7 +15,7 @@ import { SiOpenai } from 'react-icons/si';
 
 import { useAuth } from '../auth/AuthContext';
 import { getAuthSession } from '../auth/tokenStorage';
-import { fetchGrammarFeedback, assessPronunciation } from '../api/chat';
+import { fetchGrammarFeedback, assessPronunciation, transcribeAudio } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
@@ -855,8 +855,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const onTranscribe = useCallback(async (blob: Blob): Promise<string> => {
     const session = getAuthSession();
     if (!session?.token) throw new Error('Not authenticated');
-    const result = await assessPronunciation({ token: session.token, audioBlob: blob });
-    return result.recognized_text;
+    return transcribeAudio(session.token, blob);
   }, []);
 
   const onSendRecording = useCallback(

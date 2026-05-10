@@ -9,6 +9,7 @@ export const ENDPOINTS = {
   chat: {
     respond: '/api/chat/respond',
     assess: '/api/assess',
+    transcribe: '/api/chat/transcribe',
   },
   conversations: {
     list: '/api/conversations',

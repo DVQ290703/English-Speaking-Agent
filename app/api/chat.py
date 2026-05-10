@@ -97,6 +97,32 @@ def _insert_audio_asset(
     )
 
 
+@router.post("/transcribe")
+def transcribe_audio_only(
+    audio_file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Lightweight STT-only endpoint: transcribes audio via Groq Whisper.
+    No LLM, no TTS, no database writes — optimised for low-latency transcription."""
+    audio_bytes = _read_and_close_upload(audio_file)
+    if not audio_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Audio file is empty")
+    if len(audio_bytes) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Audio file exceeds 25 MB limit",
+        )
+    _validate_uploaded_audio(
+        audio_file=audio_file,
+        audio_bytes=audio_bytes,
+        allowed_content_types=_CHAT_AUDIO_CONTENT_TYPES,
+        endpoint_label="Transcribe",
+    )
+    text = transcribe_audio(audio_bytes, filename=audio_file.filename or "recording.wav")
+    logger.info("transcribe_audio_only done user_id=%s length=%d", user_id, len(text))
+    return {"text": text}
+
+
 @router.post("/respond", response_model=ChatResponse)
 def chat_respond(
     text: str | None = Form(default=None),
