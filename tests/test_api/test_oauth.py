@@ -171,3 +171,98 @@ def test_exchange_code_facebook_no_email(monkeypatch):
 
     assert identity["email"] is None
     assert identity["email_verified"] is False
+
+
+# ---------------------------------------------------------------------------
+# find_or_create_user
+# ---------------------------------------------------------------------------
+
+def _identity(provider_user_id="uid123", email="user@example.com",
+               email_verified=True, name="Test User", picture=None, tenant_id=None):
+    return {
+        "provider_user_id": provider_user_id,
+        "email": email,
+        "email_verified": email_verified,
+        "name": name,
+        "picture": picture,
+        "tenant_id": tenant_id,
+    }
+
+
+def test_find_or_create_returns_existing_oauth_user(mock_db_conn):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        ("existing_user_id",),   # oauth_accounts lookup found
+        ("user@example.com",),   # users email lookup
+    ]
+
+    with patch("app.api.oauth.get_connection", return_value=mock_conn):
+        from app.api.oauth import find_or_create_user
+        user_id, email = find_or_create_user("google", _identity())
+
+    assert user_id == "existing_user_id"
+    assert email == "user@example.com"
+
+
+def test_find_or_create_auto_links_existing_email(mock_db_conn):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        None,                    # no oauth_accounts match
+        ("existing_user_id",),   # users email match (auto-link)
+    ]
+
+    with patch("app.api.oauth.get_connection", return_value=mock_conn):
+        from app.api.oauth import find_or_create_user
+        user_id, email = find_or_create_user("google", _identity(email_verified=True))
+
+    assert user_id == "existing_user_id"
+    assert email == "user@example.com"
+
+
+def test_find_or_create_new_user_when_no_match(mock_db_conn):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        None,                # no oauth_accounts
+        None,                # no email match
+        ("new_user_id",),    # INSERT users RETURNING id
+    ]
+
+    with patch("app.api.oauth.get_connection", return_value=mock_conn):
+        from app.api.oauth import find_or_create_user
+        user_id, email = find_or_create_user("google", _identity())
+
+    assert user_id == "new_user_id"
+    assert email == "user@example.com"
+
+
+def test_find_or_create_unverified_email_skips_link(mock_db_conn):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        None,                # no oauth_accounts
+        ("new_user_id",),    # INSERT users RETURNING id (email link step skipped)
+    ]
+
+    with patch("app.api.oauth.get_connection", return_value=mock_conn):
+        from app.api.oauth import find_or_create_user
+        user_id, _ = find_or_create_user("google", _identity(email_verified=False))
+
+    assert user_id == "new_user_id"
+    # Confirm no SELECT WHERE email was executed
+    executed_sql = [str(call) for call in mock_cursor.execute.call_args_list]
+    assert not any("WHERE email" in sql for sql in executed_sql)
+
+
+def test_find_or_create_facebook_no_email_creates_user(mock_db_conn):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        None,                # no oauth_accounts
+        ("new_user_id",),    # INSERT users RETURNING id
+    ]
+    identity = _identity(email=None, email_verified=False)
+
+    with patch("app.api.oauth.get_connection", return_value=mock_conn):
+        from app.api.oauth import find_or_create_user
+        user_id, email = find_or_create_user("facebook", identity)
+
+    assert user_id == "new_user_id"
+    assert email is None

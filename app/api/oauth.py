@@ -10,7 +10,7 @@ from jwt import PyJWKClient
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
-from app.core.database import get_connection  # noqa: F401
+from app.core.database import get_connection
 from app.core.logger import logger
 from app.core.security import create_access_token  # noqa: F401
 from app.core.settings import (
@@ -186,3 +186,81 @@ def oauth_login(provider: str):
         logger.warning("Redis unavailable for OAuth state storage provider=%s", provider)
         raise HTTPException(status_code=503, detail="OAuth service temporarily unavailable")
     return {"auth_url": build_auth_url(provider, state)}
+
+
+def find_or_create_user(provider: str, identity: dict) -> tuple[str, str | None]:
+    """Find or create a user row for the given OAuth identity.
+
+    Returns (user_id, email).
+
+    Priority:
+      1. Existing oauth_accounts row → return linked user.
+      2. Email auto-link (verified email only) → link new oauth row to existing user.
+      3. Create new user + oauth row.
+    """
+    provider_user_id = identity["provider_user_id"]
+    email = identity["email"]
+    email_verified = identity["email_verified"]
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Step 1: lookup by provider identity
+            cur.execute(
+                "SELECT user_id::text FROM oauth_accounts "
+                "WHERE provider = %s AND provider_user_id = %s",
+                (provider, provider_user_id),
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    "SELECT email::text FROM users WHERE id = %s",
+                    (row[0],),
+                )
+                user_row = cur.fetchone()
+                return row[0], (user_row[0] if user_row else None)
+
+            user_id: str | None = None
+
+            # Step 2: email auto-link (only if verified and present)
+            if email and email_verified:
+                cur.execute(
+                    "SELECT id::text FROM users WHERE email = %s",
+                    (email,),
+                )
+                user_row = cur.fetchone()
+                if user_row:
+                    user_id = user_row[0]
+
+            # Step 3: create new user
+            if not user_id:
+                cur.execute(
+                    """
+                    INSERT INTO users
+                        (email, display_name, avatar_url, email_verified, email_verified_at)
+                    VALUES (%s, %s, %s, TRUE, NOW())
+                    RETURNING id::text
+                    """,
+                    (email, identity.get("name"), identity.get("picture")),
+                )
+                user_id = cur.fetchone()[0]
+
+            # Insert oauth_accounts link (idempotent)
+            cur.execute(
+                """
+                INSERT INTO oauth_accounts (
+                    user_id, provider, provider_user_id,
+                    provider_email, provider_email_verified,
+                    provider_display_name, provider_avatar_url, provider_tenant_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (provider, provider_user_id) DO NOTHING
+                """,
+                (
+                    user_id, provider, provider_user_id,
+                    email, email_verified,
+                    identity.get("name"), identity.get("picture"),
+                    identity.get("tenant_id"),
+                ),
+            )
+
+            return user_id, email
