@@ -104,7 +104,13 @@ export async function chatRespond({
   }
 
   if (audioBlob) {
-    formData.append('audio_file', audioBlob, audioBlob.type === 'audio/wav' ? 'recording.wav' : 'recording.webm');
+    try {
+      const wavBlob = await toWav(audioBlob);
+      formData.append('audio_file', wavBlob, 'recording.wav');
+    } catch {
+      // WAV conversion failed (e.g. unsupported codec); skip audio upload so
+      // the text message is still processed by the backend.
+    }
   }
 
   if (conversationId) {
