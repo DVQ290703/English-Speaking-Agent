@@ -33,6 +33,7 @@ from app.core.settings import APP_ENV
 _trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 _session_id_var: ContextVar[str] = ContextVar("session_id", default="")
 _user_id_var: ContextVar[str] = ContextVar("user_id", default="anonymous")
+_msg_id_var: ContextVar[str] = ContextVar("msg_id", default="")
 
 
 def set_trace_context(trace_id: str, user_id: str = "anonymous") -> None:
@@ -47,11 +48,17 @@ def update_session_id(session_id: str) -> None:
     _session_id_var.set(session_id)
 
 
+def set_msg_id(msg_id: str) -> None:
+    """Called before LLM/TTS pipeline to tag spans with the assistant message ID."""
+    _msg_id_var.set(msg_id)
+
+
 def get_trace_context() -> dict:
     return {
         "trace_id": _trace_id_var.get() or str(uuid.uuid4()),
         "session_id": _session_id_var.get() or "",
         "user_id": _user_id_var.get() or "anonymous",
+        "msg_id": _msg_id_var.get() or None,
         "environment": APP_ENV,
     }
 
@@ -60,6 +67,7 @@ def clear_trace_context() -> None:
     _trace_id_var.set("")
     _session_id_var.set("")
     _user_id_var.set("anonymous")
+    _msg_id_var.set("")
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +182,7 @@ def _emit_span(name: str, kind: str, duration_ms: int, status: str, extra: dict)
         "trace_id": ctx["trace_id"],
         "session_id": ctx["session_id"],
         "user_id": ctx["user_id"],
+        "msg_id": ctx["msg_id"],
         "span_name": name,
         "span_kind": kind,
         "duration_ms": duration_ms,

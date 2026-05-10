@@ -15,8 +15,7 @@ interface VoiceRecorderComponentProps {
   onSendText: () => void;
   // Voice recording
   selectedMicId: string;
-  onTranscribe: (blob: Blob) => Promise<string>;
-  onSendRecording: (text: string, blob: Blob) => void;
+  onSendRecording: (blob: Blob) => void;
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -110,7 +109,6 @@ export default function VoiceRecorderComponent({
   onChangeInput,
   onKeyDown,
   onSendText,
-  onTranscribe,
   onSendRecording,
 }: VoiceRecorderComponentProps) {
   const t = useT();
@@ -122,19 +120,17 @@ export default function VoiceRecorderComponent({
     visualizerData,
     waveformData,
     error,
-    transcript,
     start,
     stop,
     retake,
-    transcribe,
     send,
     cancel,
-  } = useVoiceRecorder({ selectedMicId, onTranscribe, onSend: onSendRecording });
+  } = useVoiceRecorder({ selectedMicId, onSend: onSendRecording });
 
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const isRecording = status === 'recording';
-  const isExpandedState = status === 'transcribing' || status === 'confirm' || status === 'done';
+  const isExpandedState = status === 'confirm' || status === 'done';
   const recordDisabled = agentTyping || isExpandedState;
 
   if (!isConnected) {
@@ -182,9 +178,8 @@ export default function VoiceRecorderComponent({
         </div>
       )}
 
-      {/* ── Review panel: audio player + waveform + transcript ──
-           Shown in both 'transcribing' and 'confirm' states. */}
-      {(status === 'transcribing' || status === 'confirm') && (
+      {/* ── Review panel: audio player + waveform ── */}
+      {status === 'confirm' && (
         <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-3 space-y-2">
 
           {/* Audio playback */}
@@ -203,54 +198,22 @@ export default function VoiceRecorderComponent({
           {/* Duration */}
           <div className="text-[10px] text-gray-400 text-right">{formatTime(recordingTime)}</div>
 
-          {/* Transcript area — spinner while transcribing, textarea once ready */}
-          {status === 'transcribing' ? (
-            <div className="flex items-center gap-2 py-1">
-              <div className="w-3.5 h-3.5 rounded-full border-2 border-blue-200 border-t-blue-500 animate-spin shrink-0" />
-              <span className="text-xs text-gray-400">Transcribing…</span>
-            </div>
-          ) : (
-            <>
-              <p className="text-[10px] text-gray-400">Transcript (read-only — retake to re-record)</p>
-              <div className="w-full rounded border border-gray-100 bg-slate-50 px-2 py-1.5 text-sm text-gray-800 select-text min-h-[3rem]">
-                {transcript}
-              </div>
-            </>
-          )}
-
           {/* Actions */}
           <div className="flex gap-2 justify-between">
             <button
               type="button"
-              onClick={status === 'transcribing' ? cancel : retake}
+              onClick={retake}
               className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
             >
-              {status === 'transcribing' ? 'Cancel' : 'Retake'}
+              Retake
             </button>
-            {status === 'confirm' && (
-              <button
-                type="button"
-                onClick={send}
-                disabled={!transcript.trim()}
-                className={`px-3 py-1.5 rounded text-xs ${
-                  transcript.trim()
-                    ? 'bg-blue-600 text-white hover:bg-blue-500'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Send
-              </button>
-            )}
-            {status === 'transcribing' && (
-              <button
-                type="button"
-                onClick={() => void transcribe()}
-                className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-400 cursor-not-allowed"
-                disabled
-              >
-                Transcribing…
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={send}
+              className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500"
+            >
+              Send
+            </button>
           </div>
         </div>
       )}

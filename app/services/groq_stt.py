@@ -36,6 +36,7 @@ class GroqSTTService:
                 model=self.model_name,
                 response_format="verbose_json",
                 temperature=0.0,
+                language="en",
             )
             span.set(model=self.model_name, audio_bytes=len(audio_bytes))
 

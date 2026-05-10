@@ -1,10 +1,28 @@
 import logging
 import json
 import os
+import re
 import time
 from datetime import datetime
 from typing import Any, Dict
 import sys
+
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+
+
+class UUIDMaskingFilter(logging.Filter):
+    """Pseudonymize raw UUIDs in log records: keep first 8 chars, replace rest with ****."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _UUID_RE.sub(
+            lambda m: m.group()[:8] + "****",
+            record.getMessage(),
+        )
+        record.args = ()
+        return True
 
 from dotenv import load_dotenv
 
@@ -42,11 +60,15 @@ class IndustryLogger:
         )
         formatter.converter = time.localtime
 
+        uuid_filter = UUIDMaskingFilter()
+
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(uuid_filter)
 
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(formatter)
+        console_handler.addFilter(uuid_filter)
 
         self.logger.addHandler(file_handler)
         self.logger.addHandler(console_handler)

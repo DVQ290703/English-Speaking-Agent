@@ -1,0 +1,292 @@
+# =============================================================================
+# Grafana Dashboard ConfigMap — Voice Agent Pipeline
+#
+# Source of truth: provisioning/dashboards/json/voice-agent-pipeline.json
+# Apply whenever the dashboard JSON changes:
+#   kubectl apply -f deployments/grafana/dashboard-configmap.yaml
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-voice-agent
+  namespace: english-speaking-agent
+  labels:
+    app: grafana
+    tier: monitoring
+    project: english-speaking-agent
+data:
+  voice-agent-pipeline.json: |
+    {
+      "annotations": {"list": []},
+      "description": "Voice Agent pipeline: LLM, STT, TTS, guardrail metrics",
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 100,
+          "title": "LLM",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1},
+          "id": 1,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(llm_requests_total[5m]))", "legendFormat": "{{status}}"}],
+          "title": "LLM Request Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1},
+          "id": 2,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p50"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p95"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_latency_seconds_bucket[5m])))", "legendFormat": "p99"}
+          ],
+          "title": "LLM Latency (p50/p95/p99)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+          "id": 3,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p50"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p95"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_ttft_seconds_bucket[5m])))", "legendFormat": "p99"}
+          ],
+          "title": "LLM TTFT (p50/p95/p99)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 9},
+          "id": 4,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (token_type) (rate(llm_tokens_total[5m]))", "legendFormat": "{{token_type}}"}],
+          "title": "Token Burn Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "currencyUSD", "decimals": 4}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 9},
+          "id": 5,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value"},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_cost_usd_total[1h]))", "legendFormat": "Cost/hr"}],
+          "title": "LLM Cost / hr",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 9},
+          "id": 6,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(llm_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}],
+          "title": "LLM Error Rate",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+          "id": 104,
+          "title": "Token Usage",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 18},
+          "id": 20,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none"},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_tokens_total{token_type=\"input\"}[1h]))", "legendFormat": "Input Tokens"}],
+          "title": "Input Tokens (1h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 18},
+          "id": 21,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none"},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_tokens_total{token_type=\"output\"}[1h]))", "legendFormat": "Output Tokens"}],
+          "title": "Output Tokens (1h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short", "decimals": 0}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 18},
+          "id": 22,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none"},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_tokens_total[1h]))", "legendFormat": "Total Tokens"}],
+          "title": "Total Tokens (1h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 2}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 18},
+          "id": 23,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none"},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(llm_tokens_total{token_type=\"output\"}[1h])) / sum(increase(llm_tokens_total{token_type=\"input\"}[1h]))", "legendFormat": "Output / Input"}],
+          "title": "Output / Input Ratio (1h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {"lineWidth": 2, "fillOpacity": 0, "stacking": {"mode": "none"}, "showPoints": "never"},
+              "min": 0,
+              "max": 12000
+            },
+            "overrides": [
+              {"matcher": {"id": "byName", "options": "Input"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+              {"matcher": {"id": "byName", "options": "Output"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+              {"matcher": {"id": "byName", "options": "Total"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
+            ]
+          },
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 22},
+          "id": 24,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(idelta(llm_tokens_total{token_type=\"input\"}[2m]))", "legendFormat": "Input"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(idelta(llm_tokens_total{token_type=\"output\"}[2m]))", "legendFormat": "Output"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(idelta(llm_tokens_total[2m]))", "legendFormat": "Total"}
+          ],
+          "title": "Token Usage Over Time",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+          "id": 101,
+          "title": "STT",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 33},
+          "id": 7,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(stt_requests_total[5m]))", "legendFormat": "{{status}}"}],
+          "title": "STT Request Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 33},
+          "id": 8,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p50"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p95"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(stt_latency_seconds_bucket[5m])))", "legendFormat": "p99"}
+          ],
+          "title": "STT Latency (p50/p95/p99)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 33},
+          "id": 9,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(stt_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}],
+          "title": "STT Error Rate",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 39},
+          "id": 102,
+          "title": "TTS",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 40},
+          "id": 10,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (status) (rate(tts_requests_total[5m]))", "legendFormat": "{{status}}"}],
+          "title": "TTS Request Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 40},
+          "id": 11,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.50, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p50"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.95, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p95"},
+            {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "histogram_quantile(0.99, sum by (le) (rate(tts_latency_seconds_bucket[5m])))", "legendFormat": "p99"}
+          ],
+          "title": "TTS Latency (p50/p95/p99)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 40},
+          "id": 12,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(tts_requests_total{status=\"error\"}[5m]))", "legendFormat": "error/s"}],
+          "title": "TTS Error Rate",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 48},
+          "id": 103,
+          "title": "Guardrails",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 49},
+          "id": 13,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(guardrail_decisions_total{decision=\"blocked\"}[5m]))", "legendFormat": "blocked/s"}],
+          "title": "Guardrail Block Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 49},
+          "id": 14,
+          "options": {"tooltip": {"mode": "multi"}},
+          "targets": [{"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum by (decision) (rate(guardrail_decisions_total[5m]))", "legendFormat": "{{decision}}"}],
+          "title": "Allow vs Block Ratio",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "tags": ["voice-agent", "ai"],
+      "time": {"from": "now-1h", "to": "now"},
+      "timezone": "browser",
+      "title": "Voice Agent — Pipeline",
+      "uid": "voice-agent-pipeline",
+      "version": 1
+    }

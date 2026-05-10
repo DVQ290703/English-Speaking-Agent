@@ -1,7 +1,7 @@
 // frontend/src/hooks/useVoiceRecorder.ts
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type RecorderStatus = 'idle' | 'recording' | 'transcribing' | 'confirm' | 'done';
+type RecorderStatus = 'idle' | 'recording' | 'confirm' | 'done';
 type RecorderError = 'permission-denied' | 'mic-busy' | 'not-supported' | 'unknown' | null;
 
 type WindowWithWebkit = Window &
@@ -11,8 +11,7 @@ type WindowWithWebkit = Window &
 
 export interface UseVoiceRecorderParams {
   selectedMicId: string;
-  onTranscribe: (blob: Blob) => Promise<string>;
-  onSend: (text: string, blob: Blob) => void;
+  onSend: (blob: Blob) => void;
 }
 
 export interface UseVoiceRecorderResult {
@@ -24,11 +23,9 @@ export interface UseVoiceRecorderResult {
   visualizerData: number[];
   waveformData: number[];
   error: RecorderError;
-  transcript: string;
   start: () => Promise<void>;
   stop: () => void;
   retake: () => void;
-  transcribe: () => Promise<void>;
   send: () => void;
   cancel: () => void;
 }
@@ -36,7 +33,7 @@ export interface UseVoiceRecorderResult {
 const LIVE_BAR_COUNT = 42;
 const WAVEFORM_BAR_COUNT = 150;
 const SILENCE_THRESHOLD = 0.02;  // amplitude below this = silence (speech boundary detection)
-const NOISE_GATE_FLOOR  = 0.005; // amplitude below this = zeroed out (residual hiss removal)
+const NOISE_GATE_FLOOR  = 0.002; // amplitude below this = zeroed out (residual hiss removal)
 const TRIM_PADDING_MS   = 100;   // ms of audio kept before/after detected speech boundaries
 
 function writeWavString(view: DataView, offset: number, str: string): void {
@@ -154,7 +151,6 @@ function computeWaveformBars(audioBuffer: AudioBuffer, barCount: number): number
 
 export default function useVoiceRecorder({
   selectedMicId,
-  onTranscribe,
   onSend,
 }: UseVoiceRecorderParams): UseVoiceRecorderResult {
   const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -165,7 +161,6 @@ export default function useVoiceRecorder({
   const [waveformData, setWaveformData] = useState<number[]>(Array(WAVEFORM_BAR_COUNT).fill(0));
   const [cleanBlob, setCleanBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<RecorderError>(null);
-  const [transcript, setTranscriptState] = useState('');
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -181,8 +176,6 @@ export default function useVoiceRecorder({
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopFnRef = useRef<() => void>(() => {});
-  // Ref so handleStop can call transcribe without capturing a stale closure
-  const transcribeFnRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const stopVisualizer = useCallback(() => {
     if (rafRef.current !== null) {
@@ -248,7 +241,6 @@ export default function useVoiceRecorder({
     setAudioBlob(null);
     setCleanBlob(null);
     setRecordingTime(0);
-    setTranscriptState('');
     setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
     setError(null);
     setStatus('idle');
@@ -367,14 +359,11 @@ export default function useVoiceRecorder({
       audioUrlRef.current = url;
       setAudioBlob(blob);
       setAudioUrl(url);
-      // Skip separate preview step — go straight to transcribing
-      setStatus('transcribing');
+      setStatus('confirm');
 
       const gen = cancelGenRef.current;
 
-      // Decode audio buffer once — compute waveform bars + produce clean blob,
-      // then kick off transcription with the clean WAV blob (no extra toWav
-      // conversion needed in the transcription path).
+      // Decode audio buffer — compute waveform bars + produce clean blob for send.
       void decodeAudioBuffer(blob)
         .then((audioBuf) => {
           if (cancelGenRef.current !== gen) return;
@@ -382,13 +371,8 @@ export default function useVoiceRecorder({
           const clean = trimGateEncode(audioBuf);
           cleanBlobRef.current = clean;
           setCleanBlob(clean);
-          void transcribeFnRef.current();
         })
-        .catch(() => {
-          // Decode failed — transcribe with the raw blob as fallback.
-          if (cancelGenRef.current !== gen) return;
-          void transcribeFnRef.current();
-        });
+        .catch(() => { /* use raw blob on decode failure */ });
     };
 
     if (recorder.state === 'inactive') {
@@ -403,38 +387,14 @@ export default function useVoiceRecorder({
     stopFnRef.current = stop;
   }, [stop]);
 
-  const transcribe = useCallback(async () => {
-    const blob = cleanBlobRef.current ?? audioBlobRef.current;
-    if (!blob) return;
-    const gen = cancelGenRef.current;
-    setStatus('transcribing');
-    try {
-      const text = await onTranscribe(blob);
-      if (gen !== cancelGenRef.current) return;
-      setTranscriptState(text);
-      setStatus('confirm');
-    } catch {
-      if (gen !== cancelGenRef.current) return;
-      setError('unknown');
-      // Stay in confirm so user can see the audio + cancel or type manually
-      setStatus('confirm');
-    }
-  }, [onTranscribe]);
-
-  // Keep transcribeFnRef pointing to the latest transcribe callback
-  useEffect(() => {
-    transcribeFnRef.current = transcribe;
-  }, [transcribe]);
-
   const retake = useCallback(() => {
-    cancelGenRef.current++; // abort any in-flight transcription
+    cancelGenRef.current++;
     revokeUrl();
     audioBlobRef.current = null;
     cleanBlobRef.current = null;
     setAudioBlob(null);
     setCleanBlob(null);
     setRecordingTime(0);
-    setTranscriptState('');
     setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
     setError(null);
     setStatus('idle');
@@ -443,8 +403,8 @@ export default function useVoiceRecorder({
   const send = useCallback(() => {
     // Prefer cleanBlob (trimmed + noise-gated WAV); fall back to raw blob if processing failed
     const blob = cleanBlobRef.current ?? audioBlobRef.current;
-    if (!blob || !transcript.trim()) return;
-    onSend(transcript, blob);
+    if (!blob) return;
+    onSend(blob);
     setStatus('done');
     sendTimerRef.current = setTimeout(() => {
       sendTimerRef.current = null;
@@ -454,11 +414,10 @@ export default function useVoiceRecorder({
       setAudioBlob(null);
       setCleanBlob(null);
       setRecordingTime(0);
-      setTranscriptState('');
       setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
       setStatus('idle');
     }, 800);
-  }, [transcript, onSend, revokeUrl]);
+  }, [onSend, revokeUrl]);
 
   // Strict cleanup on unmount — prevents mic-in-use indicator staying on
   useEffect(() => {
@@ -493,11 +452,9 @@ export default function useVoiceRecorder({
     visualizerData,
     waveformData,
     error,
-    transcript,
     start,
     stop,
     retake,
-    transcribe,
     send,
     cancel,
   };

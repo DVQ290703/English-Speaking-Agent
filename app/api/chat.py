@@ -26,7 +26,7 @@ from app.core.logger import logger
 from app.core.security import get_current_user_id
 from app.core.storage import _upload, build_object_key, store_user_audio
 from app.guardrails.audit.logger import AuditLogger
-from app.core.telemetry import update_session_id
+from app.core.telemetry import update_session_id, set_msg_id
 from app.guardrails.exceptions import GuardrailException
 from app.guardrails.input import InputGuardrails
 from app.guardrails.output import OutputGuardrails
@@ -316,6 +316,7 @@ def chat_respond(
         role_label = "User" if msg["role"] == "user" else "Assistant"
         history_lines.append(f"{role_label}: {msg['content']}")
 
+    set_msg_id(assistant_message_id)
     logger.info(
         "Running LLM+TTS pipeline user_input_length=%d history_lines=%d",
         len(user_input),

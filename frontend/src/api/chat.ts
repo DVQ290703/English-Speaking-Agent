@@ -106,7 +106,7 @@ export async function chatRespond({
 
   if (audioBlob) {
     try {
-      const wavBlob = await toWav(audioBlob);
+      const wavBlob = audioBlob.type === 'audio/wav' ? audioBlob : await toWav(audioBlob);
       formData.append('audio_file', wavBlob, 'recording.wav');
     } catch {
       // WAV conversion failed (e.g. unsupported codec); skip audio upload so

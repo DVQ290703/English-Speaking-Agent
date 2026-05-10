@@ -24,7 +24,8 @@ def list_decks(user_id: str) -> list[dict]:
     """List all active flashcard decks for a user.
 
     Returns each deck's id, name, description, card_count, and due_count.
-    Use this to recommend which deck to add a new word to.
+    ONLY call when the user explicitly asks to see or choose a deck (e.g. "show my decks",
+    "which deck should I save to"). Never call proactively at session start.
 
     Args:
         user_id: The UUID of the authenticated user.
@@ -223,6 +224,8 @@ def search_cards(
     """Search a user's flashcards by keyword or tag.
 
     Keyword search uses ILIKE on front_text and back_text.
+    ONLY call when the user explicitly asks to find or look up a card
+    (e.g. "search my cards for X", "do I have a card for Y").
 
     Args:
         user_id: The UUID of the authenticated user.
