@@ -1,6 +1,5 @@
 """Groq LLM service — generates speech-friendly responses via ChatGroq."""
 
-import json
 import os
 import time
 from pathlib import Path
@@ -111,72 +110,3 @@ class GroqLLMService:
 
         logger.info("GroqLLM response_length=%d", len(result))
         return result
-
-    def generate_response_with_grammar(
-        self,
-        user_input: str,
-        history: list[str] | None = None,
-        category: str | None = None,
-        topic: str | None = None,
-    ) -> tuple[str, str | None]:
-        """Generate a reply with grammar analysis in one JSON-mode LLM call.
-
-        Returns (response_text, raw_json_str).
-        Falls back to (plain_response_text, None) when JSON mode fails.
-        """
-        history = history or []
-        logger.info(
-            "GroqLLM generate_response_with_grammar model=%s history_lines=%d input_length=%d",
-            self.model_name,
-            len(history),
-            len(user_input),
-        )
-
-        dynamic_prompt = build_system_prompt(category=category, topic=topic, include_grammar=True)
-        messages: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
-
-        for line in history[-8:]:
-            if line.startswith("User:"):
-                messages.append(HumanMessage(content=line[5:].strip()))
-            elif line.startswith("Assistant:"):
-                messages.append(AIMessage(content=line[10:].strip()))
-
-        messages.append(HumanMessage(content=user_input))
-
-        try:
-            with span_context("llm.generate_response_with_grammar", kind="llm") as span:
-                json_client = self.client.bind(response_format={"type": "json_object"})
-                raw = ""
-                ttft_ms = None
-                t0 = time.perf_counter()
-                final_chunk = None
-                for chunk in json_client.stream(messages):
-                    if ttft_ms is None and chunk.content:
-                        ttft_ms = (time.perf_counter() - t0) * 1000
-                    raw += chunk.content
-                    final_chunk = chunk
-
-                usage = {}
-                if final_chunk is not None:
-                    usage = getattr(final_chunk, "usage_metadata", {}) or {}
-
-                span.set(
-                    model=self.model_name,
-                    prompt_tokens=usage.get("input_tokens", 0),
-                    completion_tokens=usage.get("output_tokens", 0),
-                    total_tokens=usage.get("total_tokens", 0),
-                    ttft_ms=ttft_ms,
-                )
-
-            data = json.loads(raw)
-            response_text = data.get("response_text", "").strip()
-            if response_text:
-                logger.info("GroqLLM grammar response parsed ok response_length=%d", len(response_text))
-                return response_text, raw
-
-            logger.warning("GroqLLM grammar response missing response_text key, falling back")
-        except Exception:
-            logger.exception("GroqLLM generate_response_with_grammar failed, falling back to plain response")
-
-        fallback = self.generate_response(user_input=user_input, history=history, category=category, topic=topic)
-        return fallback, None
