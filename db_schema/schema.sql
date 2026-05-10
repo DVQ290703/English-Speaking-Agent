@@ -20,12 +20,14 @@ $$;
 
 CREATE TABLE IF NOT EXISTS users (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email               CITEXT UNIQUE NOT NULL,
-    password_hash       TEXT NOT NULL,
+    email               CITEXT UNIQUE,              -- NULL allowed: Facebook phone-only accounts
+    password_hash       TEXT,                        -- NULL allowed: OAuth-only users
     display_name        VARCHAR(100),
     avatar_url          TEXT,
     english_level       TEXT CHECK (english_level IN ('A1','A2','B1','B2','C1','C2')),
     is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    email_verified      BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verified_at   TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -52,6 +54,31 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id    ON auth_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_token_hash ON auth_sessions(refresh_token_hash);
+
+CREATE TABLE IF NOT EXISTS oauth_accounts (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider                TEXT NOT NULL CHECK (provider IN ('google', 'microsoft', 'facebook')),
+    provider_user_id        TEXT NOT NULL,
+    provider_email          CITEXT,
+    provider_email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    provider_display_name   TEXT,
+    provider_avatar_url     TEXT,
+    provider_tenant_id      TEXT,
+    granted_scopes          TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_oauth_accounts_provider_user UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id
+    ON oauth_accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_accounts_provider_email
+    ON oauth_accounts(provider_email);
+
+CREATE TRIGGER trg_oauth_accounts_updated_at
+    BEFORE UPDATE ON oauth_accounts
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- =========================
 -- 2) CATEGORIES & TOPICS
