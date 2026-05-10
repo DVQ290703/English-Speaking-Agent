@@ -121,25 +121,26 @@ def run_langraph_agent(
     voice_gender: str | None = None,
     category: str | None = None,
     topic: str | None = None,
+    user_id: str | None = None,
 ) -> tuple[str, bytes, str | None, list]:
-    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_json, tool_steps)."""
+    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_raw, tool_steps)."""
     from app.agents.tool_steps import extract_tool_steps
 
     history = history or []
-    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d category=%s topic=%s", len(user_input), len(history), category, topic)
+    logger.info("run_langraph_agent start user_input_length=%d history_lines=%d category=%s topic=%s user_id=%s", len(user_input), len(history), category, topic, user_id)
     try:
         pipeline = get_voice_agent_pipeline()
-        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, category=category, topic=topic)
+        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, category=category, topic=topic, user_id=user_id)
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
-        grammar_json: str | None = result.get("grammar_json")
+        grammar_raw: str | None = result.get("grammar_raw")
         tool_steps = extract_tool_steps(result.get("messages", []))
 
         logger.info(
             "Pipeline run complete response_text_length=%d audio_bytes=%d grammar_present=%s tool_steps=%d",
             len(response_text),
             len(audio_bytes),
-            grammar_json is not None,
+            grammar_raw is not None,
             len(tool_steps),
         )
 
@@ -147,7 +148,7 @@ def run_langraph_agent(
             if not audio_bytes:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender)
-            return response_text, audio_bytes, grammar_json, tool_steps
+            return response_text, audio_bytes, grammar_raw, tool_steps
 
         logger.warning("Pipeline returned empty response_text - using fallback")
     except Exception:
