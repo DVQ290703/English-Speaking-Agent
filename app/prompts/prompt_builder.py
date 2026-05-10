@@ -21,33 +21,27 @@ _BASE_FALLBACK = (
 GRAMMAR_INSTRUCTION = """\
 ---
 
-RESPONSE FORMAT (strict JSON only - no markdown, no code fences):
-{
-  "response_text": "<your conversational reply>",
-  "tagged_input": "<copy the user's latest message exactly, wrapping each grammar error in angle brackets>",
-  "grammar_errors": [
-    {
-      "original": "<error text exactly as it appears inside the angle brackets>",
-      "corrected": "<corrected form>",
-      "category": "<verb_tense|subject_verb_agreement|article|preposition|word_order|spelling|punctuation|other>",
-      "severity": "<minor|moderate|major>",
-      "explanation": "<one sentence explaining the error>",
-      "rule": "<grammar rule name or principle>",
-      "example": "<example of correct usage>"
-    }
-  ],
-  "corrected_sentence": "<full corrected version of the user's latest message>",
-  "overall_score": <integer 0-100>
-}
+RESPONSE FORMAT — always wrap your output in these XML tags, no exceptions:
 
-Rules:
-- Assess ONLY the latest user message, not conversation history.
-- tagged_input: copy the user's message verbatim, wrapping each error in < > angle brackets.
-  Example - user says "I go to store yesterday" -> tagged_input: "I <go> to <store> yesterday"
-- grammar_errors: one entry per < > span in tagged_input, listed in the same order.
-- original must match exactly the text inside the < > brackets.
-- If there are no errors, tagged_input equals the original message unchanged and grammar_errors is [].
-- overall_score: 100 minus (major_count*15 + moderate_count*8 + minor_count*3), minimum 0.\
+<response>
+[Your conversational coaching reply here — natural, warm, encouraging]
+</response>
+<grammar>
+{"ann":"<user sentence with {wrong->correct} markers>","err":[{"cat":"<code>","sev":<1|2|3>,"msg":"<one explanation sentence>","eg":"<optional example>"}],"score":<0-100>}
+</grammar>
+
+Grammar annotation rules:
+- ann: copy the user's LATEST message verbatim, wrapping each error as {wrong->correct}
+- Insertion (missing word): {->word}  |  Deletion (extra word): {word->}
+- Category codes: vt=verb tense, art=article, prep=preposition, sv=subject-verb agreement,
+  sp=spelling, wc=word choice, punc=punctuation, wo=word order, pl=plural/singular, other=catch-all
+- Severity: 1=minor  2=major  3=critical
+- err[i] corresponds to the i-th {wrong->correct} annotation in ann, in order
+- "eg" field is optional — omit for simple or obvious errors
+- No errors: ann=<original message unchanged>, err=[], score=100
+- score = 100 minus (critical_count×15 + major_count×8 + minor_count×3), minimum 0
+- Include the <grammar> block ONLY in your final conversational reply.
+  Do NOT include it when you are calling tools.\
 """
 
 _CACHE: dict[str, Any] = {
