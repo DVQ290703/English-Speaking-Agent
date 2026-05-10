@@ -1,6 +1,6 @@
 import json
 
-from groq import RateLimitError
+from groq import BadRequestError, RateLimitError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -40,7 +40,8 @@ def _sanitize_tool_messages(messages: list) -> list:
 def _route_after_respond(state: AgentState) -> str:
     last = state["messages"][-1] if state.get("messages") else None
     if last and getattr(last, "tool_calls", None):
-        if state.get("_tool_call_iterations", 0) >= _TOOL_CALL_CAP:
+        iterations = state.get("_tool_call_iterations", 0)
+        if iterations >= _TOOL_CALL_CAP:
             # Loop back to respond WITHOUT going through tools — _respond_node
             # will detect the cap and invoke the plain client (no tools bound)
             # to force a text reply instead of silently routing to TTS with
@@ -50,7 +51,9 @@ def _route_after_respond(state: AgentState) -> str:
                 _TOOL_CALL_CAP,
             )
             return "respond"
+        logger.debug("route_after_respond decision=tools iterations=%d", iterations)
         return "tools"
+    logger.debug("route_after_respond decision=tts no_tool_calls=True")
     return "tts"
 
 
@@ -74,8 +77,19 @@ class VoiceAgentPipeline:
         dynamic_prompt = build_system_prompt(
             category=state.get("category"),
             topic=state.get("topic"),
+            include_grammar=True,
         )
-        messages_to_send: list = [SystemMessage(content=dynamic_prompt or SYSTEM_PROMPT)]
+        base_prompt = dynamic_prompt or SYSTEM_PROMPT
+        user_id = state.get("user_id")
+        if user_id:
+            base_prompt = (
+                f"{base_prompt}\n\n---\n\n"
+                "TOOL USE POLICY: Only call flashcard tools when the user explicitly requests "
+                "flashcard management (e.g. 'save this word', 'show my decks', 'add a card'). "
+                "Never call tools based on topic context or conversation subject alone. "
+                f"If a tool is needed, use this user_id: {user_id}."
+            )
+        messages_to_send: list = [SystemMessage(content=base_prompt)]
 
         for line in state.get("history", [])[-8:]:
             if line.startswith("User:"):
@@ -90,9 +104,15 @@ class VoiceAgentPipeline:
         if state.get("messages"):
             messages_to_send.extend(_sanitize_tool_messages(state["messages"]))
 
-        # When the tool-call cap is reached, use the plain client (no tools bound)
-        # so the LLM is forced to produce a text reply instead of another tool call.
-        llm = self.llm_service.client if iterations >= _TOOL_CALL_CAP else self.llm_service.tool_client
+        cap_reached = iterations >= _TOOL_CALL_CAP
+        use_tools = not cap_reached and bool(state.get("user_id"))
+        llm = self.llm_service.tool_client if use_tools else self.llm_service.client
+        logger.debug(
+            "respond_node invoking_llm client=%s messages=%d cap_reached=%s",
+            "plain" if cap_reached else "tool_client",
+            len(messages_to_send),
+            cap_reached,
+        )
 
         with span_context("llm.respond", kind="llm") as span:
             try:
@@ -109,8 +129,15 @@ class VoiceAgentPipeline:
                     "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
                     "messages": [],
                     "_tool_call_iterations": iterations,
-                    "grammar_json": None,
+                    "grammar_raw": None,
                 }
+            except BadRequestError as exc:
+                span.fail(str(exc))
+                logger.warning(
+                    "respond_node tool_use_failed — model emitted malformed tool call, retrying with plain client: %s",
+                    exc,
+                )
+                ai_msg = self.llm_service.client.invoke(messages_to_send)
             usage = getattr(ai_msg, "usage_metadata", {}) or {}
             span.set(
                 model=self.llm_service.model_name,
@@ -119,12 +146,20 @@ class VoiceAgentPipeline:
                 total_tokens=usage.get("total_tokens", 0),
             )
 
+        logger.debug(
+            "respond_node llm_response has_tool_calls=%s content_length=%d",
+            bool(ai_msg.tool_calls),
+            len(ai_msg.content or ""),
+        )
+
         if ai_msg.tool_calls:
             tool_names = [tc["name"] for tc in ai_msg.tool_calls]
+            tool_args = [{tc["name"]: tc.get("args", {})} for tc in ai_msg.tool_calls]
             logger.info(
-                "respond_node tool_calls_detected count=%d tools=%s iteration=%d",
+                "respond_node tool_calls_detected count=%d tools=%s args=%s iteration=%d",
                 len(ai_msg.tool_calls),
                 tool_names,
+                tool_args,
                 iterations + 1,
             )
             return {
@@ -134,15 +169,14 @@ class VoiceAgentPipeline:
                 "response_text": state.get("response_text", ""),
             }
 
-        # No tool calls — final response; run grammar analysis as a second pass
-        response_text = ai_msg.content or ""
-        logger.debug("respond_node done response_length=%d", len(response_text))
-
-        _, grammar_json = self.llm_service.generate_response_with_grammar(
-            user_input=state["user_input"],
-            history=state.get("history", []),
-            category=state.get("category"),
-            topic=state.get("topic"),
+        # No tool calls — final response; split <response> and <grammar> sections
+        from app.services.grammar_parser import split_combined_output
+        raw_output = ai_msg.content or ""
+        response_text, grammar_raw = split_combined_output(raw_output)
+        logger.debug(
+            "respond_node no_tool_calls response_preview=%r grammar_present=%s",
+            response_text[:120],
+            grammar_raw is not None,
         )
 
         history = state.get("history", []) + [
@@ -153,7 +187,7 @@ class VoiceAgentPipeline:
             **state,
             "response_text": response_text,
             "history": history,
-            "grammar_json": grammar_json,
+            "grammar_raw": grammar_raw,
             "messages": [ai_msg],
             "_tool_call_iterations": iterations,
         }
@@ -188,6 +222,7 @@ class VoiceAgentPipeline:
         voice_gender: str | None = None,
         category: str | None = None,
         topic: str | None = None,
+        user_id: str | None = None,
     ) -> AgentState:
         """Execute the pipeline for a single user message and return the final state."""
         initial_state: AgentState = {
@@ -196,9 +231,10 @@ class VoiceAgentPipeline:
             "audio_bytes": b"",
             "history": history or [],
             "voice_gender": voice_gender,
-            "grammar_json": None,
+            "grammar_raw": None,
             "category": category,
             "topic": topic,
+            "user_id": user_id,
             "messages": [],
             "_tool_call_iterations": 0,
         }
