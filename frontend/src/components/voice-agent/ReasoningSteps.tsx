@@ -73,34 +73,19 @@ export default function ReasoningSteps({ steps, defaultOpen = false }: Reasoning
                       )}
                     </div>
 
-                    {/* In / Out summary pill */}
-                    <div className="bg-slate-50 rounded border border-slate-100 px-2 py-1 flex flex-col gap-0.5 dark:bg-slate-800 dark:border-slate-700">
-                      <div className="flex gap-2 items-baseline min-w-0">
-                        <span className="text-[10px] uppercase tracking-wide text-slate-400 w-5 flex-shrink-0">
-                          in
-                        </span>
-                        <span className="text-slate-600 break-words dark:text-slate-300">
-                          {step.input_summary || '—'}
-                        </span>
-                      </div>
-                      <div className="flex gap-2 items-baseline min-w-0">
-                        <span className="text-[10px] uppercase tracking-wide text-slate-400 w-5 flex-shrink-0">
-                          out
-                        </span>
-                        <span
-                          className={cn(
-                            'break-words',
-                            step.status === 'failed'
-                              ? 'text-red-500 dark:text-red-400'
-                              : 'text-emerald-600 dark:text-emerald-400',
-                          )}
-                        >
-                          {step.status === 'failed'
-                            ? (step.error ?? 'Error')
-                            : (step.output_summary || '—')}
-                        </span>
-                      </div>
-                    </div>
+                    {/* Result label */}
+                    <span
+                      className={cn(
+                        'text-[11px] leading-snug',
+                        step.status === 'failed'
+                          ? 'text-red-500 dark:text-red-400'
+                          : 'text-slate-500 dark:text-slate-400',
+                      )}
+                    >
+                      {step.status === 'failed'
+                        ? (step.error ?? 'Error')
+                        : (step.result_label || step.output_summary || '—')}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -16,6 +16,7 @@ export interface ToolCallStep {
   tool_name: string;
   input_summary: string;
   output_summary: string;
+  result_label?: string;
   duration_ms?: number;
   status: 'completed' | 'failed';
   error?: string;

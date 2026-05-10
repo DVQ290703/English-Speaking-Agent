@@ -90,6 +90,7 @@ class ToolCallStep(BaseModel):
     tool_name: str
     input_summary: str
     output_summary: str
+    result_label: str = ""
     duration_ms: int | None = None
     status: Literal["completed", "failed"] = "completed"
     error: str | None = None
