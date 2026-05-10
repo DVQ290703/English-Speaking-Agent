@@ -65,6 +65,27 @@ class GrammarSummary(BaseModel):
     flagged_spans: list[GrammarSpan]
 
 
+class GrammarErrorDetail(BaseModel):
+    id: int
+    original: str
+    corrected: str
+    start_char: int
+    end_char: int
+    category: str
+    severity: str
+    explanation: str
+    rule: str | None = None
+    example: str | None = None
+
+
+class GrammarDetailResponse(BaseModel):
+    message_id: str
+    user_input: str
+    errors: list[GrammarErrorDetail]
+    corrected_sentence: str | None
+    overall_score: int
+
+
 class ToolCallStep(BaseModel):
     tool_name: str
     input_summary: str
@@ -86,6 +107,7 @@ class ChatResponse(BaseModel):
     grammar_summary: GrammarSummary = Field(
         default_factory=lambda: GrammarSummary(error_count=0, has_errors=False, flagged_spans=[])
     )
+    grammar_detail: GrammarDetailResponse | None = None
     tool_steps: list[ToolCallStep] = Field(default_factory=list)
 
 
@@ -259,27 +281,6 @@ class CategoryWithTopicsOut(BaseModel):
     title: str
     sort_order: int
     topics: list[TopicOut]
-
-
-class GrammarErrorDetail(BaseModel):
-    id: int
-    original: str
-    corrected: str
-    start_char: int
-    end_char: int
-    category: str
-    severity: str
-    explanation: str
-    rule: str
-    example: str
-
-
-class GrammarDetailResponse(BaseModel):
-    message_id: str
-    user_input: str
-    errors: list[GrammarErrorDetail]
-    corrected_sentence: str | None
-    overall_score: int
 
 
 # ── Flashcard schemas ──────────────────────────────────────────────────────────

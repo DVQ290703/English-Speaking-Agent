@@ -14,8 +14,8 @@ from app.api._audio import (
     _validate_uploaded_audio,
 )
 from app.api._validators import _enforce_max_length, _validate_uuid
-from app.api.schemas import ChatResponse, GrammarSummary, GrammarSpan, ToolCallStep
-from app.services.grammar_parser import parse_grammar_response
+from app.api.schemas import ChatResponse, GrammarDetailResponse, GrammarErrorDetail, GrammarSummary, GrammarSpan, ToolCallStep
+from app.services.grammar_parser import parse_annotated_grammar
 from app.core.ai_services import (
     _synthesize_audio_bytes,
     run_langraph_agent,
@@ -321,14 +321,15 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_json, tool_steps = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_raw, tool_steps = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
         category=category,
         topic=topic,
+        user_id=user_id,
     )
-    _, grammar_data = parse_grammar_response(grammar_json, user_input)
+    grammar_data = parse_annotated_grammar(grammar_raw, user_input)
 
     # ── Guardrails: Output ─────────────────────────────────────────────────
     output_result = _output_guardrails.check(response_text)
@@ -402,8 +403,8 @@ def chat_respond(
                     size_bytes=len(response_audio_bytes),
                 )
 
-            # Save grammar feedback (only when LLM returned valid JSON)
-            if grammar_json is not None:
+            # Save grammar feedback (only when LLM returned valid grammar output)
+            if grammar_raw is not None:
                 cur.execute(
                     """
                     INSERT INTO grammar_feedback
@@ -472,6 +473,28 @@ def chat_respond(
         ],
     )
 
+    grammar_detail = GrammarDetailResponse(
+        message_id=user_message_id,
+        user_input=user_input,
+        errors=[
+            GrammarErrorDetail(
+                id=i + 1,
+                original=e.original,
+                corrected=e.corrected,
+                start_char=e.start_char,
+                end_char=e.end_char,
+                category=e.category,
+                severity=e.severity,
+                explanation=e.explanation,
+                rule=e.rule or None,
+                example=e.example or None,
+            )
+            for i, e in enumerate(grammar_data.errors)
+        ],
+        corrected_sentence=grammar_data.corrected_sentence,
+        overall_score=grammar_data.overall_score,
+    ) if grammar_raw is not None else None
+
     return ChatResponse(
         user_input=user_input,
         response_text=response_text,
@@ -480,7 +503,8 @@ def chat_respond(
         user_audio_url=user_audio_url,
         assistant_audio_url=assistant_audio_url,
         conversation_id=conv_id,
-        user_message_id=user_message_id,
+        user_message_id=user_message_id if grammar_raw is not None else None,
         grammar_summary=grammar_summary,
+        grammar_detail=grammar_detail,
         tool_steps=tool_steps,
     )
