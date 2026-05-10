@@ -13,6 +13,7 @@ const VoiceAgent = lazy(() => import('./pages/VoiceAgent'));
 const FlashcardDecksPage = lazy(() => import('./pages/FlashcardDecksPage'));
 const FlashcardCardsPage = lazy(() => import('./pages/FlashcardCardsPage'));
 const FlashcardStudyPage = lazy(() => import('./pages/FlashcardStudyPage'));
+const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
 
 function PageFallback() {
   return (
@@ -45,6 +46,14 @@ export const router = createBrowserRouter(
               element: (
                 <Suspense fallback={<PageFallback />}>
                   <RegisterPage />
+                </Suspense>
+              ),
+            },
+            {
+              path: 'auth/callback',
+              element: (
+                <Suspense fallback={<PageFallback />}>
+                  <OAuthCallbackPage />
                 </Suspense>
               ),
             },

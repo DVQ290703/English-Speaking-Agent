@@ -6,6 +6,7 @@ import { loginRequest } from '../api/auth';
 import { useAuth } from '../auth/AuthContext';
 import Spinner from '../components/ui/Spinner';
 import { useT } from '../i18n/useLanguage';
+import OAuthButtons from '../components/auth/OAuthButtons';
 
 const initialForm = {
   email: '',
@@ -194,6 +195,11 @@ export default function LoginPage() {
 
             {apiError ? <p className="error-msg">{apiError}</p> : null}
           </form>
+
+          <div className="oauth-divider">
+            <span>or continue with</span>
+          </div>
+          <OAuthButtons />
 
           <div className="switch-link">
             <p style={{ margin: 0 }}>

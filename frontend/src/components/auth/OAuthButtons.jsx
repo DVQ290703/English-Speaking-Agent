@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { FcGoogle } from 'react-icons/fc';
-import { SiMicrosoft } from 'react-icons/si';
+import { TbBrandWindowsFilled } from 'react-icons/tb';
 import { FaFacebook } from 'react-icons/fa';
 import { API_BASE_URL } from '../../api/config';
 
@@ -14,7 +14,7 @@ const PROVIDERS = [
   {
     id: 'microsoft',
     label: 'Continue with Microsoft',
-    Icon: SiMicrosoft,
+    Icon: TbBrandWindowsFilled,
     iconColor: '#2F2F2F',
   },
   {
