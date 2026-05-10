@@ -53,8 +53,7 @@ def _make_pipeline():
 def test_tool_use_failed_falls_back_to_plain_client():
     pipeline, llm_mock = _make_pipeline()
 
-    with patch("app.agents.intent._wants_flashcard_tools", return_value=True):
-        result = pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
+    result = pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
 
     assert result["response_text"] == "Here are your decks."
     llm_mock.client.invoke.assert_called_once()
@@ -63,19 +62,17 @@ def test_tool_use_failed_falls_back_to_plain_client():
 def test_tool_use_failed_does_not_propagate_exception():
     pipeline, _ = _make_pipeline()
 
-    with patch("app.agents.intent._wants_flashcard_tools", return_value=True):
-        try:
-            pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
-        except Exception as exc:
-            pytest.fail(f"Exception should not propagate to caller: {exc}")
+    try:
+        pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
+    except Exception as exc:
+        pytest.fail(f"Exception should not propagate to caller: {exc}")
 
 
 def test_tool_use_failed_logs_warning(caplog):
     import logging
     pipeline, _ = _make_pipeline()
 
-    with patch("app.agents.intent._wants_flashcard_tools", return_value=True):
-        with caplog.at_level(logging.WARNING, logger="AI-Lab-Agent"):
-            pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
+    with caplog.at_level(logging.WARNING, logger="AI-Lab-Agent"):
+        pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
 
     assert any("tool_use_failed" in r.message for r in caplog.records)

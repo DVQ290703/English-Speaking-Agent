@@ -86,8 +86,7 @@ class VoiceAgentPipeline:
                 f"{base_prompt}\n\n---\n\n"
                 "TOOL USE POLICY: Only call flashcard tools when the user explicitly requests "
                 "flashcard management (e.g. 'save this word', 'show my decks', 'add a card'). "
-                "Never call tools based on topic context or conversation subject alone. "
-                f"If a tool is needed, use this user_id: {user_id}."
+                "Never call tools based on topic context or conversation subject alone."
             )
         messages_to_send: list = [SystemMessage(content=base_prompt)]
 
@@ -238,4 +237,7 @@ class VoiceAgentPipeline:
             "messages": [],
             "_tool_call_iterations": 0,
         }
-        return self.app.invoke(initial_state)
+        invoke_config: dict = {"configurable": {"user_id": user_id}}
+        if user_id:
+            invoke_config["metadata"] = {"user_id": user_id}
+        return self.app.invoke(initial_state, config=invoke_config)
