@@ -4,9 +4,9 @@ import json  # noqa: F401
 import secrets
 from urllib.parse import quote, urlencode  # quote: noqa: F401
 
-import httpx  # noqa: F401
-import jwt  # noqa: F401
-from jwt import PyJWKClient  # noqa: F401
+import httpx
+import jwt
+from jwt import PyJWKClient
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
@@ -85,6 +85,94 @@ def build_auth_url(provider: str, state: str) -> str:
         **cfg.get("extra_params", {}),
     }
     return cfg["auth_url"] + "?" + urlencode(params)
+
+
+def exchange_code_for_identity(provider: str, code: str) -> dict:
+    """Exchange OAuth authorization code for a normalized identity dict.
+
+    Returns:
+        {
+            provider_user_id: str,
+            email: str | None,
+            email_verified: bool,
+            name: str | None,
+            picture: str | None,
+            tenant_id: str | None,   # Microsoft only
+        }
+    """
+    cfg = _OAUTH_CONFIG[provider]
+
+    if provider in ("google", "microsoft"):
+        resp = httpx.post(cfg["token_url"], data={
+            "client_id": cfg["client_id"],
+            "client_secret": cfg["client_secret"],
+            "code": code,
+            "redirect_uri": _redirect_uri(provider),
+            "grant_type": "authorization_code",
+        })
+        resp.raise_for_status()
+        id_token = resp.json()["id_token"]
+
+        jwks_client = PyJWKClient(cfg["jwks_url"])
+        signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+        claims = jwt.decode(
+            id_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+
+        if provider == "google":
+            return {
+                "provider_user_id": claims["sub"],
+                "email": claims.get("email"),
+                "email_verified": bool(claims.get("email_verified", False)),
+                "name": claims.get("name"),
+                "picture": claims.get("picture"),
+                "tenant_id": None,
+            }
+        else:  # microsoft
+            return {
+                "provider_user_id": claims["oid"],
+                "email": claims.get("email") or claims.get("preferred_username"),
+                "email_verified": True,  # Microsoft enforces email verification
+                "name": claims.get("name"),
+                "picture": None,
+                "tenant_id": claims.get("tid"),
+            }
+
+    else:  # facebook
+        resp = httpx.post(cfg["token_url"], params={
+            "client_id": cfg["client_id"],
+            "client_secret": cfg["client_secret"],
+            "code": code,
+            "redirect_uri": _redirect_uri(provider),
+        })
+        resp.raise_for_status()
+        access_token = resp.json()["access_token"]
+
+        graph_resp = httpx.get(cfg["graph_url"], params={
+            "fields": "id,name,email,picture",
+            "access_token": access_token,
+        })
+        graph_resp.raise_for_status()
+        data = graph_resp.json()
+
+        email = data.get("email")
+        picture_data = data.get("picture")
+        picture_url = (
+            picture_data.get("data", {}).get("url")
+            if isinstance(picture_data, dict)
+            else None
+        )
+        return {
+            "provider_user_id": data["id"],
+            "email": email,
+            "email_verified": email is not None,  # FB only returns email when verified
+            "name": data.get("name"),
+            "picture": picture_url,
+            "tenant_id": None,
+        }
 
 
 @router.get("/login/{provider}")
