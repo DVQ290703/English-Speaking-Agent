@@ -33,6 +33,8 @@ os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-2026")
+os.environ.setdefault("APP_BASE_URL", "http://localhost:8000")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
 
 # ---------------------------------------------------------------------------

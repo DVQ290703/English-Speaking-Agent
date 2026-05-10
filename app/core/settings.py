@@ -126,3 +126,18 @@ TOPIC_BLOCKLIST: list[str] = _parse_json_list("TOPIC_BLOCKLIST")
 
 # Audit
 AUDIT_DB_ENABLED: bool = os.getenv("AUDIT_DB_ENABLED", "false").lower() == "true"
+
+# ── OAuth providers ───────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID      = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET  = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+MICROSOFT_CLIENT_ID      = os.getenv("MICROSOFT_CLIENT_ID", "")
+MICROSOFT_CLIENT_SECRET  = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+
+FACEBOOK_CLIENT_ID      = os.getenv("FACEBOOK_CLIENT_ID", "")
+FACEBOOK_CLIENT_SECRET  = os.getenv("FACEBOOK_CLIENT_SECRET", "")
+
+# Base URL of this backend (used to build OAuth redirect URIs)
+APP_BASE_URL  = os.getenv("APP_BASE_URL", "http://localhost:8000")
+# Base URL of the frontend (used to build post-OAuth redirects)
+FRONTEND_URL  = os.getenv("FRONTEND_URL", "http://localhost:5173")
