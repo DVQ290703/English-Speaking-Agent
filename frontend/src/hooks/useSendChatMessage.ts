@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
-import { assessPronunciation, chatRespond, fetchGrammarFeedback } from '../api/chat';
+import { assessPronunciation, chatRespond } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
 import { LANGUAGE_CODES, type Gender, type Language } from '../components/voice-agent/constants';
 import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
@@ -156,6 +156,7 @@ export default function useSendChatMessage({
 
       try {
         let userMessageId: string | null = null;
+        let backendTranscript = '';
         if (session?.token) {
           console.log('[SendMessage] sending to API', { hasBlob: hasAudio });
           const data = await chatRespond({
@@ -174,65 +175,76 @@ export default function useSendChatMessage({
           }
           userMessageId = data.user_message_id ?? null;
 
-          if (userMessageId) {
-            setIsGrammarLoading(true);
-            void fetchGrammarFeedback(session.token, userMessageId)
-              .then((data) => {
-                const items = data.errors || [];
-                setGrammarCorrectedSentence(data.corrected_sentence ?? '');
-                const grammarMistakes = items.reduce<Mistake[]>((acc, item) => {
-                  const raw = item as Record<string, unknown>;
-                  const wrong = String(
-                    item.wrong ??
-                    item.original_text ??
-                    item.original ??
-                    raw.original ??
-                    raw.text ??
-                    raw.error_text ??
-                    raw.incorrect ??
-                    '',
-                  ).trim();
-                  const correct = String(
-                    item.correct ??
-                    item.corrected_text ??
-                    item.corrected ??
-                    raw.corrected ??
-                    raw.suggestion ??
-                    raw.fix ??
-                    '',
-                  ).trim();
-                  const note = String(
-                    item.note ?? item.explanation ?? raw.reason ?? raw.detail ?? raw.message ?? '',
-                  ).trim();
-                  acc.push({
-                    wrong: wrong || '—',
-                    correct: correct || '—',
-                    type: 'Grammar' as const,
-                    note: note || undefined,
-                  });
-                  return acc;
-                }, []);
-
-                setGrammarErrors(grammarMistakes);
-                setMessages((prev) =>
-                  prev.map((message) => {
-                    if (message.id !== userId) return message;
-                    const existing = message.mistakes ?? [];
-                    const nonGrammar = existing.filter((m) => m.type !== 'Grammar');
-                    return {
-                      ...message,
-                      mistakes: [...nonGrammar, ...grammarMistakes],
-                    };
-                  }),
-                );
-              })
-              .catch(() => {
-                setGrammarErrors([]);
-                setGrammarCorrectedSentence('');
-              })
-              .finally(() => {
-                setIsGrammarLoading(false);
+          // Grammar is returned inline in the chat response — no follow-up fetch needed
+          setIsGrammarLoading(true);
+          const grammarPayload = data.grammar_detail ?? null;
+          if (grammarPayload) {
+            const items = grammarPayload.errors ?? [];
+            setGrammarCorrectedSentence(grammarPayload.corrected_sentence ?? '');
+            const grammarMistakes = items.reduce<Mistake[]>((acc, item) => {
+              const raw = item as Record<string, unknown>;
+              const wrong = String(
+                item.wrong ??
+                item.original_text ??
+                item.original ??
+                raw.original ??
+                raw.text ??
+                raw.error_text ??
+                raw.incorrect ??
+                '',
+              ).trim();
+              const correct = String(
+                item.correct ??
+                item.corrected_text ??
+                item.corrected ??
+                raw.corrected ??
+                raw.suggestion ??
+                raw.fix ??
+                '',
+              ).trim();
+              const note = String(
+                item.note ?? item.explanation ?? raw.reason ?? raw.detail ?? raw.message ?? '',
+              ).trim();
+              acc.push({
+                wrong: wrong || '—',
+                correct: correct || '—',
+                type: 'Grammar' as const,
+                note: note || undefined,
               });
+              return acc;
+            }, []);
+            setGrammarErrors(grammarMistakes);
+            setMessages((prev) =>
+              prev.map((message) => {
+                if (message.id !== userId) return message;
+                const existing = message.mistakes ?? [];
+                const nonGrammar = existing.filter((m) => m.type !== 'Grammar');
+                return {
+                  ...message,
+                  mistakes: [...nonGrammar, ...grammarMistakes],
+                  grammarChecked: true,
+                };
+              }),
+            );
+          } else {
+            setGrammarErrors([]);
+            setGrammarCorrectedSentence('');
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === userId ? { ...message, grammarChecked: true } : message,
+              ),
+            );
+          }
+          setIsGrammarLoading(false);
+
+          // Capture backend transcript (used when audio-only send — no frontend text)
+          backendTranscript = String(data.user_input || '').trim();
+          if (backendTranscript && !trimmed) {
+            setMessages((prev) =>
+              prev.map((message) =>
+                message.id === userId ? { ...message, text: backendTranscript } : message,
+              ),
+            );
           }
 
           const responseText = String(data.response_text || '').trim();
@@ -299,12 +311,13 @@ export default function useSendChatMessage({
         // If we have an audio blob and a logged-in session, call the backend
         // pronunciation assessment API and map the Azure response into the
         // message `scoreDetails` and `mistakes` shown in the AI Feedback panel.
-        if (session?.token && audioBlob) {
+        const referenceText = trimmed || backendTranscript;
+        if (session?.token && audioBlob && referenceText) {
           try {
             const assessment = await assessPronunciation({
               token: session.token,
               audioBlob,
-              referenceText: trimmed,
+              referenceText,
               language: LANGUAGE_CODES[language],
               messageId: userMessageId,
             });
