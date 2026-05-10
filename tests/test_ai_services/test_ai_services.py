@@ -194,6 +194,8 @@ class TestRunLangraphAgent:
         mock_pipeline.run.return_value = {
             "response_text": response_text,
             "audio_bytes": audio_bytes,
+            "grammar_raw": None,
+            "messages": [],
         }
         return mock_pipeline
 
@@ -217,7 +219,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Next question", history=history)
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Next question", history=history, voice_gender=None, category=None, topic=None
+            user_input="Next question", history=history, voice_gender=None, category=None, topic=None, user_id=None
         )
 
     def test_run_langraph_agent_none_history_defaults_to_empty(self):
@@ -227,11 +229,11 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             run_langraph_agent("Hello", history=None)
 
-        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, category=None, topic=None)
+        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, category=None, topic=None, user_id=None)
 
     def test_run_langraph_agent_empty_response_text_returns_fallback(self):
         mock_pipeline = MagicMock()
-        mock_pipeline.run.return_value = {"response_text": "", "audio_bytes": b""}
+        mock_pipeline.run.return_value = {"response_text": "", "audio_bytes": b"", "grammar_raw": None, "messages": []}
 
         mock_tts_pipeline = MagicMock()
         mock_tts_pipeline.tts_service.convert_text_to_speech.return_value = b"fallback-audio"
@@ -265,7 +267,7 @@ class TestRunLangraphAgent:
     def test_run_langraph_agent_text_no_audio_retries_tts(self):
         """When pipeline returns text but empty audio, _synthesize_audio_bytes is called."""
         mock_pipeline = MagicMock()
-        mock_pipeline.run.return_value = {"response_text": "Nice job!", "audio_bytes": b""}
+        mock_pipeline.run.return_value = {"response_text": "Nice job!", "audio_bytes": b"", "grammar_raw": None, "messages": []}
 
         with (
             patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline),
@@ -287,7 +289,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Hello", history=[], voice_gender="Female")
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Hello", history=[], voice_gender="Female", category=None, topic=None
+            user_input="Hello", history=[], voice_gender="Female", category=None, topic=None, user_id=None
         )
 
 
