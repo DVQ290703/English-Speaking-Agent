@@ -1,0 +1,95 @@
+# =============================================================================
+# GKE Ingress + GCP Managed Certificate — English Speaking Agent
+# Apply  : kubectl apply -f deployments/ingress.yaml
+# Status : kubectl describe ingress vinai-ingress -n english-speaking-agent
+#
+# After applying:
+#   1. Get Ingress IP: kubectl get ingress vinai-ingress -n english-speaking-agent
+#   2. Point a20-app-014.duckdns.org → that IP in DuckDNS
+#   3. Wait 15-20 min for GCP to provision the SSL cert
+# =============================================================================
+# ── GCP Managed Certificate ───────────────────────────────────────────────────
+# GCP automatically provisions and renews the Let's Encrypt TLS cert.
+# Certificate status: kubectl describe managedcertificate vinai-managed-cert -n english-speaking-agent
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: vinai-managed-cert
+  namespace: english-speaking-agent
+spec:
+  domains:
+    - a20-app-014.duckdns.org
+
+---
+
+# ── FrontendConfig ────────────────────────────────────────────────────────────
+# Redirects all HTTP (port 80) traffic to HTTPS automatically.
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: vinai-frontend-config
+  namespace: english-speaking-agent
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+
+---
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+# Single entry point for all traffic. GKE creates a GCP HTTP(S) Load Balancer.
+#
+# Routing rules (evaluated top to bottom):
+#   /api/*  → backend-agent-service:8000  (FastAPI)
+#   /*      → frontend-agent-service:80   (React + nginx)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vinai-ingress
+  namespace: english-speaking-agent
+  labels:
+    project: english-speaking-agent
+  annotations:
+    # Use GKE's built-in GCP HTTP(S) Load Balancer
+    kubernetes.io/ingress.class: "gce"
+    # Attach the managed TLS certificate
+    networking.gke.io/managed-certificates: "vinai-managed-cert"
+    # Attach the HTTP→HTTPS redirect config
+    networking.gke.io/v1beta1.FrontendConfig: "vinai-frontend-config"
+spec:
+  rules:
+    - host: a20-app-014.duckdns.org
+      http:
+        paths:
+          # Backend API — must be listed before /* to take priority
+          - path: /api/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend-agent-service
+                port:
+                  number: 8000
+          # MinIO object storage — presigned URLs use this public path
+          - path: /storage/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: minio-service
+                port:
+                  number: 9000
+          # Grafana monitoring dashboard
+          - path: /grafana/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: grafana-service
+                port:
+                  number: 3000
+          # Frontend — catch-all for React SPA routing
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend-agent-service
+                port:
+                  number: 80
