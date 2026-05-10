@@ -266,3 +266,107 @@ def test_find_or_create_facebook_no_email_creates_user(mock_db_conn):
 
     assert user_id == "new_user_id"
     assert email is None
+
+
+# ---------------------------------------------------------------------------
+# Callback endpoint
+# ---------------------------------------------------------------------------
+
+def test_callback_missing_code_redirects_to_error(client, monkeypatch):
+    mock_redis = MagicMock()
+    monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
+
+    resp = client.get(
+        "/api/auth/oauth/callback/google?state=abc",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert "oauth_failed" in resp.headers["location"]
+
+
+def test_callback_invalid_state_redirects_to_error(client, monkeypatch):
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "microsoft"  # state belongs to microsoft, not google
+    monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
+
+    resp = client.get(
+        "/api/auth/oauth/callback/google?code=abc&state=wrong_state",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert "oauth_failed" in resp.headers["location"]
+
+
+def test_callback_state_deleted_on_first_use(client, monkeypatch):
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "google"
+    monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
+    # Make exchange raise so we hit the error path after state deletion
+    monkeypatch.setattr(
+        "app.api.oauth.exchange_code_for_identity",
+        lambda p, c: (_ for _ in ()).throw(Exception("stop")),
+    )
+
+    client.get(
+        "/api/auth/oauth/callback/google?code=abc&state=valid_state",
+        follow_redirects=False,
+    )
+
+    mock_redis.delete.assert_called_once_with("oauth_state:valid_state")
+
+
+def test_callback_success_redirects_with_token_fragment(client, mock_db_conn, monkeypatch):
+    mock_conn, mock_cursor = mock_db_conn
+    mock_cursor.fetchone.side_effect = [
+        None,                  # no oauth_accounts
+        None,                  # no existing user
+        ("new_user_id",),      # INSERT users
+    ]
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "google"
+    monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
+    monkeypatch.setattr(
+        "app.api.oauth.exchange_code_for_identity",
+        lambda p, c: {
+            "provider_user_id": "gid123",
+            "email": "user@gmail.com",
+            "email_verified": True,
+            "name": "Test User",
+            "picture": None,
+            "tenant_id": None,
+        },
+    )
+    monkeypatch.setattr("app.api.oauth.get_connection", lambda: mock_conn)
+
+    resp = client.get(
+        "/api/auth/oauth/callback/google?code=abc&state=valid",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    location = resp.headers["location"]
+    assert "/auth/callback#" in location
+    assert "token=" in location
+    assert "expires_in=" in location
+    assert "user=" in location
+
+
+def test_callback_exchange_failure_redirects_to_error(client, monkeypatch):
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "google"
+    monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
+    monkeypatch.setattr(
+        "app.api.oauth.exchange_code_for_identity",
+        lambda p, c: (_ for _ in ()).throw(Exception("httpx error")),
+    )
+
+    resp = client.get(
+        "/api/auth/oauth/callback/google?code=abc&state=valid",
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 302
+    assert "oauth_failed" in resp.headers["location"]

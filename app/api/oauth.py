@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json  # noqa: F401
+import json
 import secrets
-from urllib.parse import quote, urlencode  # quote: noqa: F401
+from urllib.parse import quote, urlencode
 
 import httpx
 import jwt
@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 
 from app.core.database import get_connection
 from app.core.logger import logger
-from app.core.security import create_access_token  # noqa: F401
+from app.core.security import create_access_token
 from app.core.settings import (
     APP_BASE_URL,
     FACEBOOK_CLIENT_ID,
@@ -264,3 +264,42 @@ def find_or_create_user(provider: str, identity: dict) -> tuple[str, str | None]
             )
 
             return user_id, email
+
+
+@router.get("/callback/{provider}")
+def oauth_callback(
+    provider: str,
+    code: str | None = None,
+    state: str | None = None,
+):
+    if not code or not state:
+        return _error_redirect()
+
+    r = _get_redis()
+    stored = r.get(f"oauth_state:{state}")
+    r.delete(f"oauth_state:{state}")  # one-time use regardless of outcome
+    if stored != provider:
+        return _error_redirect()
+
+    try:
+        identity = exchange_code_for_identity(provider, code)
+        user_id, email = find_or_create_user(provider, identity)
+        token, expires_in = create_access_token(user_id=user_id, email=email or "")
+        user_json = json.dumps({
+            "id": user_id,
+            "email": email,
+            "display_name": identity.get("name"),
+            "english_level": None,
+        })
+        fragment = (
+            f"token={token}"
+            f"&expires_in={expires_in}"
+            f"&user={quote(user_json)}"
+        )
+        return RedirectResponse(
+            f"{FRONTEND_URL}/auth/callback#{fragment}",
+            status_code=302,
+        )
+    except Exception:
+        logger.exception("OAuth callback failed provider=%s", provider)
+        return _error_redirect()
