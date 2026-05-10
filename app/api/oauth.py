@@ -66,7 +66,7 @@ def _get_redis():
 
 
 def _redirect_uri(provider: str) -> str:
-    return f"{APP_BASE_URL}/api/auth/oauth/callback/{provider}"
+    return f"{APP_BASE_URL}/api/auth/oauth/{provider}/callback"
 
 
 def _error_redirect() -> RedirectResponse:
@@ -266,7 +266,7 @@ def find_or_create_user(provider: str, identity: dict) -> tuple[str, str | None]
             return user_id, email
 
 
-@router.get("/callback/{provider}")
+@router.get("/{provider}/callback")
 def oauth_callback(
     provider: str,
     code: str | None = None,

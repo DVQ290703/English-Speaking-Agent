@@ -277,7 +277,7 @@ def test_callback_missing_code_redirects_to_error(client, monkeypatch):
     monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
 
     resp = client.get(
-        "/api/auth/oauth/callback/google?state=abc",
+        "/api/auth/oauth/google/callback?state=abc",
         follow_redirects=False,
     )
 
@@ -291,7 +291,7 @@ def test_callback_invalid_state_redirects_to_error(client, monkeypatch):
     monkeypatch.setattr("app.api.oauth._get_redis", lambda: mock_redis)
 
     resp = client.get(
-        "/api/auth/oauth/callback/google?code=abc&state=wrong_state",
+        "/api/auth/oauth/google/callback?code=abc&state=wrong_state",
         follow_redirects=False,
     )
 
@@ -310,7 +310,7 @@ def test_callback_state_deleted_on_first_use(client, monkeypatch):
     )
 
     client.get(
-        "/api/auth/oauth/callback/google?code=abc&state=valid_state",
+        "/api/auth/oauth/google/callback?code=abc&state=valid_state",
         follow_redirects=False,
     )
 
@@ -342,7 +342,7 @@ def test_callback_success_redirects_with_token_fragment(client, mock_db_conn, mo
     monkeypatch.setattr("app.api.oauth.get_connection", lambda: mock_conn)
 
     resp = client.get(
-        "/api/auth/oauth/callback/google?code=abc&state=valid",
+        "/api/auth/oauth/google/callback?code=abc&state=valid",
         follow_redirects=False,
     )
 
@@ -364,7 +364,7 @@ def test_callback_exchange_failure_redirects_to_error(client, monkeypatch):
     )
 
     resp = client.get(
-        "/api/auth/oauth/callback/google?code=abc&state=valid",
+        "/api/auth/oauth/google/callback?code=abc&state=valid",
         follow_redirects=False,
     )
 
