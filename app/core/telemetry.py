@@ -88,10 +88,17 @@ def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> fl
 class _SpanData:
     def __init__(self) -> None:
         self.extra: dict = {}
+        self._failed: bool = False
+        self._error_message: str = ""
 
     def set(self, **kwargs) -> None:
         """Set span-specific fields: model, prompt_tokens, completion_tokens, etc."""
         self.extra.update(kwargs)
+
+    def fail(self, message: str = "") -> None:
+        """Mark this span as failed without raising an exception."""
+        self._failed = True
+        self._error_message = message
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +127,13 @@ def span_context(name: str, kind: str) -> Generator[_SpanData, None, None]:
     try:
         yield span
         duration_ms = int((time.monotonic() - start) * 1000)
-        _emit_span(name, kind, duration_ms, "ok", span.extra)
-        record_span_metrics(name, kind, duration_ms, "ok", span.extra)
+        if span._failed:
+            error_extra = {**span.extra, "exception_message": span._error_message}
+            _emit_span(name, kind, duration_ms, "error", error_extra)
+            record_span_metrics(name, kind, duration_ms, "error", error_extra)
+        else:
+            _emit_span(name, kind, duration_ms, "ok", span.extra)
+            record_span_metrics(name, kind, duration_ms, "ok", span.extra)
     except Exception as exc:
         duration_ms = int((time.monotonic() - start) * 1000)
         error_extra = {

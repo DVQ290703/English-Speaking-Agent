@@ -1,11 +1,13 @@
 import json
 
+from groq import RateLimitError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from app.agents.tools.flashcard_tools import FLASHCARD_TOOLS
 from app.core.logger import logger
+from app.core.telemetry import span_context
 from app.services.elevenlabs_tts import ElevenLabsTTS
 from app.services.groq_llm import GroqLLMService
 from app.agents.state import AgentState
@@ -91,7 +93,31 @@ class VoiceAgentPipeline:
         # When the tool-call cap is reached, use the plain client (no tools bound)
         # so the LLM is forced to produce a text reply instead of another tool call.
         llm = self.llm_service.client if iterations >= _TOOL_CALL_CAP else self.llm_service.tool_client
-        ai_msg: AIMessage = llm.invoke(messages_to_send)
+
+        with span_context("llm.respond", kind="llm") as span:
+            try:
+                ai_msg: AIMessage = llm.invoke(messages_to_send)
+            except RateLimitError as exc:
+                span.fail(str(exc))
+                logger.warning(
+                    "respond_node rate_limited iteration=%d: %s",
+                    iterations,
+                    exc,
+                )
+                return {
+                    **state,
+                    "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
+                    "messages": [],
+                    "_tool_call_iterations": iterations,
+                    "grammar_json": None,
+                }
+            usage = getattr(ai_msg, "usage_metadata", {}) or {}
+            span.set(
+                model=self.llm_service.model_name,
+                prompt_tokens=usage.get("input_tokens", 0),
+                completion_tokens=usage.get("output_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+            )
 
         if ai_msg.tool_calls:
             tool_names = [tc["name"] for tc in ai_msg.tool_calls]

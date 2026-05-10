@@ -110,6 +110,7 @@ class ElevenLabsTTS:
                             model_id,
                             response.text[:200],
                         )
+                        span.fail(f"HTTP {response.status_code}: {response.text[:200]}")
                         return b""
 
                     audio_bytes = self._read_audio_response(response)
