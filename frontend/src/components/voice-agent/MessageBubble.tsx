@@ -1,4 +1,4 @@
-import { Bot, Play, User } from 'lucide-react';
+import { Bot, Mic, Play, User } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
 import ReasoningSteps from './ReasoningSteps';
 import type { ToolCallStep } from '../../api/chat';
@@ -37,6 +37,7 @@ export interface Message {
   assessmentStatus?: 'available' | 'unavailable' | 'failed' | 'pending';
   assessmentNote?: string;
   toolSteps?: ToolCallStep[];
+  grammarChecked?: boolean;
 }
 
 const PHONEME_TIPS_BASE: Record<string, string> = {
@@ -279,7 +280,17 @@ export default function MessageBubble({
                 }`
           }`}
         >
-          {message.typing ? <TypingIndicator /> : message.text}
+          {message.typing ? (
+            <TypingIndicator />
+          ) : message.text ? (
+            message.text
+          ) : !isAgent && message.userAudioUrl ? (
+            <span className="flex items-center gap-1 text-gray-400 italic text-xs">
+              <Mic className="w-3 h-3" /> Voice message
+            </span>
+          ) : (
+            message.text
+          )}
         </button>
         {isAgent && !message.typing && (message.toolSteps?.length ?? 0) > 0 && (
           <ReasoningSteps steps={message.toolSteps!} />

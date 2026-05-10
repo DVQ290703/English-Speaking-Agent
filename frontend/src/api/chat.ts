@@ -31,6 +31,7 @@ export interface ChatRespondResult {
   conversation_id?: string;
   user_message_id?: string;
   tool_steps?: ToolCallStep[];
+  grammar_detail?: GrammarFeedbackPayload | null;
 }
 
 export interface GrammarFeedbackItem {
