@@ -237,7 +237,8 @@ class VoiceAgentPipeline:
             "messages": [],
             "_tool_call_iterations": 0,
         }
-        invoke_config: dict = {"configurable": {"user_id": user_id}}
+        invoke_config: dict = {}
         if user_id:
+            invoke_config["configurable"] = {"user_id": user_id}
             invoke_config["metadata"] = {"user_id": user_id}
         return self.app.invoke(initial_state, config=invoke_config)

@@ -13,6 +13,6 @@ class AgentState(TypedDict):
     grammar_raw: str | None  # raw compact JSON from <grammar> tag; None on failure
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"
-    user_id: str | None       # authenticated user UUID — injected into system prompt for tool calls
+    user_id: str | None       # authenticated user UUID — passed via RunnableConfig to tools; gates tool-client selection
     messages: Annotated[list[BaseMessage], add_messages]  # tool-calling sub-loop accumulator
     _tool_call_iterations: int                            # loop guard counter
