@@ -6,6 +6,9 @@ export const ENDPOINTS = {
     register: '/api/auth/register',
     me: '/api/auth/me',
   },
+  oauth: {
+    login: (provider: string) => `/api/auth/oauth/login/${provider}`,
+  },
   chat: {
     respond: '/api/chat/respond',
     assess: '/api/assess',
