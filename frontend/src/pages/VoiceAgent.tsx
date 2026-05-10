@@ -15,7 +15,7 @@ import { SiOpenai } from 'react-icons/si';
 
 import { useAuth } from '../auth/AuthContext';
 import { getAuthSession } from '../auth/tokenStorage';
-import { fetchGrammarFeedback, assessPronunciation, transcribeAudio } from '../api/chat';
+import { fetchGrammarFeedback, assessPronunciation } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
@@ -716,9 +716,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   // the dashboard), automatically open the most recent DB conversation for that
   // topic so the user lands directly in context. Fires only once per mount.
   useEffect(() => {
-    // 1. If we've already performed an auto-load for this session/topic switch, 
+    // 1. If we've already performed an auto-load for this session/topic switch,
     // or if we are already in an active session, don't do anything.
-    if (hasAutoLoadedRef.current || conversationIdRef.current) return;
+    if (convsLoading || hasAutoLoadedRef.current) return;
+    if (conversationIdRef.current) return;
 
     // 2. We need a topic and we must wait for the conversations list to finish loading.
     if (!topic || convsLoading || conversations.length === 0) return;
@@ -775,6 +776,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     grammarAbortRef.current?.abort();
 
     if (!displayMsg || displayMsg.role !== 'user') {
+      setIsGrammarLoading(false);
+      return;
+    }
+
+    // Skip network fetch if grammar was already loaded for this message
+    if (displayMsg.grammarChecked) {
+      const cached = displayMsg.mistakes?.filter((m) => m.type === 'Grammar') ?? [];
+      setGrammarErrors(cached);
       setIsGrammarLoading(false);
       return;
     }
@@ -852,15 +861,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     if (chatInput.trim() && !agentTyping) sendChatMessage(chatInput);
   }, [agentTyping, chatInput, sendChatMessage]);
 
-  const onTranscribe = useCallback(async (blob: Blob): Promise<string> => {
-    const session = getAuthSession();
-    if (!session?.token) throw new Error('Not authenticated');
-    return transcribeAudio(session.token, blob);
-  }, []);
-
   const onSendRecording = useCallback(
-    (text: string, blob: Blob) => {
-      sendChatMessage(text, blob);
+    (blob: Blob) => {
+      void sendChatMessage('', blob);
     },
     [sendChatMessage],
   );
@@ -1164,7 +1167,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               onChangeInput={setChatInput}
               onKeyDown={handleKeyDown}
               onSendText={handleSendChat}
-              onTranscribe={onTranscribe}
               onSendRecording={onSendRecording}
             />
             {!isAuthenticated && (
