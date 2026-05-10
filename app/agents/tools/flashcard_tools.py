@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import Literal
 from uuid import UUID
 
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import var_child_runnable_config
 from langchain_core.tools import tool
 
 from app.core.database import get_connection
@@ -21,13 +21,14 @@ def _is_valid_uuid(value: str) -> bool:
 
 
 @tool
-def list_decks(config: RunnableConfig) -> list[dict]:
+def list_decks() -> list[dict]:
     """List all active flashcard decks for the current user.
 
     Returns each deck's id, name, description, card_count, and due_count.
     ONLY call when the user explicitly asks to see or choose a deck (e.g. "show my decks",
     "which deck should I save to"). Never call proactively at session start.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("list_decks enter user_id=%s", user_id)
     if not _is_valid_uuid(user_id):
@@ -63,7 +64,6 @@ def list_decks(config: RunnableConfig) -> list[dict]:
 def create_deck(
     name: str,
     description: str | None = None,
-    config: RunnableConfig = None,
 ) -> dict:
     """Create a new flashcard deck for the user.
 
@@ -79,6 +79,7 @@ def create_deck(
     Returns:
         dict with deck_id, name, and description on success, or error on failure.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("create_deck enter user_id=%s name=%r", user_id, name)
     if not _is_valid_uuid(user_id):
@@ -113,7 +114,6 @@ def create_card(
     front_text: str,
     back_text: str,
     tags: list[str] | None = None,
-    config: RunnableConfig = None,
 ) -> dict:
     """Create a new flashcard in a deck and initialize its SM-2 review schedule.
 
@@ -126,6 +126,7 @@ def create_card(
     Returns:
         dict with card_id, deck_name, front_text.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("create_card enter user_id=%s deck_id=%s front=%r", user_id, deck_id, front_text)
     if not _is_valid_uuid(deck_id):
@@ -173,7 +174,6 @@ def update_card(
     front_text: str | None = None,
     back_text: str | None = None,
     tags: list[str] | None = None,
-    config: RunnableConfig = None,
 ) -> dict:
     """Update an existing flashcard's content.
 
@@ -186,6 +186,7 @@ def update_card(
     Returns:
         dict with card_id and updated fields, or error.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("update_card enter user_id=%s card_id=%s", user_id, card_id)
     if not _is_valid_uuid(card_id):
@@ -218,7 +219,6 @@ def search_cards(
     query: str | None = None,
     tag: str | None = None,
     deck_id: str | None = None,
-    config: RunnableConfig = None,
 ) -> list[dict]:
     """Search a user's flashcards by keyword or tag.
 
@@ -234,6 +234,7 @@ def search_cards(
     Returns:
         List of dicts with card_id, front_text, deck_name, tags.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     conditions = ["c.user_id = %s", "c.is_active = TRUE"]
     params: list = [user_id]
@@ -273,7 +274,6 @@ def search_cards(
 def get_due_cards(
     deck_id: str | None = None,
     limit: int = 20,
-    config: RunnableConfig = None,
 ) -> list[dict]:
     """Retrieve cards due for review today for a user.
 
@@ -284,6 +284,7 @@ def get_due_cards(
     Returns:
         List of dicts with card_id, front_text, back_text, deck_name, due_date.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     conditions = ["r.user_id = %s", "r.due_date <= CURRENT_DATE", "c.is_active = TRUE"]
     params: list = [user_id]
@@ -325,7 +326,6 @@ def get_due_cards(
 def submit_card_review(
     card_id: str,
     rating: Literal["again", "hard", "good", "easy"],
-    config: RunnableConfig = None,
 ) -> dict:
     """Submit a review rating for a flashcard and update its SM-2 schedule.
 
@@ -338,6 +338,7 @@ def submit_card_review(
     Returns:
         dict with card_id, new due_date, interval_days, ease_factor, repetitions.
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("submit_card_review enter user_id=%s card_id=%s rating=%s", user_id, card_id, rating)
     if not _is_valid_uuid(card_id):
@@ -390,7 +391,7 @@ def submit_card_review(
 
 
 @tool
-def get_deck_stats(deck_id: str, config: RunnableConfig = None) -> dict:
+def get_deck_stats(deck_id: str) -> dict:
     """Get statistics for a flashcard deck.
 
     Args:
@@ -399,6 +400,7 @@ def get_deck_stats(deck_id: str, config: RunnableConfig = None) -> dict:
     Returns:
         dict with total_cards, due_today, learned, retention_rate (0.0-1.0).
     """
+    config = var_child_runnable_config.get()
     user_id: str = config["configurable"]["user_id"]
     logger.debug("get_deck_stats enter user_id=%s deck_id=%s", user_id, deck_id)
     if not _is_valid_uuid(deck_id):
