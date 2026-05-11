@@ -5,5 +5,5 @@ global:
 scrape_configs:
   - job_name: "voice-agent-backend"
     static_configs:
-      - targets: ["backend:8000"]
+      - targets: ["backend-agent-service.english-speaking-agent.svc.cluster.local:8000"]
     metrics_path: /metrics
