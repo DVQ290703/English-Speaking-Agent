@@ -1,5 +1,6 @@
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type Gender = 'Male' | 'Female';
+export type Accent = 'US' | 'UK';
 export type Language = 'English' | 'Vietnamese';
 export type Model = 'OpenAI GPT 5' | 'OpenAI GPT 4o' | 'Claude 3.5 Sonnet' | 'Gemini 1.5 Pro';
 
@@ -16,6 +17,10 @@ export const MODELS: Model[] = [
   'Gemini 1.5 Pro',
 ];
 export const GENDERS: Gender[] = ['Male', 'Female'];
+export const ACCENTS: { value: Accent; flag: string; label: string }[] = [
+  { value: 'US', flag: '🇺🇸', label: 'US' },
+  { value: 'UK', flag: '🇬🇧', label: 'UK' },
+];
 export type TopicId =
   | 'daily_conversation'
   | 'travel'

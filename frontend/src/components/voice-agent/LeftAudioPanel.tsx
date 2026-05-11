@@ -4,12 +4,14 @@ import { useT } from '../../i18n/useLanguage';
 import DeviceSelect from './DeviceSelect';
 import SelectDropdown from './SelectDropdown';
 import { AgentWaveform, MicWaveform } from './Waveforms';
-import { GENDERS, type AuthUser, type Gender } from './constants';
+import { ACCENTS, GENDERS, type Accent, type AuthUser, type Gender } from './constants';
 import type { MicDevice } from '../../hooks/useMicDevices';
 
 interface LeftAudioPanelProps {
   gender: Gender;
   onChangeGender: (next: Gender) => void;
+  accent: Accent;
+  onChangeAccent: (next: Accent) => void;
   agentSpeaking: boolean;
   isConnected: boolean;
   isConnecting: boolean;
@@ -32,6 +34,8 @@ function InactiveDots({ dotClass }: { dotClass: string }) {
 export default function LeftAudioPanel({
   gender,
   onChangeGender,
+  accent,
+  onChangeAccent,
   agentSpeaking,
   isConnected,
   isConnecting,
@@ -47,7 +51,28 @@ export default function LeftAudioPanel({
         <span className="text-xs font-semibold text-gray-700 tracking-wide">
           {t('va.left.audioSettings')}
         </span>
-        <SelectDropdown value={gender} options={GENDERS} onChange={onChangeGender} />
+        <div className="flex items-center gap-2">
+          {/* Accent toggle */}
+          <div className="flex items-center rounded-md border border-gray-200 overflow-hidden">
+            {ACCENTS.map((a) => (
+              <button
+                key={a.value}
+                type="button"
+                onClick={() => onChangeAccent(a.value)}
+                title={`${a.flag} ${a.label} accent`}
+                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium transition-colors ${
+                  accent === a.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span>{a.flag}</span>
+                <span>{a.label}</span>
+              </button>
+            ))}
+          </div>
+          <SelectDropdown value={gender} options={GENDERS} onChange={onChangeGender} />
+        </div>
       </div>
 
       <div className="px-2 mt-2 space-y-2">

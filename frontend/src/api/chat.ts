@@ -9,6 +9,7 @@ export interface ChatRespondParams {
   category?: string;
   subOption?: string;
   voiceGender?: 'Male' | 'Female' | string;
+  voiceAccent?: 'US' | 'UK' | string;
   conversationId?: string | null;
 }
 
@@ -73,6 +74,7 @@ export async function chatRespond({
   category = '',
   subOption = '',
   voiceGender = '',
+  voiceAccent = '',
   conversationId = null,
 }: ChatRespondParams): Promise<ChatRespondResult> {
   console.log('[API] building FormData', {
@@ -103,6 +105,10 @@ export async function chatRespond({
 
   if (voiceGender && voiceGender.trim()) {
     formData.append('voice_gender', voiceGender.trim());
+  }
+
+  if (voiceAccent && voiceAccent.trim()) {
+    formData.append('voice_accent', voiceAccent.trim().toLowerCase());
   }
 
   if (audioBlob) {

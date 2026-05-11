@@ -32,6 +32,7 @@ import type { Message, Mistake, SessionSummary } from '../components/voice-agent
 import {
   LANGUAGES,
   MODELS,
+  type Accent,
   type AuthUser,
   type ConnectionStatus,
   type Gender,
@@ -175,6 +176,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [gender, setGender] = useState<Gender>('Male');
+  const [accent, setAccent] = useState<Accent>('US');
   const [language, setLanguage] = useState<Language>(lang === 'vi' ? 'Vietnamese' : 'English');
 
   const { categories: topicCategories, loading: topicsLoading } = useTopics();
@@ -409,6 +411,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     category,
     subOption,
     gender,
+    accent,
     language,
     agentTyping,
     conversationIdRef,
@@ -991,6 +994,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             <LeftAudioPanel
               gender={gender}
               onChangeGender={setGender}
+              accent={accent}
+              onChangeAccent={setAccent}
               agentSpeaking={agentSpeaking}
               isConnected={isConnected}
               isConnecting={isConnecting}

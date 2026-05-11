@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { assessPronunciation, chatRespond } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
-import { LANGUAGE_CODES, type Gender, type Language } from '../components/voice-agent/constants';
+import { LANGUAGE_CODES, type Accent, type Gender, type Language } from '../components/voice-agent/constants';
 import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
 
 export interface UseSendChatMessageParams {
@@ -10,6 +10,7 @@ export interface UseSendChatMessageParams {
   category: string | null;
   subOption: string | null;
   gender: Gender;
+  accent: Accent;
   language: Language;
   agentTyping: boolean;
   conversationIdRef: MutableRefObject<string | null>;
@@ -51,6 +52,7 @@ export default function useSendChatMessage({
   category,
   subOption,
   gender,
+  accent,
   language,
   agentTyping,
   conversationIdRef,
@@ -168,6 +170,7 @@ export default function useSendChatMessage({
             category: category ?? undefined,
             subOption: subOption ?? undefined,
             voiceGender: gender,
+            voiceAccent: accent,
             conversationId: conversationIdRef.current ?? undefined,
           });
           if (data.conversation_id) {
@@ -448,6 +451,7 @@ export default function useSendChatMessage({
       category,
       subOption,
       gender,
+      accent,
       language,
       trimLocalAudioUrls,
       conversationIdRef,
