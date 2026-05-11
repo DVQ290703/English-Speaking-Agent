@@ -80,6 +80,12 @@ spec:
               containerPort: 80
               protocol: TCP
 
+          # nginx template substitution — envsubst runs at container start and
+          # writes the resolved conf to /etc/nginx/conf.d/default.conf.
+          env:
+            - name: BACKEND_HOST
+              value: "backend-agent-service.english-speaking-agent.svc.cluster.local:8000"
+
           # ── Resource Limits ────────────────────────────────────────────────
           # nginx serving static assets is intentionally lightweight.
           # Raise limits if you add SSR or a BFF layer.
