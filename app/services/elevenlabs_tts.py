@@ -14,11 +14,16 @@ from app.core.telemetry import span_context
 _ENV_API_KEY = "ELEVENLABS_API_KEY"
 _ENV_MODEL_ID = "ELEVENLABS_MODEL_ID"
 _ENV_DEFAULT_VOICE_ID = "ELEVENLABS_VOICE_ID"
-_ENV_MALE_VOICE_ID = "ELEVENLABS_VOICE_ID_MALE"
-_ENV_FEMALE_VOICE_ID = "ELEVENLABS_VOICE_ID_FEMALE"
 _DEFAULT_MODEL_ID = "eleven_flash_v2_5"
 _REQUEST_TIMEOUT_SECONDS = 60
 _CHUNK_SIZE_BYTES = 64 * 1024
+
+_VOICE_ENV_MAP: dict[tuple[str, str], str] = {
+    ("male",   "us"): "ELEVENLABS_US_MALE_VOICE_ID",
+    ("female", "us"): "ELEVENLABS_US_FEMALE_VOICE_ID",
+    ("male",   "uk"): "ELEVENLABS_UK_MALE_VOICE_ID",
+    ("female", "uk"): "ELEVENLABS_UK_FEMALE_VOICE_ID",
+}
 
 
 class ElevenLabsTTS:
@@ -27,36 +32,26 @@ class ElevenLabsTTS:
     def _get_env_value(self, key: str) -> str:
         return os.getenv(key, "").strip()
 
-    def _resolve_voice_id(self, voice_gender: str | None = None) -> str:
-        """Resolve voice ID without crossing explicit male/female requests."""
+    def _resolve_voice_id(self, voice_gender: str | None = None, voice_accent: str | None = None) -> str:
+        """Resolve voice ID from (gender, accent) pair; defaults accent to 'us'."""
         gender = (voice_gender or "").strip().lower()
-        gender_env_by_name = {
-            "male": _ENV_MALE_VOICE_ID,
-            "female": _ENV_FEMALE_VOICE_ID,
-        }
-        requested_env = gender_env_by_name.get(gender)
-        if requested_env is not None:
-            return self._resolve_requested_gender_voice(requested_env)
+        accent = (voice_accent or "").strip().lower() or "us"
+
+        env_key = _VOICE_ENV_MAP.get((gender, accent))
+        if env_key:
+            voice_id = self._get_env_value(env_key)
+            if voice_id:
+                return voice_id
+            logger.error("ElevenLabsTTS: %s is not configured for gender=%r accent=%r", env_key, gender, accent)
 
         default_voice_id = self._get_env_value(_ENV_DEFAULT_VOICE_ID)
-        return self._resolve_unspecified_gender_voice(default_voice_id)
-
-    def _resolve_unspecified_gender_voice(self, default_voice_id: str) -> str:
         if default_voice_id:
             return default_voice_id
 
-        logger.error("%s is not configured and no valid voice_gender was requested", _ENV_DEFAULT_VOICE_ID)
+        logger.error("ElevenLabsTTS: no voice ID resolved for gender=%r accent=%r and %s is not set", gender, accent, _ENV_DEFAULT_VOICE_ID)
         return ""
 
-    def _resolve_requested_gender_voice(self, requested_env: str) -> str:
-        """Resolve an explicit gender request only from its matching voice env."""
-        voice_id = self._get_env_value(requested_env)
-        if voice_id:
-            return voice_id
-        logger.error("%s is not configured for explicit voice_gender request", requested_env)
-        return ""
-
-    def convert_text_to_speech(self, text: str, voice_gender: str | None = None) -> bytes:
+    def convert_text_to_speech(self, text: str, voice_gender: str | None = None, voice_accent: str | None = None) -> bytes:
         """Synthesize text and return raw MP3 bytes, or empty bytes on failure."""
         if not text.strip():
             logger.debug("ElevenLabs: empty text provided, skipping synthesis")
@@ -67,15 +62,12 @@ class ElevenLabsTTS:
             logger.error("ElevenLabs: %s is not set - cannot synthesize audio", _ENV_API_KEY)
             return b""
 
-        voice_id = self._resolve_voice_id(voice_gender)
+        voice_id = self._resolve_voice_id(voice_gender, voice_accent)
         if not voice_id:
             logger.error(
-                "ElevenLabs: no voice ID configured for voice_gender=%r - set "
-                "%s, %s, or %s",
+                "ElevenLabs: no voice ID configured for voice_gender=%r voice_accent=%r",
                 voice_gender,
-                _ENV_MALE_VOICE_ID,
-                _ENV_FEMALE_VOICE_ID,
-                _ENV_DEFAULT_VOICE_ID,
+                voice_accent,
             )
             return b""
 
