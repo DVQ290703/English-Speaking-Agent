@@ -10,6 +10,7 @@ class AgentState(TypedDict):
     audio_bytes: bytes   # raw MP3 bytes from TTS; empty on failure
     history: list[str]
     voice_gender: str | None
+    voice_accent: str | None
     grammar_raw: str | None  # raw compact JSON from <grammar> tag; None on failure
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"
