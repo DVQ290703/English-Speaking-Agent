@@ -197,6 +197,7 @@ class VoiceAgentPipeline:
         audio_bytes = self.tts_service.convert_text_to_speech(
             state["response_text"],
             voice_gender=state.get("voice_gender"),
+            voice_accent=state.get("voice_accent"),
         )
         logger.debug("tts_node done audio_bytes=%d", len(audio_bytes))
         return {**state, "audio_bytes": audio_bytes}
@@ -219,6 +220,7 @@ class VoiceAgentPipeline:
         user_input: str,
         history: list[str] | None = None,
         voice_gender: str | None = None,
+        voice_accent: str | None = None,
         category: str | None = None,
         topic: str | None = None,
         user_id: str | None = None,
@@ -230,6 +232,7 @@ class VoiceAgentPipeline:
             "audio_bytes": b"",
             "history": history or [],
             "voice_gender": voice_gender,
+            "voice_accent": voice_accent,
             "grammar_raw": None,
             "category": category,
             "topic": topic,
