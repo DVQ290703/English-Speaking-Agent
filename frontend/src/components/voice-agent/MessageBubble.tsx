@@ -285,8 +285,18 @@ export default function MessageBubble({
           ) : message.text ? (
             message.text
           ) : !isAgent && message.userAudioUrl ? (
-            <span className="flex items-center gap-1 text-gray-400 italic text-xs">
-              <Mic className="w-3 h-3" /> Voice message
+            <span className="flex items-center gap-1.5 text-gray-400 text-xs">
+              <Mic className="w-3 h-3 animate-pulse" />
+              <span>Sending</span>
+              <span className="flex items-center gap-0.5">
+                {[0, 150, 300].map((delay) => (
+                  <span
+                    key={delay}
+                    className="w-1 h-1 rounded-full bg-gray-400 inline-block"
+                    style={{ animation: `dotPulse 1.2s ease-in-out ${delay}ms infinite` }}
+                  />
+                ))}
+              </span>
             </span>
           ) : (
             message.text
