@@ -8,9 +8,9 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Circle, Mic } from 'lucide-react';
+import { Circle, Mic, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { SiOpenai } from 'react-icons/si';
+
 
 
 import { useAuth } from '../auth/AuthContext';
@@ -24,20 +24,16 @@ import {
   LeftAudioPanel,
   LogoutConfirmModal,
   MessageBubble,
-  SelectDropdown,
   SessionSummaryModal,
 } from '../components/voice-agent';
 import VoiceRecorderComponent from '../components/voice-agent/VoiceRecorderComponent';
 import type { Message, Mistake, SessionSummary } from '../components/voice-agent';
 import {
-  LANGUAGES,
-  MODELS,
   type Accent,
   type AuthUser,
   type ConnectionStatus,
   type Gender,
   type Language,
-  type Model,
 } from '../components/voice-agent/constants';
 import { useTopics } from '../hooks/useTopics';
 import { getInitialSessionState } from '../components/voice-agent/sessionRestore';
@@ -154,6 +150,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const navigate = useNavigate();
   const { lang, t } = useLanguage();
   const [isDark] = useDarkMode();
+  const { isAuthenticated, logout } = useAuth();
 
   const [currentUser] = useState<AuthUser | null>(() => {
     if (initialUser) return initialUser;
@@ -177,7 +174,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [gender, setGender] = useState<Gender>('Male');
   const [accent, setAccent] = useState<Accent>('US');
-  const [language, setLanguage] = useState<Language>(lang === 'vi' ? 'Vietnamese' : 'English');
+  const [language] = useState<Language>('English');
 
   const { categories: topicCategories, loading: topicsLoading } = useTopics();
 
@@ -191,7 +188,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [subOption, setSubOption] = useState<string | null>(initialState.subOption);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [model, setModel] = useState<Model>('OpenAI GPT 5');
+
 
   const { micDevices, selectedMicId, selectedMicIdRef, setSelectedMicId, refreshMicDevicesRef } =
     useMicDevices();
@@ -344,7 +341,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   /* eslint-enable react-hooks/immutability */
 
   // No-op stubs — VoiceRecorderComponent manages its own mic lifecycle now.
-  const noopSetMicEnabled = useCallback((_: boolean) => {}, []);
+  const noopSetMicEnabled = useCallback((_: boolean) => { }, []);
   const noopUserMicIntentRef = useRef(false);
   const { mediaStreamRef, startUserAudioCapture, stopUserAudioCapture, releaseMediaStream } =
     useAudioCapture(selectedMicIdRef);
@@ -853,7 +850,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     };
   }, [displayMsg, setMessages]);
 
-  const { isAuthenticated, logout } = useAuth();
   const handleLogout = useCallback(() => {
     setShowLogoutConfirm(false);
     if (onLogout) onLogout();
@@ -876,7 +872,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       data-va="root"
       className={`h-full overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
     >
-      {/* VoiceAgentHeader removed - handled by MainLayout */}
 
       {/* Description bar */}
       {(topic || customTopicLabel) && (
@@ -920,10 +915,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               onClick={handleConnect}
               disabled={isConnecting}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
-                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
-                  : isConnecting
-                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                : isConnecting
+                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
                 }`}
             >
               {isConnected
@@ -1041,13 +1036,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <SiOpenai className="w-4 h-4 text-gray-500" />
-                  <SelectDropdown value={model} options={MODELS} onChange={setModel} />
-                </div>
-                <SelectDropdown value={language} options={LANGUAGES} onChange={setLanguage} />
-              </div>
             </div>
 
             {/* Messages area */}
@@ -1073,7 +1061,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     <div className="h-full flex flex-col items-center justify-center text-center gap-6 max-w-md mx-auto animate-in fade-in zoom-in duration-500">
                       <div className="w-24 h-24 rounded-4xl bg-white dark:bg-slate-800 flex items-center justify-center shadow-2xl shadow-gray-200 dark:shadow-black/20 overflow-hidden border border-gray-100 dark:border-slate-700">
                         <img
-                          src="/src/public/audio-waves.png"
+                          src="/audio-waves.png"
                           alt="Logo"
                           className="w-full h-full object-cover p-4"
                         />
@@ -1121,7 +1109,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               {status === 'connecting' && (
                 <div className="h-full flex flex-col items-center justify-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-blue-100 border border-blue-300 flex items-center justify-center animate-pulse">
-                    <SiOpenai className="w-6 h-6 text-blue-400" />
+                    <Sparkles className="w-6 h-6 text-blue-400" />
                   </div>
                   <div className="flex items-center gap-1">
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -1173,30 +1161,31 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               onKeyDown={handleKeyDown}
               onSendText={handleSendChat}
               onSendRecording={onSendRecording}
+              isAuthenticated={isAuthenticated}
             />
             {!isAuthenticated && (
-              <div className="px-4 py-6 border-t border-gray-100 bg-white/80 backdrop-blur-md">
-                <div className="max-w-2xl mx-auto flex flex-col items-center gap-4 p-6 bg-linear-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100/50 shadow-sm">
+              <div className="px-4 py-6 border-t border-gray-100 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 backdrop-blur-sm">
+                <div className="max-w-lg mx-auto flex flex-col items-center gap-4 p-6 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900 rounded-2xl border border-blue-100/50 dark:border-slate-700/50 shadow-lg shadow-blue-500/5 dark:shadow-black/10 text-center">
                   <div className="flex flex-col items-center gap-1">
-                    <p className="text-base font-bold text-gray-900">
-                      Sign in or Sign up to start talking
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Join thousands of learners improving their English every day.
+                    <h3 className="text-base font-bold text-gray-900 dark:text-slate-100">
+                      {t('va.guest.title')}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">
+                      {t('va.guest.subtitle')}
                     </p>
                   </div>
                   <div className="flex gap-3 w-full sm:w-auto">
                     <button
                       onClick={() => navigate('/login')}
-                      className="flex-1 sm:flex-none px-8 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 active:scale-95"
+                      className="flex-1 sm:min-w-28 px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-500/10 active:scale-95 whitespace-nowrap"
                     >
-                      Sign in
+                      {t('common.signIn')}
                     </button>
                     <button
                       onClick={() => navigate('/register')}
-                      className="flex-1 sm:flex-none px-8 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all active:scale-95"
+                      className="flex-1 sm:min-w-28 px-6 py-2 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-slate-700 rounded-lg text-sm font-bold hover:bg-blue-50 dark:hover:bg-slate-700 transition-all active:scale-95 whitespace-nowrap"
                     >
-                      Sign up
+                      {t('common.signUp')}
                     </button>
                   </div>
                 </div>

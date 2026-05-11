@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { loginRequest } from '../api/auth';
@@ -179,7 +179,7 @@ export default function LoginPage() {
                 />
                 <span>Remember me</span>
               </label>
-              <a href="#">Forgot password?</a>
+              <Link to="/forgot-password">Forgot password?</Link>
             </div>
 
             <button type="submit" className="submit-btn" disabled={isSubmitting}>

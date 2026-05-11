@@ -38,7 +38,7 @@ export default function OnboardingTip() {
       >
         <div className="flex items-center justify-center w-16 h-16 rounded-3xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 mx-auto mb-4 shadow-xl overflow-hidden">
           <img
-            src="/src/public/audio-waves.png"
+            src="/audio-waves.png"
             alt="Logo"
             className="w-full h-full object-cover p-2"
           />
