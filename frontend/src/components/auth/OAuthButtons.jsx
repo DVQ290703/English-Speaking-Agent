@@ -8,18 +8,21 @@ const PROVIDERS = [
   {
     id: 'google',
     label: 'Continue with Google',
+    name: 'Google',
     Icon: FcGoogle,
     iconColor: undefined,
   },
   {
     id: 'microsoft',
     label: 'Continue with Microsoft',
+    name: 'Microsoft',
     Icon: TbBrandWindowsFilled,
     iconColor: '#2F2F2F',
   },
   {
     id: 'facebook',
     label: 'Continue with Facebook',
+    name: 'Facebook',
     Icon: FaFacebook,
     iconColor: '#1877F2',
   },
@@ -42,7 +45,7 @@ export default function OAuthButtons() {
 
   return (
     <div className="oauth-buttons">
-      {PROVIDERS.map(({ id, label, Icon, iconColor }) => (
+      {PROVIDERS.map(({ id, label, name, Icon, iconColor }) => (
         <button
           key={id}
           type="button"
@@ -52,7 +55,7 @@ export default function OAuthButtons() {
           aria-label={label}
         >
           <Icon size={18} color={iconColor} />
-          <span>{loading === id ? 'Redirecting…' : label}</span>
+          <span>{loading === id ? '…' : name}</span>
         </button>
       ))}
     </div>

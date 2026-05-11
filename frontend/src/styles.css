@@ -554,17 +554,18 @@ h6 {
 
 .oauth-buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 9px;
 }
 
 .oauth-btn {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   height: 44px;
-  padding: 0 16px;
+  padding: 0 12px;
   border: 1px solid var(--line-2);
   border-radius: 10px;
   background: #fff;
