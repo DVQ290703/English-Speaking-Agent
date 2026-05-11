@@ -17,10 +17,7 @@ export const MODELS: Model[] = [
   'Gemini 1.5 Pro',
 ];
 export const GENDERS: Gender[] = ['Male', 'Female'];
-export const ACCENTS: { value: Accent; flag: string; label: string }[] = [
-  { value: 'US', flag: '🇺🇸', label: 'US' },
-  { value: 'UK', flag: '🇬🇧', label: 'UK' },
-];
+export const ACCENTS: Accent[] = ['US', 'UK'];
 export type TopicId =
   | 'daily_conversation'
   | 'travel'

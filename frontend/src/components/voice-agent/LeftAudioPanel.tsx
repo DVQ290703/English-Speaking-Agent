@@ -5,6 +5,7 @@ import DeviceSelect from './DeviceSelect';
 import SelectDropdown from './SelectDropdown';
 import { AgentWaveform, MicWaveform } from './Waveforms';
 import { ACCENTS, GENDERS, type Accent, type AuthUser, type Gender } from './constants';
+import { FlagUK, FlagUS } from './FlagIcons';
 import type { MicDevice } from '../../hooks/useMicDevices';
 
 interface LeftAudioPanelProps {
@@ -56,18 +57,18 @@ export default function LeftAudioPanel({
           <div className="flex items-center rounded-md border border-gray-200 overflow-hidden">
             {ACCENTS.map((a) => (
               <button
-                key={a.value}
+                key={a}
                 type="button"
-                onClick={() => onChangeAccent(a.value)}
-                title={`${a.flag} ${a.label} accent`}
-                className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium transition-colors ${
-                  accent === a.value
+                onClick={() => onChangeAccent(a)}
+                title={`${a} accent`}
+                className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors ${
+                  accent === a
                     ? 'bg-blue-600 text-white'
                     : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                <span>{a.flag}</span>
-                <span>{a.label}</span>
+                {a === 'US' ? <FlagUS /> : <FlagUK />}
+                <span>{a}</span>
               </button>
             ))}
           </div>
