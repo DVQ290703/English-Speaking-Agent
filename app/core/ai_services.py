@@ -93,13 +93,14 @@ def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
         return ""
 
 
-def _synthesize_audio_bytes(text: str, voice_gender: str | None = None) -> bytes:
+def _synthesize_audio_bytes(text: str, voice_gender: str | None = None, voice_accent: str | None = None) -> bytes:
     """Synthesize *text* via the cached pipeline's TTS service and return raw bytes."""
     logger.info("_synthesize_audio_bytes start text_length=%d", len(text))
     try:
         audio = get_voice_agent_pipeline().tts_service.convert_text_to_speech(
             text,
             voice_gender=voice_gender,
+            voice_accent=voice_accent,
         )
         if audio is None:
             logger.warning("_synthesize_audio_bytes received None from TTS")
@@ -119,6 +120,7 @@ def run_langraph_agent(
     user_input: str,
     history: list[str] | None = None,
     voice_gender: str | None = None,
+    voice_accent: str | None = None,
     category: str | None = None,
     topic: str | None = None,
     user_id: str | None = None,
@@ -130,7 +132,7 @@ def run_langraph_agent(
     logger.info("run_langraph_agent start user_input_length=%d history_lines=%d category=%s topic=%s user_id=%s", len(user_input), len(history), category, topic, user_id)
     try:
         pipeline = get_voice_agent_pipeline()
-        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, category=category, topic=topic, user_id=user_id)
+        result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, voice_accent=voice_accent, category=category, topic=topic, user_id=user_id)
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
         grammar_raw: str | None = result.get("grammar_raw")
@@ -147,7 +149,7 @@ def run_langraph_agent(
         if response_text:
             if not audio_bytes:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
-                audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender)
+                audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender, voice_accent=voice_accent)
             return response_text, audio_bytes, grammar_raw, tool_steps
 
         logger.warning("Pipeline returned empty response_text - using fallback")
@@ -156,4 +158,4 @@ def run_langraph_agent(
 
     fallback_text = "Sorry, I couldn't process your request right now."
     logger.info("Returning fallback response")
-    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender), None, []
+    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender, voice_accent=voice_accent), None, []

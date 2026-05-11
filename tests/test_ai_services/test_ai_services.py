@@ -219,7 +219,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Next question", history=history)
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Next question", history=history, voice_gender=None, category=None, topic=None, user_id=None
+            user_input="Next question", history=history, voice_gender=None, voice_accent=None, category=None, topic=None, user_id=None
         )
 
     def test_run_langraph_agent_none_history_defaults_to_empty(self):
@@ -229,7 +229,7 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             run_langraph_agent("Hello", history=None)
 
-        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, category=None, topic=None, user_id=None)
+        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, voice_accent=None, category=None, topic=None, user_id=None)
 
     def test_run_langraph_agent_empty_response_text_returns_fallback(self):
         mock_pipeline = MagicMock()
@@ -276,7 +276,7 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             text, audio, grammar, tool_steps = run_langraph_agent("question")
 
-        mock_synth.assert_called_once_with("Nice job!", voice_gender=None)
+        mock_synth.assert_called_once_with("Nice job!", voice_gender=None, voice_accent=None)
         assert text == "Nice job!"
         assert audio == b"retry-audio"
         assert grammar is None
@@ -289,7 +289,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Hello", history=[], voice_gender="Female")
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Hello", history=[], voice_gender="Female", category=None, topic=None, user_id=None
+            user_input="Hello", history=[], voice_gender="Female", voice_accent=None, category=None, topic=None, user_id=None
         )
 
 
@@ -588,3 +588,62 @@ class TestElevenLabsTTS:
             result = ElevenLabsTTS().convert_text_to_speech("Hello")
 
         assert result == b""
+
+
+class TestSynthesizeAudioBytesAccent:
+    def test_synthesize_forwards_voice_accent_to_tts(self):
+        mock_pipeline = MagicMock()
+        mock_pipeline.tts_service.convert_text_to_speech.return_value = b"mp3"
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import _synthesize_audio_bytes
+            _synthesize_audio_bytes("Hello", voice_gender="female", voice_accent="uk")
+
+        mock_pipeline.tts_service.convert_text_to_speech.assert_called_once_with(
+            "Hello", voice_gender="female", voice_accent="uk"
+        )
+
+    def test_synthesize_voice_accent_defaults_to_none(self):
+        mock_pipeline = MagicMock()
+        mock_pipeline.tts_service.convert_text_to_speech.return_value = b"mp3"
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import _synthesize_audio_bytes
+            _synthesize_audio_bytes("Hello")
+
+        mock_pipeline.tts_service.convert_text_to_speech.assert_called_once_with(
+            "Hello", voice_gender=None, voice_accent=None
+        )
+
+
+class TestRunLangraphAgentAccent:
+    def _mock_pipeline(self, response_text="Reply!", audio_bytes=b"mp3"):
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = {
+            "response_text": response_text,
+            "audio_bytes": audio_bytes,
+            "grammar_raw": None,
+            "messages": [],
+        }
+        return mock_pipeline
+
+    def test_run_langraph_agent_forwards_voice_accent_to_pipeline(self):
+        mock_pipeline = self._mock_pipeline()
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import run_langraph_agent
+            run_langraph_agent("Hi", voice_gender="male", voice_accent="uk")
+
+        mock_pipeline.run.assert_called_once()
+        _, kwargs = mock_pipeline.run.call_args
+        assert kwargs.get("voice_accent") == "uk"
+
+    def test_run_langraph_agent_voice_accent_defaults_to_none(self):
+        mock_pipeline = self._mock_pipeline()
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import run_langraph_agent
+            run_langraph_agent("Hi")
+
+        _, kwargs = mock_pipeline.run.call_args
+        assert kwargs.get("voice_accent") is None
