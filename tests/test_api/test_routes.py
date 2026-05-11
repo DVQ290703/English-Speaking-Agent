@@ -394,6 +394,62 @@ class TestChatRespond:
 
 
 # ===========================================================================
+# POST /api/chat/respond — voice_accent forwarding
+# ===========================================================================
+
+class TestChatRespondVoiceAccent:
+    _user_id = _new_uuid()
+    _conv_id = _new_uuid()
+    _email = "grace@example.com"
+
+    def _headers(self):
+        return _make_bearer(self._user_id, self._email)
+
+    def _new_conv_conn(self):
+        return _make_conn(
+            fetchone_by_sql={
+                "from topics where code": None,
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+
+    def test_voice_accent_is_forwarded_to_run_langraph_agent(self):
+        with (
+            _client(self._new_conv_conn()) as (c, _),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [])) as mock_agent,
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            r = c.post(
+                "/api/chat/respond",
+                data={"text": "Hello", "voice_accent": "uk"},
+                headers=self._headers(),
+            )
+        assert r.status_code == 200
+        mock_agent.assert_called_once()
+        _, kwargs = mock_agent.call_args
+        assert kwargs["voice_accent"] == "uk"
+
+    def test_missing_voice_accent_passes_none_to_run_langraph_agent(self):
+        with (
+            _client(self._new_conv_conn()) as (c, _),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [])) as mock_agent,
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            r = c.post(
+                "/api/chat/respond",
+                data={"text": "Hello"},
+                headers=self._headers(),
+            )
+        assert r.status_code == 200
+        mock_agent.assert_called_once()
+        _, kwargs = mock_agent.call_args
+        assert kwargs["voice_accent"] is None
+
+
+# ===========================================================================
 # GET /api/conversations
 # ===========================================================================
 

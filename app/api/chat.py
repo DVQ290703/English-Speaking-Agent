@@ -129,6 +129,7 @@ def chat_respond(
     category: str | None = Form(default=None),
     topic: str | None = Form(default=None),
     voice_gender: str | None = Form(default=None),
+    voice_accent: str | None = Form(default=None),
     audio_file: UploadFile | None = File(default=None),
     conversation_id: str | None = Form(default=None),
     user_id: str = Depends(get_current_user_id),
@@ -326,6 +327,7 @@ def chat_respond(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
+        voice_accent=voice_accent,
         category=category,
         topic=topic,
         user_id=user_id,
@@ -335,7 +337,7 @@ def chat_respond(
     # ── Guardrails: Output ─────────────────────────────────────────────────
     output_result = _output_guardrails.check(response_text)
     if output_result.text != response_text:
-        response_audio_bytes = _synthesize_audio_bytes(output_result.text, voice_gender=voice_gender)
+        response_audio_bytes = _synthesize_audio_bytes(output_result.text, voice_gender=voice_gender, voice_accent=voice_accent)
     response_text = output_result.text
     _all_flags.extend(output_result.flags)
     _guardrail_decisions["output_pii_redacted"] = "contains_pii" in _all_flags
