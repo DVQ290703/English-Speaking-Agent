@@ -77,6 +77,14 @@ spec:
                 name: minio-service
                 port:
                   number: 9000
+          # Grafana monitoring dashboard
+          - path: /grafana/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: grafana-service
+                port:
+                  number: 3000
           # Frontend — catch-all for React SPA routing
           - path: /*
             pathType: ImplementationSpecific

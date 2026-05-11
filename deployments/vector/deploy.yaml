@@ -140,10 +140,23 @@ data:
           del(.payload)
           .source_file = .file
 
+      drop_health_checks:
+        type: filter
+        inputs:
+          - parse_payload
+        condition: |
+          msg = string(.raw_message ?? "") ?? ""
+          !(
+            contains(msg, "/health") ||
+            contains(msg, "/healthz") ||
+            contains(msg, "/readyz") ||
+            contains(msg, "/livez")
+          )
+
       route_by_category:
         type: route
         inputs:
-          - parse_payload
+          - drop_health_checks
         route:
           audit: exists(.event_type)
           span: .log_type == "span" && !exists(.event_type)

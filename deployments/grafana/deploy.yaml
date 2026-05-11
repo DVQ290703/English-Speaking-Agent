@@ -186,6 +186,8 @@ metadata:
     app: grafana
     tier: monitoring
     project: english-speaking-agent
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
 spec:
   type: ClusterIP
   selector:
