@@ -1,0 +1,154 @@
+# =============================================================================
+# MinIO Deployment Manifest — English Speaking Agent
+# Apply  : kubectl apply -f deployments/database/minio.yaml
+# Status : kubectl get pods -l app=minio -n english-speaking-agent
+# =============================================================================
+
+# ── PersistentVolumeClaim ─────────────────────────────────────────────────────
+# Requests 10 Gi of storage for audio files. GKE provisions a GCP Persistent
+# Disk automatically via the default StorageClass.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: english-speaking-agent
+  labels:
+    app: minio
+    project: english-speaking-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: english-speaking-agent
+  labels:
+    app: minio
+    tier: storage
+    project: english-speaking-agent
+spec:
+  replicas: 1   # MinIO single-node — ReadWriteOnce PVC cannot span multiple pods
+
+  strategy:
+    type: Recreate   # Recreate (not RollingUpdate) — PVC can only mount on one node at a time
+
+  selector:
+    matchLabels:
+      app: minio
+      tier: storage
+
+  template:
+    metadata:
+      labels:
+        app: minio
+        tier: storage
+        project: english-speaking-agent
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:latest
+          imagePullPolicy: Always
+
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+
+          ports:
+            - name: api
+              containerPort: 9000
+              protocol: TCP
+            - name: console
+              containerPort: 9001
+              protocol: TCP
+
+          # Credentials come from the backend-secret so the backend and MinIO
+          # share the same keys without duplication.
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: MINIO_SECRET_KEY
+
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+
+      volumes:
+        - name: minio-data
+          persistentVolumeClaim:
+            claimName: minio-pvc
+
+---
+
+# ── Service (API) ─────────────────────────────────────────────────────────────
+# ClusterIP: internal only. Backend reaches MinIO via this DNS name:
+#   http://minio-service.english-speaking-agent.svc.cluster.local:9000
+# Set MINIO_ENDPOINT=minio-service.english-speaking-agent.svc.cluster.local:9000
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-service
+  namespace: english-speaking-agent
+  labels:
+    app: minio
+    tier: storage
+    project: english-speaking-agent
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: minio
+    tier: storage
+  ports:
+    - name: api
+      protocol: TCP
+      port: 9000
+      targetPort: api
+    - name: console
+      protocol: TCP
+      port: 9001
+      targetPort: console
