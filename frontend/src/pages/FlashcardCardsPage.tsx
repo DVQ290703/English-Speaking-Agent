@@ -745,6 +745,17 @@ function MediaManagerSection({
   onPlay?: (url: string) => void;
 }) {
   const inputId = `media-upload-${side}`;
+
+  // Stable object URLs for pending files — revoked on change or unmount
+  const [pendingUrls, setPendingUrls] = useState<string[]>([]);
+  useEffect(() => {
+    const urls = pendingFiles.map((f) => URL.createObjectURL(f));
+    setPendingUrls(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [pendingFiles]);
+
+  const sanitize = (url: string) => url.replace('http://minio:9000', '');
+
   return (
     <div className="space-y-3 p-4 rounded-xl bg-muted/10 border border-border/50">
       <div className="flex items-center justify-between">
@@ -757,61 +768,89 @@ function MediaManagerSection({
           <HelpCircle className="h-3 w-3" /> Max 5
         </div>
       </div>
+
       <div className="flex flex-wrap gap-2">
+        {/* Existing uploaded media */}
         {existingMedia
           .filter((m) => !deletedIds.includes(m.id))
           .map((m) => {
             const isImage = m.media_type === 'image';
-            const isAudio = m.media_type === 'audio';
+            const url = sanitize(m.public_url);
+            if (isImage) {
+              return (
+                <div
+                  key={m.id}
+                  className="relative group w-16 h-16 rounded-lg overflow-hidden border shadow-sm cursor-pointer animate-in fade-in duration-300"
+                  onClick={() => onPreview?.(url)}
+                >
+                  <img src={url} alt="" className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-0.5 right-0.5 h-5 w-5 opacity-0 group-hover:opacity-100 bg-black/60 hover:bg-black/80 rounded-full transition-opacity"
+                    onClick={(e) => { e.stopPropagation(); onDeleteExisting(m.id); }}
+                  >
+                    <X className="h-3 w-3 text-white" />
+                  </Button>
+                </div>
+              );
+            }
             return (
               <div
                 key={m.id}
-                onClick={() => {
-                  if (isImage) onPreview?.(m.public_url);
-                  else if (isAudio) onPlay?.(m.public_url);
-                }}
+                onClick={() => onPlay?.(m.public_url)}
                 className="relative group rounded-lg border bg-card p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in fade-in duration-300 cursor-pointer hover:bg-muted/50 transition-colors"
               >
-                {isAudio ? (
-                  <Volume2 className="h-3.5 w-3.5 text-primary" />
-                ) : (
-                  <ImageIcon className="h-3.5 w-3.5 text-primary" />
-                )}
+                <Volume2 className="h-3.5 w-3.5 text-primary shrink-0" />
                 <span className="text-[9px] truncate flex-1 uppercase font-bold tracking-tighter">
-                  {m.media_type}
+                  {m.file_name || 'audio'}
                 </span>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteExisting(m.id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onDeleteExisting(m.id); }}
                 >
                   <X className="h-3 w-3 text-destructive" />
                 </Button>
               </div>
             );
           })}
+
+        {/* Pending (not yet uploaded) files */}
         {pendingFiles.map((file, idx) => {
           const isImage = file.type.startsWith('image/');
-          const isAudio = file.type.startsWith('audio/');
+          const url = pendingUrls[idx];
+          if (!url) return null;
+
+          if (isImage) {
+            return (
+              <div
+                key={idx}
+                className="relative group w-16 h-16 rounded-lg overflow-hidden border border-primary/30 shadow-sm cursor-pointer animate-in zoom-in-95 duration-300"
+                onClick={() => onPreview?.(url)}
+              >
+                <img src={url} alt={file.name} className="w-full h-full object-cover hover:opacity-90 transition-opacity" />
+                <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-0.5 right-0.5 h-5 w-5 opacity-0 group-hover:opacity-100 bg-black/60 hover:bg-black/80 rounded-full transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); onRemovePending(idx); }}
+                >
+                  <X className="h-3 w-3 text-white" />
+                </Button>
+              </div>
+            );
+          }
+
           return (
             <div
               key={idx}
-              onClick={() => {
-                const url = URL.createObjectURL(file);
-                if (isImage) onPreview?.(url);
-                else if (isAudio) onPlay?.(url);
-              }}
+              onClick={() => onPlay?.(url)}
               className="relative group rounded-lg border border-primary/20 bg-primary/5 p-1.5 flex items-center gap-2 min-w-[110px] shadow-sm animate-in zoom-in-95 duration-300 cursor-pointer hover:bg-primary/10 transition-colors"
             >
-              {isAudio ? (
-                <Volume2 className="h-3.5 w-3.5 text-primary" />
-              ) : (
-                <ImageIcon className="h-3.5 w-3.5 text-primary" />
-              )}
+              <Volume2 className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="text-[9px] truncate flex-1 font-bold tracking-tighter italic">
                 {file.name}
               </span>
@@ -819,10 +858,7 @@ function MediaManagerSection({
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemovePending(idx);
-                }}
+                onClick={(e) => { e.stopPropagation(); onRemovePending(idx); }}
               >
                 <X className="h-3 w-3 text-destructive" />
               </Button>
@@ -830,6 +866,7 @@ function MediaManagerSection({
           );
         })}
       </div>
+
       <div
         className="border-2 border-dashed border-muted-foreground/10 rounded-lg p-4 transition-all hover:border-primary/40 hover:bg-primary/5 cursor-pointer text-center group"
         onClick={() => document.getElementById(inputId)?.click()}
@@ -847,10 +884,13 @@ function MediaManagerSection({
           className="hidden"
           onChange={(e) => onAddFiles(e.target.files)}
         />
-        <div className="flex flex-col items-center gap-1.5">
+        <div className="flex flex-col items-center gap-1">
           <Upload className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary transition-colors" />
           <div className="text-[10px] font-bold text-muted-foreground/60 group-hover:text-primary transition-colors uppercase tracking-widest">
             {isVi ? 'Tải lên' : 'Upload'}
+          </div>
+          <div className="text-[9px] text-muted-foreground/40 group-hover:text-primary/60 transition-colors">
+            {isVi ? 'Kéo thả hoặc Ctrl+V để dán ảnh' : 'Drag & drop or Ctrl+V to paste image'}
           </div>
         </div>
       </div>
