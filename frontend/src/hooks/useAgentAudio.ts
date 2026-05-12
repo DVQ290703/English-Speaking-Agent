@@ -225,7 +225,6 @@ export default function useAgentAudio({
   const playAgentAudio = useCallback(
     (text: string, audioUrl?: string) => {
       if (!audioUrl) {
-        speakText(text);
         return undefined;
       }
 
@@ -245,21 +244,19 @@ export default function useAgentAudio({
           if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          speakText(text);
         };
         void audio.play().catch(() => {
           if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
           ttsActiveRef.current = false;
           setAgentSpeaking(false);
-          speakText(text);
         });
       } catch {
-        speakText(text);
+        // noop
       }
 
       return audioUrl;
     },
-    [setAgentSpeaking, setMicEnabled, speakText, userMicIntentRef],
+    [setAgentSpeaking, setMicEnabled, userMicIntentRef],
   );
 
   const playMessageAudio = useCallback(
@@ -272,8 +269,6 @@ export default function useAgentAudio({
         const audioUrl = msg.minioUrl || msg.audioUrl;
         if (audioUrl) {
           playAgentAudio(msg.text, audioUrl);
-        } else {
-          speakText(msg.text);
         }
         return;
       }

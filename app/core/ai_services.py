@@ -147,7 +147,7 @@ def run_langraph_agent(
         )
 
         if response_text:
-            if not audio_bytes:
+            if not audio_bytes and not tool_steps:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender, voice_accent=voice_accent)
             return response_text, audio_bytes, grammar_raw, tool_steps

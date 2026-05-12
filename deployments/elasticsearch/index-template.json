@@ -1,5 +1,6 @@
 {
-  "index_patterns": ["voice-agent-logs-*"],
+  "index_patterns": ["logs-voice_agent.*-default"],
+  "data_stream": {},
   "template": {
     "mappings": {
       "properties": {
