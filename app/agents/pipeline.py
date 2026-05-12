@@ -14,25 +14,20 @@ from app.agents.state import AgentState
 
 _TOOL_CALL_CAP = 5
 
-_GUARDRAIL_SYSTEM_PROMPT = """You are a content safety classifier for an English language learning app.
+_PREFLIGHT_SYSTEM_PROMPT = """You are a pre-flight classifier for an English learning voice assistant.
 
-Your task: determine if the user's message contains a GENUINELY HARMFUL request.
+Evaluate the user's message on TWO dimensions and reply in EXACTLY this format (two lines, no extra text):
+SAFETY: SAFE|UNSAFE
+TOOL: NEEDS_TOOL|NO_TOOL
 
-SAFE — do NOT block:
-- Discussing sensitive topics in educational, fictional, news, or journalistic context
-- Vocabulary questions about any subject (crime, hacking, drugs, violence, etc.)
-- Mentioning movies, books, games, or history that involve violence or crime
-- Everyday conversation that happens to contain a sensitive word
-- Questions about how systems work (security, chemistry, biology) for learning
+=== SAFETY ===
+SAFE — general conversation, language questions, educational/fictional/news context, any sensitive topic discussed for learning.
+UNSAFE — step-by-step harm instructions, violence against a specific target, sexual content involving minors, manipulation of real individuals.
 
-UNSAFE — block:
-- Step-by-step instructions for causing real harm to people or systems
-- Explicit requests to help plan violence against a specific target
-- Sexual content involving minors
-- Requests specifically designed to manipulate or deceive real individuals
-
-Reply with EXACTLY one word on the first line: SAFE or UNSAFE
-Second line: brief reason (≤ 15 words)"""
+=== TOOL ===
+The assistant has flashcard tools (create deck, list decks, add card, review cards).
+NEEDS_TOOL — user EXPLICITLY asks to create/view/manage a deck or card, save/add a word, or review flashcards.
+NO_TOOL — everything else: greetings, small talk, language questions, pronunciation practice, or flashcard action implied only by prior conversation history."""
 
 _BLOCKED_RESPONSE = "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!"
 
@@ -59,11 +54,11 @@ def _sanitize_tool_messages(messages: list) -> list:
     return result
 
 
-def _route_after_guardrail(state: AgentState) -> str:
+def _route_after_preflight(state: AgentState) -> str:
     if state.get("guardrail_blocked"):
-        logger.info("route_after_guardrail decision=blocked")
+        logger.info("route_after_preflight decision=blocked")
         return "end"
-    logger.debug("route_after_guardrail decision=respond")
+    logger.debug("route_after_preflight decision=respond")
     return "respond"
 
 
@@ -98,38 +93,50 @@ class VoiceAgentPipeline:
         self.tts_service = tts_service
         self.app = self._build_graph()
 
-    def _guardrail_node(self, state: AgentState) -> AgentState:
-        """Classify user input as SAFE or UNSAFE using the LLM.
+    def _preflight_node(self, state: AgentState) -> AgentState:
+        """Single LLM call that classifies safety AND tool intent together.
 
-        Fails open: any exception or ambiguous response is treated as SAFE
-        so legitimate requests are never incorrectly blocked.
+        Replaces the former separate guardrail + intent-classifier calls,
+        keeping per-turn LLM calls at 2 (preflight + respond) instead of 3.
+
+        Failure modes:
+        - Safety fails OPEN  → treat as SAFE so legitimate messages are never blocked.
+        - Tool fails CLOSED  → treat as NO_TOOL so spurious tool calls are suppressed.
         """
         user_input = state["user_input"]
-        logger.debug("guardrail_node start input_length=%d", len(user_input))
+        logger.debug("preflight_node start input_length=%d", len(user_input))
 
+        blocked = False
+        tool_intent = False
         try:
             messages = [
-                SystemMessage(content=_GUARDRAIL_SYSTEM_PROMPT),
+                SystemMessage(content=_PREFLIGHT_SYSTEM_PROMPT),
                 HumanMessage(content=user_input),
             ]
             result: AIMessage = self.llm_service.client.invoke(messages)
-            first_line = (result.content or "").strip().split("\n")[0].strip().upper()
-            blocked = first_line.startswith("UNSAFE")
+            lines = {
+                part.split(":")[0].strip().upper(): part.split(":", 1)[1].strip().upper()
+                for part in (result.content or "").strip().splitlines()
+                if ":" in part
+            }
+            blocked = lines.get("SAFETY", "SAFE").startswith("UNSAFE")
+            tool_intent = lines.get("TOOL", "NO_TOOL").startswith("NEEDS_TOOL")
+            logger.debug("preflight_node safety=%s tool=%s", lines.get("SAFETY"), lines.get("TOOL"))
         except Exception as exc:
-            logger.warning("guardrail_node llm_error — failing open: %s", exc)
-            blocked = False
+            logger.warning("preflight_node llm_error — failing open/closed: %s", exc)
 
         if blocked:
-            logger.info("guardrail_node blocked input_length=%d", len(user_input))
+            logger.info("preflight_node blocked input_length=%d", len(user_input))
             return {
                 **state,
                 "guardrail_blocked": True,
+                "tool_intent": False,
                 "response_text": _BLOCKED_RESPONSE,
                 "audio_bytes": b"",
             }
 
-        logger.debug("guardrail_node safe input_length=%d", len(user_input))
-        return {**state, "guardrail_blocked": False}
+        logger.debug("preflight_node safe tool_intent=%s", tool_intent)
+        return {**state, "guardrail_blocked": False, "tool_intent": tool_intent}
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response, invoking tools if the LLM requests them."""
@@ -147,13 +154,6 @@ class VoiceAgentPipeline:
         )
         base_prompt = dynamic_prompt or SYSTEM_PROMPT
         user_id = state.get("user_id")
-        if user_id:
-            base_prompt = (
-                f"{base_prompt}\n\n---\n\n"
-                "TOOL USE POLICY: Only call flashcard tools when the user explicitly requests "
-                "flashcard management (e.g. 'save this word', 'show my decks', 'add a card'). "
-                "Never call tools based on topic context or conversation subject alone."
-            )
         messages_to_send: list = [SystemMessage(content=base_prompt)]
 
         for line in state.get("history", [])[-8:]:
@@ -170,13 +170,19 @@ class VoiceAgentPipeline:
             messages_to_send.extend(_sanitize_tool_messages(state["messages"]))
 
         cap_reached = iterations >= _TOOL_CALL_CAP
-        use_tools = not cap_reached and bool(state.get("user_id"))
+        # tool_intent was decided once in preflight_node (state) — no extra LLM call here.
+        # Mid-loop (iterations > 0) we're already inside a tool-call cycle; keep tool_client.
+        intent_requires_tool = state.get("tool_intent", False) or iterations > 0
+        use_tools = not cap_reached and bool(state.get("user_id")) and intent_requires_tool
+        if state.get("user_id") and not intent_requires_tool:
+            logger.debug("respond_node tool_gated_off preflight=NO_TOOL")
         llm = self.llm_service.tool_client if use_tools else self.llm_service.client
         logger.debug(
-            "respond_node invoking_llm client=%s messages=%d cap_reached=%s",
-            "plain" if cap_reached else "tool_client",
+            "respond_node invoking_llm client=%s messages=%d cap_reached=%s intent_requires_tool=%s",
+            "tool_client" if use_tools else "plain",
             len(messages_to_send),
             cap_reached,
+            intent_requires_tool,
         )
 
         with span_context("llm.respond", kind="llm") as span:
@@ -271,16 +277,16 @@ class VoiceAgentPipeline:
     def _build_graph(self):
         tool_node = ToolNode(FLASHCARD_TOOLS, handle_tool_errors=True)
         graph = StateGraph(AgentState)
-        graph.add_node("guardrail", self._guardrail_node)
+        graph.add_node("preflight", self._preflight_node)
         graph.add_node("respond", self._respond_node)
         graph.add_node("tools", tool_node)
         graph.add_node("tts", self._tts_node)
-        graph.set_entry_point("guardrail")
-        graph.add_conditional_edges("guardrail", _route_after_guardrail, {"respond": "respond", "end": END})
+        graph.set_entry_point("preflight")
+        graph.add_conditional_edges("preflight", _route_after_preflight, {"respond": "respond", "end": END})
         graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts", "respond": "respond", "end": END})
         graph.add_edge("tools", "respond")
         graph.add_edge("tts", END)
-        logger.debug("pipeline graph built nodes=[guardrail, respond, tools, tts]")
+        logger.debug("pipeline graph built nodes=[preflight, respond, tools, tts]")
         return graph.compile()
 
     def run(
@@ -308,6 +314,7 @@ class VoiceAgentPipeline:
             "messages": [],
             "_tool_call_iterations": 0,
             "guardrail_blocked": False,
+            "tool_intent": False,
         }
         invoke_config: dict = {}
         if user_id:

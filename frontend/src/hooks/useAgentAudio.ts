@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { toWav } from '../api/chat';
+import { getAuthSession } from '../auth/tokenStorage';
 import type { Message } from '../components/voice-agent/MessageBubble';
 import { LANGUAGE_CODES, type Gender, type Language } from '../components/voice-agent/constants';
 
@@ -228,35 +229,65 @@ export default function useAgentAudio({
         return undefined;
       }
 
-      try {
-        window.speechSynthesis?.cancel();
-        const audio = new Audio(audioUrl);
-        currentAgentAudioRef.current = audio;
-        ttsActiveRef.current = true;
-        setMicEnabled(false);
-        setAgentSpeaking(true);
-        audio.onended = () => {
-          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
-          ttsActiveRef.current = false;
+      const startPlayback = (url: string) => {
+        try {
+          window.speechSynthesis?.cancel();
+          const audio = new Audio(url);
+          currentAgentAudioRef.current = audio;
+          ttsActiveRef.current = true;
+          setMicEnabled(false);
+          setAgentSpeaking(true);
+          audio.onended = () => {
+            if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
+            ttsActiveRef.current = false;
+            setAgentSpeaking(false);
+          };
+          audio.onerror = () => {
+            if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
+            ttsActiveRef.current = false;
+            setAgentSpeaking(false);
+          };
+          void audio.play().catch(() => {
+            if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
+            ttsActiveRef.current = false;
+            setAgentSpeaking(false);
+          });
+        } catch {
+          // noop
+        }
+      };
+
+      // Backend API URLs require JWT auth — the browser's Audio element won't
+      // include the Authorization header, causing a 401. Fetch the audio with
+      // auth first, then play from a blob: URL.
+      if (audioUrl.startsWith('/api/')) {
+        const session = getAuthSession();
+        const token = session?.token as string | undefined;
+        if (token) {
+          fetch(audioUrl, { headers: { Authorization: `Bearer ${token}` } })
+            .then((resp) => {
+              if (!resp.ok) throw new Error('audio fetch failed');
+              return resp.blob();
+            })
+            .then((blob) => {
+              const blobUrl = URL.createObjectURL(blob);
+              localAudioUrlsRef.current.push(blobUrl);
+              trimLocalAudioUrls();
+              startPlayback(blobUrl);
+            })
+            .catch(() => {
+              setAgentSpeaking(false);
+            });
+        } else {
           setAgentSpeaking(false);
-        };
-        audio.onerror = () => {
-          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
-          ttsActiveRef.current = false;
-          setAgentSpeaking(false);
-        };
-        void audio.play().catch(() => {
-          if (currentAgentAudioRef.current === audio) currentAgentAudioRef.current = null;
-          ttsActiveRef.current = false;
-          setAgentSpeaking(false);
-        });
-      } catch {
-        // noop
+        }
+        return audioUrl;
       }
 
+      startPlayback(audioUrl);
       return audioUrl;
     },
-    [setAgentSpeaking, setMicEnabled, userMicIntentRef],
+    [setAgentSpeaking, setMicEnabled, trimLocalAudioUrls, userMicIntentRef],
   );
 
   const playMessageAudio = useCallback(

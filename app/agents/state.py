@@ -18,3 +18,4 @@ class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]  # tool-calling sub-loop accumulator
     _tool_call_iterations: int                            # loop guard counter
     guardrail_blocked: bool  # True when AI guardrail rejected the input
+    tool_intent: bool        # True when preflight classifier decided NEEDS_TOOL

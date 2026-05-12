@@ -310,6 +310,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const grammarSyncReqRef = useRef(0);
   const grammarAbortRef = useRef<AbortController | null>(null);
   const sessionStartRef = useRef<number | null>(null);
+  // True while the user is replaying a stored message — suppresses the
+  // "your turn to speak" toast that would otherwise fire when agentSpeaking
+  // flips false (same transition as a real new agent reply).
+  const isReplayingRef = useRef(false);
   const genderRef = useRef(gender);
   const languageRef = useRef(language);
 
@@ -430,12 +434,24 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setMicEnabled: noopSetMicEnabled,
   });
 
+  const handleReplayMessage = useCallback(
+    (id: number) => {
+      isReplayingRef.current = true;
+      void playMessageAudio(id);
+    },
+    [playMessageAudio],
+  );
+
   // Toast notification when it's the user's turn to speak (after agent finishes talking).
+  // Suppressed when agentSpeaking flips false due to a replay — not a new response.
   useEffect(() => {
-    if (isConnected && !agentSpeaking && messages.length > 0) {
+    if (agentSpeaking) return;
+    if (isReplayingRef.current) {
+      isReplayingRef.current = false;
+      return;
+    }
+    if (isConnected && messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
-      // Only show if the last message was from the agent and they are not currently "typing"
-      // (which for the agent means waiting for a response or streaming).
       if (lastMsg.role === 'agent' && !agentTyping) {
         toast.info(t('va.toast.yourTurn'), {
           position: 'top-center',
@@ -1010,7 +1026,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               isGrammarLoading={isGrammarLoading}
               isPronunciationLoading={displayMsg?.assessmentStatus === 'pending'}
               onShowLatest={() => setExpandedMsgId(null)}
-              onPlayAudio={(id) => void playMessageAudio(id)}
+              onPlayAudio={(id) => handleReplayMessage(id)}
             />
 
             <div className="h-3" />
@@ -1130,7 +1146,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                 const isUser = msg.role === 'user';
                 const canReplay = msg.role === 'agent' || Boolean(msg.userAudioUrl);
                 const expandable = isUser && !msg.typing;
-                const replay = canReplay ? () => void playMessageAudio(msg.id) : undefined;
+                const replay = canReplay ? () => handleReplayMessage(msg.id) : undefined;
 
                 return (
                   <MessageBubble

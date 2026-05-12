@@ -47,3 +47,6 @@ uv.lock
 IMAGES
 logs/
 .worktrees/
+
+# Prompt ConfigMap — managed out-of-band, not committed to git
+deployments/backend/prompts-configmap.yaml
