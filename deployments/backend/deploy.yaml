@@ -70,10 +70,10 @@ spec:
               containerPort: 8000
               protocol: TCP
 
-          # All sensitive env vars (Postgres, MinIO, JWT, API keys) come from
-          # the backend-secret K8s Secret. Create it once with:
+          # All sensitive env vars (Postgres, MinIO, JWT, API keys, SMTP reset-email settings)
+          # come from the backend-secret K8s Secret. Create it once with:
           #   kubectl create secret generic backend-secret \
-          #     --from-env-file=.env -n english-speaking-agent
+          #     --from-env-file=.env.prod -n english-speaking-agent
           envFrom:
             - secretRef:
                 name: backend-secret
