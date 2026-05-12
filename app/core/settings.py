@@ -9,6 +9,10 @@ load_dotenv()
 APP_ENV = os.getenv("APP_ENV", "development").strip().lower() or "development"
 
 
+def _env_flag(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _is_weak_secret(value: str, *, minimum_length: int, blocked_values: set[str]) -> bool:
     normalized = value.strip()
     return len(normalized) < minimum_length or normalized.lower() in blocked_values
@@ -113,6 +117,37 @@ def _parse_json_list(env_var: str, default: str = "[]") -> list[str]:
         raise RuntimeError(f"{env_var} contains invalid JSON: {exc}") from exc
 
 
+def validate_smtp_settings(
+    *,
+    app_env: str,
+    smtp_host: str,
+    smtp_port: int,
+    smtp_username: str,
+    smtp_password: str,
+    smtp_from_email: str,
+    smtp_use_starttls: bool,
+    smtp_use_ssl: bool,
+) -> None:
+    if smtp_use_ssl and smtp_use_starttls:
+        raise RuntimeError("SMTP_USE_SSL and SMTP_USE_STARTTLS cannot both be true")
+
+    if app_env not in {"production", "staging"}:
+        return
+
+    required_values = {
+        "SMTP_HOST": smtp_host,
+        "SMTP_USERNAME": smtp_username,
+        "SMTP_PASSWORD": smtp_password,
+        "SMTP_FROM_EMAIL": smtp_from_email,
+    }
+    missing = [name for name, value in required_values.items() if not value.strip()]
+    if missing:
+        raise RuntimeError(f"Missing required SMTP settings for {app_env}: {', '.join(missing)}")
+
+    if smtp_port <= 0:
+        raise RuntimeError("SMTP_PORT must be greater than 0")
+
+
 # Redis (rate limiting)
 REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -141,3 +176,25 @@ FACEBOOK_CLIENT_SECRET  = os.getenv("FACEBOOK_CLIENT_SECRET", "")
 APP_BASE_URL  = os.getenv("APP_BASE_URL", "http://localhost:8000")
 # Base URL of the frontend (used to build post-OAuth redirects)
 FRONTEND_URL  = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", "").strip()
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "English Speaking Agent").strip() or "English Speaking Agent"
+SMTP_USE_STARTTLS = _env_flag("SMTP_USE_STARTTLS", "true")
+SMTP_USE_SSL = _env_flag("SMTP_USE_SSL")
+SMTP_TIMEOUT_SECONDS = int(os.getenv("SMTP_TIMEOUT_SECONDS", "30"))
+SMTP_ENABLED = bool(SMTP_HOST and SMTP_PORT > 0 and SMTP_FROM_EMAIL)
+
+validate_smtp_settings(
+    app_env=APP_ENV,
+    smtp_host=SMTP_HOST,
+    smtp_port=SMTP_PORT,
+    smtp_username=SMTP_USERNAME,
+    smtp_password=SMTP_PASSWORD,
+    smtp_from_email=SMTP_FROM_EMAIL,
+    smtp_use_starttls=SMTP_USE_STARTTLS,
+    smtp_use_ssl=SMTP_USE_SSL,
+)
