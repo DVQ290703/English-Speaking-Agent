@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { LogOut, Mic, Library, HelpCircle, Menu, Key } from 'lucide-react';
+import { LogOut, Mic, Library, HelpCircle, Menu, Key, Globe, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -10,6 +10,8 @@ import ThemeToggle from '../../theme/ThemeToggle';
 import { useDarkMode } from '../../theme/useDarkMode';
 import { useAuth, User } from '../../auth/AuthContext';
 import { useShortcutsToggle } from '../ui/ShortcutsModal';
+import { MobileBottomNav } from './MobileBottomNav';
+import { MobileDrawer } from './MobileDrawer';
 
 export function MainLayout() {
   const navigate = useNavigate();
@@ -18,8 +20,8 @@ export function MainLayout() {
   const { logout, user: authUser } = useAuth();
   const [dark, toggleDark] = useDarkMode();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [profile, setProfile] = useState<User | null>(null);
-  const { setOpen: setShortcutsOpen } = useShortcutsToggle();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const constraintsRef = useRef(null);
 
@@ -66,13 +68,16 @@ export function MainLayout() {
         </div>
 
         <div className="flex items-center gap-3">
-          <LanguageToggle />
-          <ThemeToggle dark={dark} onToggle={toggleDark} />
+          <div className="hidden md:flex items-center gap-3">
+            <LanguageToggle />
+            <ThemeToggle dark={dark} onToggle={toggleDark} />
+          </div>
+          
           <div className="relative">
             {profile ? (
               <button
                 onClick={() => setShowUserMenu((v) => !v)}
-                className="flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
+                className="hidden md:flex items-center gap-1.5 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 rounded-lg px-2.5 py-1 transition-colors"
                 title={displayName}
               >
                 <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
@@ -135,7 +140,7 @@ export function MainLayout() {
                     <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 flex items-center justify-center">
                       <Library className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium">{lang === 'vi' ? 'Bộ thẻ' : 'Flashcards'}</span>
+                    <span className="font-medium">{t('nav.flashcards')}</span>
                   </Link>
                   <button
                     onClick={() => {
@@ -166,24 +171,97 @@ export function MainLayout() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto relative">
+      <main className="flex-1 overflow-y-auto relative pb-16 md:pb-0">
         <Outlet context={{ sidebarOpen, setSidebarOpen, toggleSidebar }} />
       </main>
 
-      <motion.button
-        drag
-        dragConstraints={constraintsRef}
-        dragElastic={0.1}
-        dragMomentum={false}
-        whileDrag={{ scale: 1.1 }}
-        onClick={() => setShortcutsOpen(true)}
-        style={{ touchAction: 'none' }}
-        className="fixed bottom-6 left-6 z-50 p-2.5 rounded-full bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors group cursor-grab active:cursor-grabbing"
-        aria-label="Help and keyboard shortcuts"
-        title="Keyboard shortcuts"
+      <MobileBottomNav onMenuClick={() => setIsDrawerOpen(true)} />
+
+      <MobileDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        title={t('nav.menu')}
       >
-        <HelpCircle className="w-6 h-6" />
-      </motion.button>
+        <div className="space-y-6">
+          {/* User Profile Info */}
+          <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-slate-800">
+            <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-blue-500/20">
+              {displayName?.[0]?.toUpperCase() ?? '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-bold text-gray-900 dark:text-slate-100 truncate">
+                {displayName}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                {profile?.email}
+              </div>
+            </div>
+          </div>
+
+          {/* Settings Group */}
+          <div className="space-y-3">
+            <div className="px-2 text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">
+              Settings
+            </div>
+            <div className="bg-gray-50 dark:bg-slate-800/30 rounded-2xl border border-gray-100 dark:border-slate-800/50 divide-y divide-gray-100 dark:divide-slate-800 overflow-hidden">
+              {/* Language Item */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-700 dark:text-slate-200">{t('lang.toggle.title')}</span>
+                </div>
+                <LanguageToggle />
+              </div>
+
+              {/* Theme Item */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </div>
+                  <span className="text-sm font-bold text-gray-700 dark:text-slate-200">
+                    {dark ? t('theme.toggle.toLight') : t('theme.toggle.toDark')}
+                  </span>
+                </div>
+                <ThemeToggle dark={dark} onToggle={toggleDark} />
+              </div>
+            </div>
+          </div>
+
+          {/* Actions Group */}
+          <div className="space-y-1">
+            <div className="px-2 text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-2">
+              Account
+            </div>
+            <button
+              onClick={() => {
+                setIsDrawerOpen(false);
+                navigate('/change-password');
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors text-gray-700 dark:text-slate-200"
+            >
+              <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                <Key className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-bold">{lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}</span>
+            </button>
+            <button
+              onClick={() => {
+                setIsDrawerOpen(false);
+                handleLogout();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-red-600 dark:text-red-400"
+            >
+              <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 flex items-center justify-center">
+                <LogOut className="w-4 h-4" />
+              </div>
+              <span className="text-sm font-bold">{t('common.signOut')}</span>
+            </button>
+          </div>
+        </div>
+      </MobileDrawer>
     </div>
   );
 }
