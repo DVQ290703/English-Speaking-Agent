@@ -24,6 +24,7 @@ dist/
 .ai-log/*.jsonl
 # Environment
 .env
+.env.prod
 
 # Python
 __pycache__/
