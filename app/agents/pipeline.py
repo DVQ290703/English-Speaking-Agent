@@ -242,6 +242,7 @@ class VoiceAgentPipeline:
             "user_id": user_id,
             "messages": [],
             "_tool_call_iterations": 0,
+            "guardrail_blocked": False,
         }
         invoke_config: dict = {}
         if user_id:

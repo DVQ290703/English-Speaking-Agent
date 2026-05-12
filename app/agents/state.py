@@ -17,3 +17,4 @@ class AgentState(TypedDict):
     user_id: str | None       # authenticated user UUID — passed via RunnableConfig to tools; gates tool-client selection
     messages: Annotated[list[BaseMessage], add_messages]  # tool-calling sub-loop accumulator
     _tool_call_iterations: int                            # loop guard counter
+    guardrail_blocked: bool  # True when AI guardrail rejected the input
