@@ -16,6 +16,7 @@ interface VoiceRecorderComponentProps {
   // Voice recording
   selectedMicId: string;
   onSendRecording: (blob: Blob) => void;
+  isAuthenticated: boolean;
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -110,6 +111,7 @@ export default function VoiceRecorderComponent({
   onKeyDown,
   onSendText,
   onSendRecording,
+  isAuthenticated,
 }: VoiceRecorderComponentProps) {
   const t = useT();
 
@@ -134,9 +136,10 @@ export default function VoiceRecorderComponent({
   const recordDisabled = agentTyping || isExpandedState;
 
   if (!isConnected) {
+    if (!isAuthenticated) return null;
     return (
-      <div data-va="input" className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa]">
-        <div className="flex items-center justify-center py-2 text-xs text-gray-400">
+      <div data-va="input" className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa] dark:bg-slate-900/50 dark:border-slate-800">
+        <div className="flex items-center justify-center py-2 text-xs text-gray-400 dark:text-slate-500">
           {t('va.input.connectHint')}
         </div>
       </div>
@@ -144,7 +147,7 @@ export default function VoiceRecorderComponent({
   }
 
   return (
-    <div data-va="input" className="border-t border-gray-200 bg-[#f5f7fa]">
+    <div data-va="input" className="border-t border-gray-200 dark:border-slate-800 bg-[#f5f7fa] dark:bg-slate-950">
 
       {/* ── Error banner ── */}
       {error && (
@@ -230,10 +233,10 @@ export default function VoiceRecorderComponent({
       <div className="px-3 py-3">
         <div className="flex items-center gap-2">
           <div
-            className={`flex items-center gap-2 w-full rounded-xl border px-2 py-1 bg-[#f1f5f9] transition-colors ${
+            className={`flex items-center gap-2 w-full rounded-xl border border-gray-200 dark:border-slate-700 px-2 py-1 bg-[#f1f5f9] dark:bg-slate-900 transition-colors ${
               agentTyping
                 ? 'opacity-60 cursor-not-allowed'
-                : 'focus-within:ring-1 focus-within:ring-blue-200'
+                : 'focus-within:ring-1 focus-within:ring-blue-200 dark:focus-within:ring-blue-900'
             }`}
           >
             {/* Record / Stop button */}
@@ -246,8 +249,8 @@ export default function VoiceRecorderComponent({
                 isRecording
                   ? 'bg-red-100 text-red-600 animate-pulse ring-2 ring-red-300 scale-110'
                   : recordDisabled
-                    ? 'bg-transparent text-gray-300 cursor-not-allowed'
-                    : 'bg-indigo-50 text-indigo-600 ring-2 ring-indigo-200 hover:bg-indigo-100'
+                    ? 'bg-transparent text-gray-300 dark:text-slate-700 cursor-not-allowed'
+                    : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 ring-2 ring-indigo-200 dark:ring-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-500/20'
               }`}
             >
               {isRecording ? (
@@ -278,7 +281,7 @@ export default function VoiceRecorderComponent({
                 placeholder={agentTyping ? t('va.input.agentTyping') : t('va.input.placeholder')}
                 rows={1}
                 data-va="textarea"
-                className="flex-1 resize-none bg-transparent border-0 px-2 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none leading-relaxed"
+                className="flex-1 resize-none bg-transparent border-0 px-2 py-2 text-sm text-gray-800 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-500 outline-none leading-relaxed"
                 style={{ minHeight: '38px', maxHeight: '120px' }}
               />
             )}
@@ -291,8 +294,8 @@ export default function VoiceRecorderComponent({
                 disabled={!chatInput.trim() || agentTyping}
                 className={`shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all ${
                   chatInput.trim() && !agentTyping
-                    ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-200'
-                    : 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                    ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-200 dark:shadow-none'
+                    : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-500 cursor-not-allowed'
                 }`}
               >
                 <SendHorizontal className="w-4 h-4" />

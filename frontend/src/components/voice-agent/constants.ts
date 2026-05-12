@@ -2,20 +2,12 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 export type Gender = 'Male' | 'Female';
 export type Accent = 'US' | 'UK';
 export type Language = 'English' | 'Vietnamese';
-export type Model = 'OpenAI GPT 5' | 'OpenAI GPT 4o' | 'Claude 3.5 Sonnet' | 'Gemini 1.5 Pro';
 
 export interface AuthUser {
   display_name: string;
   email?: string;
 }
 
-export const LANGUAGES: Language[] = ['English', 'Vietnamese'];
-export const MODELS: Model[] = [
-  'OpenAI GPT 5',
-  'OpenAI GPT 4o',
-  'Claude 3.5 Sonnet',
-  'Gemini 1.5 Pro',
-];
 export const GENDERS: Gender[] = ['Male', 'Female'];
 export const ACCENTS: Accent[] = ['US', 'UK'];
 export type TopicId =

@@ -1,5 +1,5 @@
-import { User } from 'lucide-react';
-import { SiOpenai } from 'react-icons/si';
+import { User, Sparkles } from 'lucide-react';
+
 import { useT } from '../../i18n/useLanguage';
 import DeviceSelect from './DeviceSelect';
 import SelectDropdown from './SelectDropdown';
@@ -85,7 +85,7 @@ export default function LeftAudioPanel({
                 : 'bg-blue-100 border border-blue-200'
             }`}
           >
-            <SiOpenai className="w-5 h-5 text-blue-600" />
+            <Sparkles className="w-5 h-5 text-blue-600" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-medium text-gray-700 mb-1">Agent</div>

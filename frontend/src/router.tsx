@@ -14,6 +14,8 @@ const FlashcardDecksPage = lazy(() => import('./pages/FlashcardDecksPage'));
 const FlashcardCardsPage = lazy(() => import('./pages/FlashcardCardsPage'));
 const FlashcardStudyPage = lazy(() => import('./pages/FlashcardStudyPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallbackPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'));
 
 function PageFallback() {
   return (
@@ -54,6 +56,14 @@ export const router = createBrowserRouter(
               element: (
                 <Suspense fallback={<PageFallback />}>
                   <OAuthCallbackPage />
+                </Suspense>
+              ),
+            },
+            {
+              path: 'forgot-password',
+              element: (
+                <Suspense fallback={<PageFallback />}>
+                  <ForgotPasswordPage />
                 </Suspense>
               ),
             },
@@ -118,6 +128,14 @@ export const router = createBrowserRouter(
                       ),
                     },
                   ],
+                },
+                {
+                  path: 'change-password',
+                  element: (
+                    <Suspense fallback={<PageFallback />}>
+                      <ChangePasswordPage />
+                    </Suspense>
+                  ),
                 },
               ],
             },

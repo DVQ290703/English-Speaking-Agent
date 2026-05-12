@@ -120,9 +120,12 @@ function TopicCard({ topic, accent, onStart }) {
   const t = useT();
   const styles = ACCENT_STYLES[accent] || ACCENT_STYLES.blue;
   const darkStyles = ACCENT_DARK[accent] || ACCENT_DARK.blue;
-  // API-driven topics have .title / .desc set directly; hardcoded ones use i18n keys
-  const displayTitle = topic.title ?? t(`topic.${topic.key}.title`);
-  const displayDesc = topic.desc ?? t(`topic.${topic.key}.desc`);
+  // Try to translate based on topic key/code first. If not found, t() returns the key string.
+  const translatedTitle = t(`topic.${topic.key}.title`);
+  const translatedDesc = t(`topic.${topic.key}.desc`);
+
+  const displayTitle = translatedTitle !== `topic.${topic.key}.title` ? translatedTitle : (topic.title ?? '');
+  const displayDesc = translatedDesc !== `topic.${topic.key}.desc` ? translatedDesc : (topic.desc ?? '');
   const levelKey = DIFFICULTY_TO_LEVEL[topic.level] ?? topic.level;
   return (
     <button
@@ -169,7 +172,7 @@ function CategoryTabsRow({ categories, onStart }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3">
-        <div className="flex gap-2 overflow-x-auto scrollbar-none">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1">
           {categories.map((cat, i) => (
             <button
               key={cat.name}
@@ -180,7 +183,9 @@ function CategoryTabsRow({ categories, onStart }) {
                   : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
             >
-              {cat.displayName ?? t(`category.${cat.name}.name`)}
+              {t(`category.${cat.name}.name`) !== `category.${cat.name}.name` 
+                ? t(`category.${cat.name}.name`) 
+                : (cat.displayName ?? cat.name)}
             </button>
           ))}
         </div>
@@ -346,23 +351,25 @@ const ScoreTrendChart = memo(function ScoreTrendChart({ sessions, onStart, dark 
             {t('dash.chart.emptyBody')}
           </p>
           {/* 3-step visual */}
-          <div className="flex items-center justify-between max-w-sm mx-auto mb-6 px-2">
+          <div className="flex items-center justify-center max-w-sm mx-auto mb-10 gap-2 sm:gap-4">
             {[
               { n: '1', emoji: '🎯', key: 'dash.empty.step1' },
               { n: '2', emoji: '🎙️', key: 'dash.empty.step2' },
               { n: '3', emoji: '📊', key: 'dash.empty.step3' },
             ].map((s, i, arr) => (
-              <div key={s.n} className="flex items-center flex-1 last:flex-none">
-                <div className="flex flex-col items-center flex-1 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-1.5 shadow-sm">
+              <div key={s.n} className="flex items-center">
+                <div className="flex flex-col items-center w-24 sm:w-28">
+                  <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-blue-100 to-violet-100 dark:from-blue-500/20 dark:to-violet-500/20 flex items-center justify-center text-2xl mb-2 shadow-sm">
                     {s.emoji}
                   </div>
-                  <p className="text-[11px] font-semibold text-gray-700 dark:text-slate-300 leading-tight">
+                  <p className="text-[11px] font-bold text-gray-700 dark:text-slate-300 leading-tight text-center">
                     {t(s.key)}
                   </p>
                 </div>
                 {i < arr.length - 1 && (
-                  <div className="text-slate-300 dark:text-slate-600 -mt-5 px-1">→</div>
+                  <div className="text-slate-300 dark:text-slate-600 flex items-center justify-center h-12 -mt-6 sm:-mt-5">
+                    <span className="text-lg">→</span>
+                  </div>
                 )}
               </div>
             ))}

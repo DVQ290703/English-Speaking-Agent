@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, Outlet } from 'react-router-dom';
-import { LogOut, Mic, Library, HelpCircle, Menu } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
+import { LogOut, Mic, Library, HelpCircle, Menu, Key } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 import { useLanguage } from '../../i18n/useLanguage';
@@ -12,6 +13,7 @@ import { useShortcutsToggle } from '../ui/ShortcutsModal';
 
 export function MainLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { lang, t } = useLanguage();
   const { logout, user: authUser } = useAuth();
   const [dark, toggleDark] = useDarkMode();
@@ -19,6 +21,7 @@ export function MainLayout() {
   const [profile, setProfile] = useState<User | null>(null);
   const { setOpen: setShortcutsOpen } = useShortcutsToggle();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const constraintsRef = useRef(null);
 
   const toggleSidebar = () => setSidebarOpen((v) => !v);
 
@@ -36,16 +39,18 @@ export function MainLayout() {
   const displayName = profile?.display_name || profile?.email || t('dash.fallbackName');
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100">
+    <div ref={constraintsRef} className="h-[100dvh] flex flex-col bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100 overflow-hidden">
       <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-2.5 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-6">
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            className="md:hidden p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          {location.pathname === '/chat' && (
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="md:hidden p-1.5 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
           <Link
             to="/dashboard"
             viewTransition
@@ -135,6 +140,18 @@ export function MainLayout() {
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
+                      navigate('/change-password');
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-3 transition-colors border-t border-gray-100 dark:border-slate-800"
+                  >
+                    <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 flex items-center justify-center">
+                      <Key className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-medium">{lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
                       handleLogout();
                     }}
                     className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 transition-colors border-t border-gray-100 dark:border-slate-800"
@@ -153,14 +170,20 @@ export function MainLayout() {
         <Outlet context={{ sidebarOpen, setSidebarOpen, toggleSidebar }} />
       </main>
 
-      <button
+      <motion.button
+        drag
+        dragConstraints={constraintsRef}
+        dragElastic={0.1}
+        dragMomentum={false}
+        whileDrag={{ scale: 1.1 }}
         onClick={() => setShortcutsOpen(true)}
-        className="fixed bottom-6 left-6 z-50 p-2.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 group"
+        style={{ touchAction: 'none' }}
+        className="fixed bottom-6 left-6 z-50 p-2.5 rounded-full bg-white dark:bg-slate-800 shadow-xl border border-gray-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors group cursor-grab active:cursor-grabbing"
         aria-label="Help and keyboard shortcuts"
         title="Keyboard shortcuts"
       >
         <HelpCircle className="w-6 h-6" />
-      </button>
+      </motion.button>
     </div>
   );
 }
