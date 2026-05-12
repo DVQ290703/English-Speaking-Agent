@@ -326,6 +326,24 @@ class TestForgotPassword:
             "https://app.englishspeakingagent.com/reset-password?token="
         )
 
+    def test_existing_local_password_account_hides_preview_link_in_staging(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        with (
+            patch("app.api.auth.APP_ENV", "staging"),
+            patch("app.api.auth.FRONTEND_URL", "https://staging.englishspeakingagent.com"),
+            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, _cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        assert r.json()["preview_reset_url"] is None
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["reset_url"].startswith(
+            "https://staging.englishspeakingagent.com/reset-password?token="
+        )
+
     def test_unknown_email_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": None})
         with (
@@ -348,6 +366,7 @@ class TestForgotPassword:
 
         assert r.status_code == 200
         mock_info.assert_any_call("Forgot password request email=%s", "*@example.com")
+        assert "a@example.com" not in str(mock_info.call_args_list)
 
     def test_oauth_only_account_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, False)})

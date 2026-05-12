@@ -183,7 +183,7 @@ def forgot_password(payload: ForgotPasswordRequest):
         logger.warning("Forgot password email delivery failed email=%s", masked_email)
         return ForgotPasswordResponse(message=_PASSWORD_RESET_SUCCESS_MESSAGE, preview_reset_url=None)
 
-    preview_reset_url = reset_url if APP_ENV != "production" else None
+    preview_reset_url = reset_url if APP_ENV == "development" else None
     return ForgotPasswordResponse(message=_PASSWORD_RESET_SUCCESS_MESSAGE, preview_reset_url=preview_reset_url)
 
 
