@@ -286,13 +286,23 @@ class TestForgotPassword:
         assert mock_send.call_args.kwargs["to_email"] == self._email
         assert mock_send.call_args.kwargs["reset_url"] == body["preview_reset_url"]
         assert mock_send.call_args.kwargs["expires_minutes"] == 5
-        assert any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+        sql_calls = _sql_calls(cursor)
+        assert any("update password_reset_tokens set revoked_at = now()" in sql for sql in sql_calls)
+        assert any("insert into password_reset_tokens" in sql for sql in sql_calls)
+
+        revoke_call = next(
+            sql_call
+            for sql_call in cursor.execute.call_args_list
+            if "update password_reset_tokens set revoked_at = now()" in " ".join(sql_call.args[0].lower().split())
+        )
+        assert revoke_call.args[1] == (self._user_id,)
 
         insert_call = next(
             sql_call
             for sql_call in cursor.execute.call_args_list
             if "insert into password_reset_tokens" in " ".join(sql_call.args[0].lower().split())
         )
+        assert cursor.execute.call_args_list.index(revoke_call) < cursor.execute.call_args_list.index(insert_call)
         expires_at = insert_call.args[1][2]
         seconds_until_expiry = (expires_at - datetime.now(timezone.utc)).total_seconds()
         assert 240 <= seconds_until_expiry <= 300
@@ -302,6 +312,7 @@ class TestForgotPassword:
         conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
         with (
             patch("app.api.auth.APP_ENV", "production"),
+            patch("app.api.auth.FRONTEND_URL", "https://app.englishspeakingagent.com"),
             patch("app.api.auth.SMTP_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
@@ -311,6 +322,9 @@ class TestForgotPassword:
         assert r.status_code == 200
         assert r.json()["preview_reset_url"] is None
         mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["reset_url"].startswith(
+            "https://app.englishspeakingagent.com/reset-password?token="
+        )
 
     def test_unknown_email_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": None})
@@ -325,6 +339,15 @@ class TestForgotPassword:
         assert r.json()["preview_reset_url"] is None
         mock_send.assert_not_called()
         assert not any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+
+    def test_one_character_local_part_is_masked_in_logs(self):
+        conn = _make_conn(fetchone_by_sql={"from users": None})
+        with patch("app.api.auth.logger.info") as mock_info:
+            with _transactional_client(conn) as (c, _cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": "a@example.com"})
+
+        assert r.status_code == 200
+        mock_info.assert_any_call("Forgot password request email=%s", "*@example.com")
 
     def test_oauth_only_account_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, False)})
@@ -342,16 +365,20 @@ class TestForgotPassword:
 
     def test_delivery_failure_rolls_back_and_still_returns_generic_success(self):
         conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        def failing_send_password_reset_email(**_kwargs):
+            assert any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+            raise PasswordResetEmailDeliveryError("smtp unavailable")
+
         with (
             patch("app.api.auth.APP_ENV", "development"),
             patch("app.api.auth.SMTP_ENABLED", True),
-            patch(
-                "app.api.auth.send_password_reset_email",
-                side_effect=PasswordResetEmailDeliveryError("smtp unavailable"),
-            ),
         ):
             with _transactional_client(conn) as (c, cursor, real_conn):
-                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+                with patch(
+                    "app.api.auth.send_password_reset_email",
+                    side_effect=failing_send_password_reset_email,
+                ):
+                    r = c.post("/api/auth/forgot-password", json={"email": self._email})
 
         assert r.status_code == 200
         assert r.json() == {
@@ -360,6 +387,7 @@ class TestForgotPassword:
         }
         assert any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
         real_conn.rollback.assert_called_once()
+        real_conn.commit.assert_not_called()
 
 
 # ===========================================================================

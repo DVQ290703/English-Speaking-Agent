@@ -68,7 +68,9 @@ def _mask_email(email: str) -> str:
     local, _, domain = email.partition("@")
     if not domain:
         return "***"
-    if len(local) <= 2:
+    if len(local) <= 1:
+        masked_local = "*"
+    elif len(local) <= 2:
         masked_local = local[:1] + "*" * max(len(local) - 1, 0)
     else:
         masked_local = local[:2] + "*" * (len(local) - 2)
@@ -141,6 +143,7 @@ def forgot_password(payload: ForgotPasswordRequest):
 
                 user_id, has_local_password = row
                 if not has_local_password:
+                    logger.info("Forgot password skipped for oauth-only account email=%s", masked_email)
                     return ForgotPasswordResponse(
                         message=_PASSWORD_RESET_SUCCESS_MESSAGE,
                         preview_reset_url=None,
