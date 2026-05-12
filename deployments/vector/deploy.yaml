@@ -140,23 +140,44 @@ data:
           del(.payload)
           .source_file = .file
 
-      drop_health_checks:
+      drop_noise:
         type: filter
         inputs:
           - parse_payload
         condition: |
-          msg = string(.raw_message ?? "") ?? ""
-          !(
-            contains(msg, "/health") ||
-            contains(msg, "/healthz") ||
-            contains(msg, "/readyz") ||
-            contains(msg, "/livez")
-          )
+          msg = string(.raw_message) ?? ""
+          path = string(.path) ?? ""
+          !(contains(msg, "/health") || contains(msg, "/healthz") || contains(msg, "/readyz") || contains(msg, "/livez") || contains(msg, "/metrics") || contains(path, "/health") || contains(path, "/healthz") || contains(path, "/readyz") || contains(path, "/livez") || contains(path, "/metrics"))
+
+      strip_k8s_noise:
+        type: remap
+        inputs:
+          - drop_noise
+        source: |
+          del(.kubernetes.node_labels)
+          del(.kubernetes.namespace_labels)
+          del(.kubernetes.pod_annotations)
+          del(.kubernetes.pod_ip)
+          del(.kubernetes.pod_ips)
+          del(.kubernetes.pod_uid)
+          del(.kubernetes.pod_owner)
+          del(.kubernetes.container_id)
+          del(.kubernetes.container_image_id)
+          del(.kubernetes.container_image)
+          del(.kubernetes.container_name)
+          del(.kubernetes.pod_labels)
+          del(.kubernetes.pod_node_name)
+          del(.message)
+          del(.stream)
+          del(.source_file)
+          del(.file)
+          del(.host)
+          del(.source_type)
 
       route_by_category:
         type: route
         inputs:
-          - drop_health_checks
+          - strip_k8s_noise
         route:
           audit: exists(.event_type)
           span: .log_type == "span" && !exists(.event_type)
@@ -169,22 +190,19 @@ data:
           - route_by_category.audit
         endpoints:
           - https://3.26.193.122:9200
+        api_version: v8
         mode: data_stream
         data_stream:
           type: logs
           dataset: voice_agent.audit
           namespace: default
         tls:
-          verify_certificate: false
+          ca_file: /etc/vector/certs/http_ca.crt
+          verify_hostname: false
         auth:
           strategy: basic
           user: "elastic"
           password: "${ELASTICSEARCH_PASSWORD}"
-        encoding:
-          except_fields:
-            - file
-            - host
-            - source_type
 
       elasticsearch_spans:
         type: elasticsearch
@@ -192,22 +210,19 @@ data:
           - route_by_category.span
         endpoints:
           - https://3.26.193.122:9200
+        api_version: v8
         mode: data_stream
         data_stream:
           type: logs
           dataset: voice_agent.spans
           namespace: default
         tls:
-          verify_certificate: false
+          ca_file: /etc/vector/certs/http_ca.crt
+          verify_hostname: false
         auth:
           strategy: basic
           user: "elastic"
           password: "${ELASTICSEARCH_PASSWORD}"
-        encoding:
-          except_fields:
-            - file
-            - host
-            - source_type
 
       elasticsearch_plain:
         type: elasticsearch
@@ -215,22 +230,19 @@ data:
           - route_by_category.plain
         endpoints:
           - https://3.26.193.122:9200
+        api_version: v8
         mode: data_stream
         data_stream:
           type: logs
           dataset: voice_agent.plain
           namespace: default
         tls:
-          verify_certificate: false
+          ca_file: /etc/vector/certs/http_ca.crt
+          verify_hostname: false
         auth:
           strategy: basic
           user: "elastic"
           password: "${ELASTICSEARCH_PASSWORD}"
-        encoding:
-          except_fields:
-            - file
-            - host
-            - source_type
 
 ---
 

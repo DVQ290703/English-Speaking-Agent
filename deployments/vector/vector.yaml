@@ -63,13 +63,8 @@ transforms:
     inputs:
       - parse_payload
     condition: |
-      msg = string(.raw_message ?? "") ?? ""
-      !(
-        contains(msg, "/health") ||
-        contains(msg, "/healthz") ||
-        contains(msg, "/readyz") ||
-        contains(msg, "/livez")
-      )
+      msg = string(.raw_message) ?? ""
+      !(contains(msg, "/health") || contains(msg, "/healthz") || contains(msg, "/readyz") || contains(msg, "/livez"))
 
   route_by_category:
     type: route
@@ -86,7 +81,15 @@ sinks:
     inputs:
       - route_by_category.audit
     endpoints:
-      - http://elasticsearch:9200
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
     mode: data_stream
     data_stream:
       type: logs
@@ -103,7 +106,15 @@ sinks:
     inputs:
       - route_by_category.span
     endpoints:
-      - http://elasticsearch:9200
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
     mode: data_stream
     data_stream:
       type: logs
@@ -120,7 +131,15 @@ sinks:
     inputs:
       - route_by_category.plain
     endpoints:
-      - http://elasticsearch:9200
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
     mode: data_stream
     data_stream:
       type: logs
