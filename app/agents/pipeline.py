@@ -14,6 +14,28 @@ from app.agents.state import AgentState
 
 _TOOL_CALL_CAP = 5
 
+_GUARDRAIL_SYSTEM_PROMPT = """You are a content safety classifier for an English language learning app.
+
+Your task: determine if the user's message contains a GENUINELY HARMFUL request.
+
+SAFE — do NOT block:
+- Discussing sensitive topics in educational, fictional, news, or journalistic context
+- Vocabulary questions about any subject (crime, hacking, drugs, violence, etc.)
+- Mentioning movies, books, games, or history that involve violence or crime
+- Everyday conversation that happens to contain a sensitive word
+- Questions about how systems work (security, chemistry, biology) for learning
+
+UNSAFE — block:
+- Step-by-step instructions for causing real harm to people or systems
+- Explicit requests to help plan violence against a specific target
+- Sexual content involving minors
+- Requests specifically designed to manipulate or deceive real individuals
+
+Reply with EXACTLY one word on the first line: SAFE or UNSAFE
+Second line: brief reason (≤ 15 words)"""
+
+_BLOCKED_RESPONSE = "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!"
+
 
 def _sanitize_tool_messages(messages: list) -> list:
     """Ensure all ToolMessages have non-empty string content.
@@ -35,6 +57,14 @@ def _sanitize_tool_messages(messages: list) -> list:
                 msg = ToolMessage(content=content, tool_call_id=msg.tool_call_id, name=msg.name)
         result.append(msg)
     return result
+
+
+def _route_after_guardrail(state: AgentState) -> str:
+    if state.get("guardrail_blocked"):
+        logger.info("route_after_guardrail decision=blocked")
+        return "end"
+    logger.debug("route_after_guardrail decision=respond")
+    return "respond"
 
 
 def _route_after_respond(state: AgentState) -> str:
@@ -67,6 +97,39 @@ class VoiceAgentPipeline:
         self.llm_service = llm_service
         self.tts_service = tts_service
         self.app = self._build_graph()
+
+    def _guardrail_node(self, state: AgentState) -> AgentState:
+        """Classify user input as SAFE or UNSAFE using the LLM.
+
+        Fails open: any exception or ambiguous response is treated as SAFE
+        so legitimate requests are never incorrectly blocked.
+        """
+        user_input = state["user_input"]
+        logger.debug("guardrail_node start input_length=%d", len(user_input))
+
+        try:
+            messages = [
+                SystemMessage(content=_GUARDRAIL_SYSTEM_PROMPT),
+                HumanMessage(content=user_input),
+            ]
+            result: AIMessage = self.llm_service.client.invoke(messages)
+            first_line = (result.content or "").strip().split("\n")[0].strip().upper()
+            blocked = first_line.startswith("UNSAFE")
+        except Exception as exc:
+            logger.warning("guardrail_node llm_error — failing open: %s", exc)
+            blocked = False
+
+        if blocked:
+            logger.info("guardrail_node blocked input_length=%d", len(user_input))
+            return {
+                **state,
+                "guardrail_blocked": True,
+                "response_text": _BLOCKED_RESPONSE,
+                "audio_bytes": b"",
+            }
+
+        logger.debug("guardrail_node safe input_length=%d", len(user_input))
+        return {**state, "guardrail_blocked": False}
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response, invoking tools if the LLM requests them."""
@@ -208,14 +271,16 @@ class VoiceAgentPipeline:
     def _build_graph(self):
         tool_node = ToolNode(FLASHCARD_TOOLS, handle_tool_errors=True)
         graph = StateGraph(AgentState)
+        graph.add_node("guardrail", self._guardrail_node)
         graph.add_node("respond", self._respond_node)
         graph.add_node("tools", tool_node)
         graph.add_node("tts", self._tts_node)
-        graph.set_entry_point("respond")
+        graph.set_entry_point("guardrail")
+        graph.add_conditional_edges("guardrail", _route_after_guardrail, {"respond": "respond", "end": END})
         graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts", "respond": "respond", "end": END})
         graph.add_edge("tools", "respond")
         graph.add_edge("tts", END)
-        logger.debug("pipeline graph built nodes=[respond, tools, tts]")
+        logger.debug("pipeline graph built nodes=[guardrail, respond, tools, tts]")
         return graph.compile()
 
     def run(
