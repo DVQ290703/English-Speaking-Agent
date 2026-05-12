@@ -74,6 +74,14 @@ export const router = createBrowserRouter(
           element: <Navigate to="/chat" replace />,
         },
         {
+          path: 'reset-password',
+          element: (
+            <Suspense fallback={<PageFallback />}>
+              <ChangePasswordPage mode="reset" />
+            </Suspense>
+          ),
+        },
+        {
           element: <MainLayout />,
           children: [
             {

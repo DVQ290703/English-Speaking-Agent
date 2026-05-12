@@ -1,7 +1,8 @@
 # tests/test_api/test_schemas.py
 """
 Unit tests for app.api.schemas
-Covers: LoginRequest, RegisterRequest, UserOut, LoginResponse,
+Covers: LoginRequest, RegisterRequest, ForgotPasswordRequest, ResetPasswordRequest,
+        ChangePasswordRequest, UserOut, LoginResponse,
         ChatResponse, MessageOut, ConversationOut,
         ConversationListResponse, ConversationMessagesResponse,
         AssessmentResponse, WordResult
@@ -19,13 +20,16 @@ os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 from app.api.schemas import (
     AssessmentResponse,
     ChatResponse,
+    ChangePasswordRequest,
     ConversationListResponse,
     ConversationMessagesResponse,
     ConversationOut,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     MessageOut,
     RegisterRequest,
+    ResetPasswordRequest,
     UserOut,
     WordResult,
 )
@@ -71,6 +75,51 @@ class TestRegisterRequest:
     def test_register_request_invalid_email_raises(self):
         with pytest.raises(ValidationError):
             RegisterRequest(email="@@bad", password="secret")
+
+
+# ---------------------------------------------------------------------------
+# ForgotPasswordRequest
+# ---------------------------------------------------------------------------
+
+class TestForgotPasswordRequest:
+    def test_forgot_password_request_valid(self):
+        r = ForgotPasswordRequest(email="recover@example.com")
+        assert r.email == "recover@example.com"
+
+    def test_forgot_password_request_invalid_email_raises(self):
+        with pytest.raises(ValidationError):
+            ForgotPasswordRequest(email="bad-email")
+
+
+# ---------------------------------------------------------------------------
+# ResetPasswordRequest
+# ---------------------------------------------------------------------------
+
+class TestResetPasswordRequest:
+    def test_reset_password_request_valid(self):
+        r = ResetPasswordRequest(token="token-123", new_password="Password123!AB")
+        assert r.token == "token-123"
+
+    def test_reset_password_request_missing_token_raises(self):
+        with pytest.raises(ValidationError):
+            ResetPasswordRequest(new_password="Password123!AB")
+
+
+# ---------------------------------------------------------------------------
+# ChangePasswordRequest
+# ---------------------------------------------------------------------------
+
+class TestChangePasswordRequest:
+    def test_change_password_request_valid(self):
+        r = ChangePasswordRequest(
+            current_password="Current123!AB",
+            new_password="Updated123!AB",
+        )
+        assert r.current_password == "Current123!AB"
+
+    def test_change_password_request_missing_new_password_raises(self):
+        with pytest.raises(ValidationError):
+            ChangePasswordRequest(current_password="Current123!AB")
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,9 @@ export const ENDPOINTS = {
     login: '/api/auth/login',
     register: '/api/auth/register',
     me: '/api/auth/me',
+    forgotPassword: '/api/auth/forgot-password',
+    resetPassword: '/api/auth/reset-password',
+    changePassword: '/api/auth/change-password',
   },
   oauth: {
     login: (provider: string) => `/api/auth/oauth/login/${provider}`,

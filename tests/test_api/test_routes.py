@@ -273,7 +273,7 @@ class TestForgotPassword:
         with (
             patch("app.api.auth.APP_ENV", "development"),
             patch("app.api.auth.FRONTEND_URL", "http://localhost:5173"),
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
             with _transactional_client(conn) as (c, cursor, real_conn):
@@ -313,7 +313,7 @@ class TestForgotPassword:
         with (
             patch("app.api.auth.APP_ENV", "production"),
             patch("app.api.auth.FRONTEND_URL", "https://app.englishspeakingagent.com"),
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
             with _transactional_client(conn) as (c, _, _real_conn):
@@ -331,7 +331,7 @@ class TestForgotPassword:
         with (
             patch("app.api.auth.APP_ENV", "staging"),
             patch("app.api.auth.FRONTEND_URL", "https://staging.englishspeakingagent.com"),
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
             with _transactional_client(conn) as (c, _cursor, _real_conn):
@@ -347,7 +347,7 @@ class TestForgotPassword:
     def test_unknown_email_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": None})
         with (
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
             with _transactional_client(conn) as (c, cursor, _real_conn):
@@ -371,7 +371,7 @@ class TestForgotPassword:
     def test_oauth_only_account_returns_200_and_does_not_send_email(self):
         conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, False)})
         with (
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
             patch("app.api.auth.send_password_reset_email") as mock_send,
         ):
             with _transactional_client(conn) as (c, cursor, _real_conn):
@@ -390,7 +390,7 @@ class TestForgotPassword:
 
         with (
             patch("app.api.auth.APP_ENV", "development"),
-            patch("app.api.auth.SMTP_ENABLED", True),
+            patch("app.api.auth.EMAIL_ENABLED", True),
         ):
             with _transactional_client(conn) as (c, cursor, real_conn):
                 with patch(

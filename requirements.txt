@@ -1,5 +1,6 @@
 httpx
 pydantic
+resend
 langgraph
 langchain-groq
 groq

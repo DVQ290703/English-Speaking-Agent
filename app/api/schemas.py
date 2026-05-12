@@ -38,11 +38,38 @@ class RegisterRequest(_EmailValidatedModel):
         return cls._normalize_and_validate_email(value)
 
 
+class ForgotPasswordRequest(_EmailValidatedModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return cls._normalize_and_validate_email(value)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class UserOut(BaseModel):
     id: str
     email: str
     display_name: str | None
     english_level: str | None
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class ForgotPasswordResponse(MessageResponse):
+    preview_reset_url: str | None = None
 
 
 class LoginResponse(BaseModel):

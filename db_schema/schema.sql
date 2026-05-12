@@ -36,6 +36,21 @@ CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash          TEXT NOT NULL UNIQUE,
+    expires_at          TIMESTAMPTZ NOT NULL,
+    used_at             TIMESTAMPTZ,
+    revoked_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id
+    ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at
+    ON password_reset_tokens(expires_at);
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -361,3 +376,80 @@ CREATE TABLE IF NOT EXISTS grammar_feedback (
 
 CREATE INDEX IF NOT EXISTS grammar_feedback_message_id_idx
     ON grammar_feedback(message_id);
+
+-- =========================
+-- 10) FLASHCARDS
+-- =========================
+
+CREATE TABLE IF NOT EXISTS flashcard_decks (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    description TEXT,
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_flashcard_decks_user_id ON flashcard_decks(user_id);
+
+CREATE TRIGGER trg_flashcard_decks_updated_at
+    BEFORE UPDATE ON flashcard_decks
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS flashcards (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deck_id     UUID NOT NULL REFERENCES flashcard_decks(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    front_text  TEXT NOT NULL,
+    back_text   TEXT NOT NULL,
+    tags        TEXT[] NOT NULL DEFAULT '{}',
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_flashcards_deck_id ON flashcards(deck_id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_user_id ON flashcards(user_id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_tags    ON flashcards USING GIN(tags);
+
+CREATE TRIGGER trg_flashcards_updated_at
+    BEFORE UPDATE ON flashcards
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE IF NOT EXISTS flashcard_media (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    card_id           UUID NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+    side              TEXT NOT NULL CHECK (side IN ('front', 'back')),
+    media_type        TEXT NOT NULL CHECK (media_type IN ('image', 'audio')),
+    storage_provider  TEXT NOT NULL CHECK (storage_provider IN ('local','s3','azure_blob','gcs','minio')),
+    storage_key       TEXT NOT NULL,
+    public_url        TEXT,
+    mime_type         TEXT,
+    size_bytes        BIGINT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_flashcard_media_card_id ON flashcard_media(card_id);
+
+CREATE TABLE IF NOT EXISTS flashcard_reviews (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    card_id          UUID NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+    user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    due_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+    interval_days    INT NOT NULL DEFAULT 1,
+    ease_factor      NUMERIC(4,2) NOT NULL DEFAULT 2.5,
+    repetitions      INT NOT NULL DEFAULT 0,
+    last_rating      TEXT CHECK (last_rating IN ('again','hard','good','easy')),
+    last_reviewed_at TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_flashcard_reviews_card_user UNIQUE (card_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_flashcard_reviews_user_due
+    ON flashcard_reviews(user_id, due_date);
+
+CREATE TRIGGER trg_flashcard_reviews_updated_at
+    BEFORE UPDATE ON flashcard_reviews
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();

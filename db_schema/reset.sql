@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS conversations                   CASCADE;
 DROP TABLE IF EXISTS user_topic_preferences          CASCADE;
 DROP TABLE IF EXISTS topics                          CASCADE;
 DROP TABLE IF EXISTS categories                      CASCADE;
+DROP TABLE IF EXISTS password_reset_tokens          CASCADE;
 DROP TABLE IF EXISTS auth_sessions                   CASCADE;
 DROP TABLE IF EXISTS users                           CASCADE;
 

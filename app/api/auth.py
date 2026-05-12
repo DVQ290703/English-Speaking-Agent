@@ -32,7 +32,7 @@ from app.core.security import (
     verify_password,
     verify_password_with_padding,
 )
-from app.core.settings import APP_ENV, FRONTEND_URL, SMTP_ENABLED
+from app.core.settings import APP_ENV, EMAIL_ENABLED, FRONTEND_URL
 from app.services.email_service import PasswordResetEmailDeliveryError, send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -173,7 +173,7 @@ def forgot_password(payload: ForgotPasswordRequest):
                 )
 
                 reset_url = _build_password_reset_url(raw_token)
-                if SMTP_ENABLED:
+                if EMAIL_ENABLED:
                     send_password_reset_email(
                         to_email=email,
                         reset_url=reset_url,

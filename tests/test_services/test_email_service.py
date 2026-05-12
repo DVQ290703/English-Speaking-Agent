@@ -9,218 +9,96 @@ os.environ.setdefault("POSTGRES_PASSWORD", "test-password-strong-2026")
 from app.services.email_service import PasswordResetEmailDeliveryError, send_password_reset_email
 
 
-def test_starttls_path_logs_in_and_sends_a_message():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", "smtp-user"), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="tls-context"), \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        smtp_cls.return_value.__enter__.return_value = client
-
-        send_password_reset_email(
-            to_email="learner@example.com",
-            reset_url="https://frontend.example.com/reset-password?token=abc123",
-            expires_minutes=5,
-        )
-
-    smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=15)
-    client.starttls.assert_called_once_with(context="tls-context")
-    client.login.assert_called_once_with("smtp-user", "smtp-pass")
-    client.send_message.assert_called_once()
-
-    message = client.send_message.call_args.args[0]
-    assert message["Subject"] == "Reset your English Speaking Agent password"
-    plain_body = message.get_body(preferencelist=("plain",)).get_content()
-    html_body = message.get_body(preferencelist=("html",)).get_content()
-    assert "5 minutes" in plain_body
-    assert "/reset-password?token=abc123" in html_body
+def _patch_settings(**overrides):
+    defaults = {
+        "app.services.email_service.RESEND_API_KEY": "re_test_key",
+        "app.services.email_service.EMAIL_FROM": "noreply@example.com",
+        "app.services.email_service.EMAIL_FROM_NAME": "English Speaking Agent",
+    }
+    defaults.update(overrides)
+    return [patch(k, v) for k, v in defaults.items()]
 
 
-def test_ssl_path_uses_smtp_ssl_and_does_not_call_starttls():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 465), \
-        patch("app.services.email_service.SMTP_USERNAME", "smtp-user"), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", False), \
-        patch("app.services.email_service.SMTP_USE_SSL", True), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 20), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="ssl-context"), \
-        patch("app.services.email_service.smtplib.SMTP_SSL") as smtp_ssl_cls, \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        smtp_ssl_cls.return_value.__enter__.return_value = client
-
-        send_password_reset_email(
-            to_email="learner@example.com",
-            reset_url="https://frontend.example.com/reset-password?token=def456",
-            expires_minutes=5,
-        )
-
-    smtp_ssl_cls.assert_called_once_with("smtp.example.com", 465, timeout=20, context="ssl-context")
-    smtp_cls.assert_not_called()
-    client.starttls.assert_not_called()
-    client.login.assert_called_once_with("smtp-user", "smtp-pass")
-    client.send_message.assert_called_once()
-
-    message = client.send_message.call_args.args[0]
-    assert message["Subject"] == "Reset your English Speaking Agent password"
-    plain_body = message.get_body(preferencelist=("plain",)).get_content()
-    html_body = message.get_body(preferencelist=("html",)).get_content()
-    assert "5 minutes" in plain_body
-    assert "/reset-password?token=def456" in html_body
-
-
-def test_network_or_smtp_failure_raises_password_reset_email_delivery_error():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", "smtp-user"), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="tls-context"), \
-        patch("app.services.email_service.logger") as logger_mock, \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        client.send_message.side_effect = OSError("network down")
-        smtp_cls.return_value.__enter__.return_value = client
-
-        with pytest.raises(
-            PasswordResetEmailDeliveryError,
-            match="Failed to send password reset email",
-        ):
+def test_send_calls_resend_with_correct_fields():
+    mock_send = MagicMock(return_value={"id": "abc123"})
+    patches = _patch_settings()
+    with patch("resend.Emails.send", mock_send):
+        for p in patches:
+            p.start()
+        try:
             send_password_reset_email(
                 to_email="learner@example.com",
-                reset_url="https://frontend.example.com/reset-password?token=ghi789",
+                reset_url="https://app.example.com/reset-password?token=tok1",
                 expires_minutes=5,
             )
+        finally:
+            for p in patches:
+                p.stop()
 
-    logger_mock.warning.assert_called_once()
-    warning_args = logger_mock.warning.call_args.args
-    assert "learner@example.com" not in " ".join(str(arg) for arg in warning_args)
+    mock_send.assert_called_once()
+    payload = mock_send.call_args.args[0]
+    assert payload["to"] == ["learner@example.com"]
+    assert payload["subject"] == "Reset your English Speaking Agent password"
+    assert "English Speaking Agent <noreply@example.com>" == payload["from"]
+    assert "5 minutes" in payload["text"]
+    assert "/reset-password?token=tok1" in payload["html"]
 
 
-def test_smtp_exception_raises_password_reset_email_delivery_error():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", "smtp-user"), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="tls-context"), \
-        patch("app.services.email_service.logger") as logger_mock, \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        client.send_message.side_effect = __import__("smtplib").SMTPException("smtp failure")
-        smtp_cls.return_value.__enter__.return_value = client
-
-        with pytest.raises(
-            PasswordResetEmailDeliveryError,
-            match="Failed to send password reset email",
-        ):
+def test_html_body_escapes_reset_url():
+    mock_send = MagicMock(return_value={"id": "abc123"})
+    patches = _patch_settings()
+    with patch("resend.Emails.send", mock_send):
+        for p in patches:
+            p.start()
+        try:
             send_password_reset_email(
                 to_email="learner@example.com",
-                reset_url="https://frontend.example.com/reset-password?token=ghi789",
+                reset_url='https://app.example.com/reset-password?token="abc"&next=<done>',
                 expires_minutes=5,
             )
+        finally:
+            for p in patches:
+                p.stop()
 
-    logger_mock.warning.assert_called_once()
-    warning_args = logger_mock.warning.call_args.args
-    assert "learner@example.com" not in " ".join(str(arg) for arg in warning_args)
-
-
-def test_smtp_recipients_refused_does_not_log_recipient_pii():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", "smtp-user"), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="tls-context"), \
-        patch("app.services.email_service.logger") as logger_mock, \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        client.send_message.side_effect = __import__("smtplib").SMTPRecipientsRefused(
-            {"learner@example.com": (550, b"user unknown")}
-        )
-        smtp_cls.return_value.__enter__.return_value = client
-
-        with pytest.raises(
-            PasswordResetEmailDeliveryError,
-            match="Failed to send password reset email",
-        ):
-            send_password_reset_email(
-                to_email="learner@example.com",
-                reset_url="https://frontend.example.com/reset-password?token=ghi789",
-                expires_minutes=5,
-            )
-
-    logger_mock.warning.assert_called_once()
-    warning_args = logger_mock.warning.call_args.args
-    assert "learner@example.com" not in " ".join(str(arg) for arg in warning_args)
+    payload = mock_send.call_args.args[0]
+    assert '&quot;abc&quot;' in payload["html"]
+    assert "&amp;next=&lt;done&gt;" in payload["html"]
 
 
-def test_empty_smtp_username_does_not_call_login():
-    with patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", ""), \
-        patch("app.services.email_service.SMTP_PASSWORD", "smtp-pass"), \
-        patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.ssl.create_default_context", return_value="tls-context"), \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        smtp_cls.return_value.__enter__.return_value = client
-
-        send_password_reset_email(
-            to_email="learner@example.com",
-            reset_url="https://frontend.example.com/reset-password?token=abc123",
-            expires_minutes=5,
-        )
-
-    client.login.assert_not_called()
+def test_resend_failure_raises_delivery_error():
+    patches = _patch_settings()
+    with patch("resend.Emails.send", side_effect=Exception("network error")):
+        for p in patches:
+            p.start()
+        try:
+            with pytest.raises(PasswordResetEmailDeliveryError, match="Failed to send password reset email"):
+                send_password_reset_email(
+                    to_email="learner@example.com",
+                    reset_url="https://app.example.com/reset-password?token=tok2",
+                    expires_minutes=5,
+                )
+        finally:
+            for p in patches:
+                p.stop()
 
 
-def test_html_body_escapes_reset_url_in_anchor_href():
-    with patch("app.services.email_service.SMTP_FROM_EMAIL", "noreply@example.com"), \
-        patch("app.services.email_service.SMTP_FROM_NAME", "English Speaking Agent"), \
-        patch("app.services.email_service.SMTP_HOST", "smtp.example.com"), \
-        patch("app.services.email_service.SMTP_PORT", 587), \
-        patch("app.services.email_service.SMTP_USERNAME", ""), \
-        patch("app.services.email_service.SMTP_PASSWORD", ""), \
-        patch("app.services.email_service.SMTP_USE_STARTTLS", True), \
-        patch("app.services.email_service.SMTP_USE_SSL", False), \
-        patch("app.services.email_service.SMTP_TIMEOUT_SECONDS", 15), \
-        patch("app.services.email_service.smtplib.SMTP") as smtp_cls:
-        client = MagicMock()
-        smtp_cls.return_value.__enter__.return_value = client
+def test_failure_does_not_log_recipient_email():
+    patches = _patch_settings()
+    with patch("resend.Emails.send", side_effect=Exception("rejected")), \
+         patch("app.services.email_service.logger") as mock_logger:
+        for p in patches:
+            p.start()
+        try:
+            with pytest.raises(PasswordResetEmailDeliveryError):
+                send_password_reset_email(
+                    to_email="learner@example.com",
+                    reset_url="https://app.example.com/reset-password?token=tok3",
+                    expires_minutes=5,
+                )
+        finally:
+            for p in patches:
+                p.stop()
 
-        send_password_reset_email(
-            to_email="learner@example.com",
-            reset_url='https://frontend.example.com/reset-password?token="abc"&next=<done>',
-            expires_minutes=5,
-        )
-
-    message = client.send_message.call_args.args[0]
-    html_body = message.get_body(preferencelist=("html",)).get_content()
-    assert 'href="https://frontend.example.com/reset-password?token=&quot;abc&quot;&amp;next=&lt;done&gt;"' in html_body
+    mock_logger.warning.assert_called_once()
+    logged = " ".join(str(a) for a in mock_logger.warning.call_args.args)
+    assert "learner@example.com" not in logged
