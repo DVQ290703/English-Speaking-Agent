@@ -20,7 +20,7 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
 export const TRANSLATIONS: Record<Lang, Dict> = {
   en: {
     // Brand
-    'brand.name': 'IELTS Speaking Coach',
+    'brand.name': 'LinguAI',
 
     // Language toggle
     'lang.toggle.title': 'Switch language',
@@ -45,6 +45,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.start': 'Start',
     'common.replay': 'Replay',
     'common.dashboard': 'Dashboard',
+    'nav.chat': 'Chat',
+    'nav.dashboard': 'Dashboard',
+    'nav.flashcards': 'Flashcards',
+    'nav.menu': 'Menu',
 
     // Dashboard
     'dash.greeting': 'Hello, {name} 👋',
@@ -528,7 +532,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
 
   vi: {
     // Brand
-    'brand.name': 'IELTS Speaking Coach',
+    'brand.name': 'LinguAI',
 
     // Language toggle
     'lang.toggle.title': 'Đổi ngôn ngữ',
@@ -553,6 +557,10 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'common.start': 'Bắt đầu',
     'common.replay': 'Phát lại',
     'common.dashboard': 'Trang chính',
+    'nav.chat': 'Trò chuyện',
+    'nav.dashboard': 'Trang chính',
+    'nav.flashcards': 'Bộ thẻ',
+    'nav.menu': 'Menu',
 
     // Dashboard
     'dash.greeting': 'Xin chào, {name} 👋',

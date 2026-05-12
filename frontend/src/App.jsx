@@ -41,7 +41,7 @@ function GlobalHelpButton({ onClick }) {
   return (
     <button
       onClick={onClick}
-      className="fixed bottom-6 left-6 z-50 p-2.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 group"
+      className="hidden md:block fixed bottom-6 left-6 z-50 p-2.5 rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all duration-200 group"
       aria-label="Help and keyboard shortcuts"
       title="Keyboard shortcuts"
     >
