@@ -53,6 +53,9 @@ def _route_after_respond(state: AgentState) -> str:
             return "respond"
         logger.debug("route_after_respond decision=tools iterations=%d", iterations)
         return "tools"
+    if state.get("_tool_call_iterations", 0) > 0:
+        logger.debug("route_after_respond decision=end tool_used=True skipping_tts")
+        return "end"
     logger.debug("route_after_respond decision=tts no_tool_calls=True")
     return "tts"
 
@@ -209,7 +212,7 @@ class VoiceAgentPipeline:
         graph.add_node("tools", tool_node)
         graph.add_node("tts", self._tts_node)
         graph.set_entry_point("respond")
-        graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts", "respond": "respond"})
+        graph.add_conditional_edges("respond", _route_after_respond, {"tools": "tools", "tts": "tts", "respond": "respond", "end": END})
         graph.add_edge("tools", "respond")
         graph.add_edge("tts", END)
         logger.debug("pipeline graph built nodes=[respond, tools, tts]")
