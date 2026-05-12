@@ -1,0 +1,253 @@
+# Vector configuration — tails app log files, parses JSON spans, routes to data streams
+
+data_dir: ${VECTOR_DATA_DIR:-/var/lib/vector}
+
+sources:
+  app_logs:
+    type: file
+    include:
+      - /logs/*.log
+    read_from: beginning
+
+transforms:
+  extract_prefix:
+    type: remap
+    inputs:
+      - app_logs
+    source: |
+      parsed, err = parse_regex(.message, r'^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<level>\S+)\s+\[(?P<logger>[^\]]+)\] \[(?P<python_file>[^\]]+)\]:\s+(?P<payload>.+)$')
+      if err == null {
+        ts, ts_err = parse_timestamp(parsed.ts, "%Y-%m-%d %H:%M:%S")
+        if ts_err == null {
+          .@timestamp = ts
+        }
+        .level = parsed.level
+        .logger = parsed.logger
+        .python_file = parsed.python_file
+        .payload = parsed.payload
+      } else {
+        .payload = .message
+      }
+
+  parse_payload:
+    type: remap
+    inputs:
+      - extract_prefix
+    source: |
+      json_payload, json_err = parse_json(.payload)
+      if json_err == null && is_object(json_payload) {
+        merged, merge_err = merge(., json_payload)
+        if merge_err == null {
+          . = merged
+          .log_type = "span"
+        } else {
+          .parse_error = true
+          .log_type = "plain"
+        }
+        if exists(.timestamp) {
+          ts, ts_err = parse_timestamp(.timestamp, "%+")
+          if ts_err == null {
+            .@timestamp = ts
+          }
+          del(.timestamp)
+        }
+      } else {
+        .raw_message = .payload
+        .log_type = "plain"
+      }
+      del(.payload)
+      .source_file = .file
+
+  drop_health_checks:
+    type: filter
+    inputs:
+      - parse_payload
+    condition: |
+      msg = string(.raw_message) ?? ""
+      !(contains(msg, "/health") || contains(msg, "/healthz") || contains(msg, "/readyz") || contains(msg, "/livez"))
+
+  route_by_category:
+    type: route
+    inputs:
+      - drop_health_checks
+    route:
+      audit: exists(.event_type)
+      span: .log_type == "span" && !exists(.event_type)
+      plain: .log_type == "plain"
+
+sinks:
+  elasticsearch_audit:
+    type: elasticsearch
+    inputs:
+      - route_by_category.audit
+    endpoints:
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
+    mode: data_stream
+    data_stream:
+      type: logs
+      dataset: voice_agent.audit
+      namespace: default
+    encoding:
+      except_fields:
+        - file
+        - host
+        - source_type
+
+  elasticsearch_spans:
+    type: elasticsearch
+    inputs:
+      - route_by_category.span
+    endpoints:
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
+    mode: data_stream
+    data_stream:
+      type: logs
+      dataset: voice_agent.spans
+      namespace: default
+    encoding:
+      except_fields:
+        - file
+        - host
+        - source_type
+
+  elasticsearch_plain:
+    type: elasticsearch
+    inputs:
+      - route_by_category.plain
+    endpoints:
+      - https://3.26.193.122:9200
+    api_version: v8
+    auth:
+      strategy: basic
+      user: elastic
+      password: "${ELASTICSEARCH_PASSWORD}"
+    tls:
+      ca_file: /etc/vector/certs/http_ca.crt
+      verify_hostname: false
+    mode: data_stream
+    data_stream:
+      type: logs
+      dataset: voice_agent.plain
+      namespace: default
+    encoding:
+      except_fields:
+        - file
+        - host
+        - source_type
+
+tests:
+  - name: "span log line — prefix metadata extracted and @timestamp set from JSON payload"
+    inputs:
+      - insert_at: extract_prefix
+        type: log
+        log_fields:
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [chat.py]: {\"span_name\": \"chat_route\", \"timestamp\": \"2026-05-07T15:53:11.100Z\", \"trace_id\": \"abc123\", \"duration_ms\": 42.0, \"status\": \"ok\"}"
+          file: "/logs/2026-05-07.log"
+    outputs:
+      - extract_from: parse_payload
+        conditions:
+          - type: vrl
+            source: |
+              exists(."@timestamp") &&
+              !exists(.parse_error) &&
+              .log_type == "span" &&
+              .level == "INFO" &&
+              .logger == "AI-Lab-Agent" &&
+              .python_file == "chat.py" &&
+              .span_name == "chat_route" &&
+              .trace_id == "abc123" &&
+              !exists(.timestamp) &&
+              !exists(.payload)
+
+  - name: "audit log line — event_type promoted to root"
+    inputs:
+      - insert_at: extract_prefix
+        type: log
+        log_fields:
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [logger.py]: {\"event_type\": \"audit_event\", \"timestamp\": \"2026-05-07T15:53:11.109Z\", \"session_id\": \"sess1\"}"
+          file: "/logs/2026-05-07.log"
+    outputs:
+      - extract_from: parse_payload
+        conditions:
+          - type: vrl
+            source: |
+              exists(."@timestamp") &&
+              !exists(.parse_error) &&
+              .log_type == "span" &&
+              exists(.event_type) &&
+              .event_type == "audit_event" &&
+              .session_id == "sess1" &&
+              !exists(.timestamp) &&
+              !exists(.payload)
+
+  - name: "plain log line — raw_message, level, and python_file preserved"
+    inputs:
+      - insert_at: extract_prefix
+        type: log
+        log_fields:
+          message: "2026-05-07 15:53:11 WARNING  [AI-Lab-Agent] [assess.py]: something went wrong"
+          file: "/logs/2026-05-07.log"
+    outputs:
+      - extract_from: parse_payload
+        conditions:
+          - type: vrl
+            source: |
+              exists(."@timestamp") &&
+              .log_type == "plain" &&
+              .level == "WARNING" &&
+              .logger == "AI-Lab-Agent" &&
+              .python_file == "assess.py" &&
+              .raw_message == "something went wrong" &&
+              !exists(.payload)
+
+  - name: "malformed log line — falls back to plain with full message as raw_message"
+    inputs:
+      - insert_at: extract_prefix
+        type: log
+        log_fields:
+          message: "this does not match the expected prefix format"
+          file: "/logs/2026-05-07.log"
+    outputs:
+      - extract_from: parse_payload
+        conditions:
+          - type: vrl
+            source: |
+              !exists(.level) &&
+              .log_type == "plain" &&
+              .raw_message == "this does not match the expected prefix format" &&
+              !exists(.payload)
+
+  - name: "span JSON without timestamp field — @timestamp comes from prefix"
+    inputs:
+      - insert_at: extract_prefix
+        type: log
+        log_fields:
+          message: "2026-05-07 15:53:11 INFO     [AI-Lab-Agent] [chat.py]: {\"span_name\": \"no_ts_span\", \"trace_id\": \"xyz789\"}"
+          file: "/logs/2026-05-07.log"
+    outputs:
+      - extract_from: parse_payload
+        conditions:
+          - type: vrl
+            source: |
+              .log_type == "span" &&
+              .span_name == "no_ts_span" &&
+              exists(."@timestamp") &&
+              !exists(.timestamp) &&
+              !exists(.payload) &&
+              !exists(.parse_error)
