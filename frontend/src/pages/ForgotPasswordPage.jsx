@@ -1,25 +1,43 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, ArrowLeft, Send } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Send } from 'lucide-react';
+import { forgotPasswordRequest } from '../api/auth';
 import { useT } from '../i18n/useLanguage';
 
 export default function ForgotPasswordPage() {
   const t = useT();
-  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const [previewResetUrl, setPreviewResetUrl] = useState('');
+
+  const normalizePreviewResetUrl = (url) => {
+    if (!url) return '';
+
+    try {
+      const parsed = new URL(url);
+      return `${window.location.origin}${parsed.pathname}${parsed.search}`;
+    } catch {
+      return url;
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email) return;
 
     setLoading(true);
-    // Simulating API call
-    setTimeout(() => {
-      setLoading(false);
+    setApiError('');
+    try {
+      const data = await forgotPasswordRequest({ email: email.trim() });
+      setPreviewResetUrl(normalizePreviewResetUrl(data.preview_reset_url || ''));
       setSubmitted(true);
-    }, 1500);
+    } catch (error) {
+      setApiError(error.message || 'Failed to start password reset.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -82,23 +100,40 @@ export default function ForgotPasswordPage() {
                 {loading ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    {t('auth.signingIn')}
+                    {t('auth.forgotPassword.submit')}
                   </span>
                 ) : (
                   t('auth.forgotPassword.submit')
                 )}
               </button>
+
+              {apiError ? <p className="error-msg">{apiError}</p> : null}
             </form>
           ) : (
             <div className="text-center py-4">
               <div className="w-16 h-16 bg-green-50 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Send className="w-8 h-8" />
               </div>
-              <p className="text-sm text-gray-600 mb-6">
+              <p className="text-sm text-gray-600 mb-2">
                 {t('auth.forgotPassword.sentTo')} <span className="font-semibold text-gray-900">{email}</span>
               </p>
+              <p className="text-xs text-gray-500 mb-6">
+                {t('auth.forgotPassword.checkEmailHint')}
+              </p>
+              {previewResetUrl ? (
+                <a
+                  href={previewResetUrl}
+                  className="submit-btn inline-flex items-center justify-center"
+                  style={{ textDecoration: 'none', marginBottom: '1rem' }}
+                >
+                  Open reset page
+                </a>
+              ) : null}
               <button
-                onClick={() => setSubmitted(false)}
+                onClick={() => {
+                  setSubmitted(false);
+                  setPreviewResetUrl('');
+                }}
                 className="text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
               >
                 {t('auth.forgotPassword.tryAgain')}

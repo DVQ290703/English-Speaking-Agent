@@ -130,6 +130,13 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.changePassword.placeholder.confirm': 'Re-enter new password',
     'auth.changePassword.success': 'Password changed successfully!',
     'auth.changePassword.error.mismatch': 'New passwords do not match!',
+    'auth.changePassword.resetTitle': 'Reset Password',
+    'auth.changePassword.resetSubtitle': 'Set a new password for your account.',
+    'auth.changePassword.resetInvalidLink': 'This reset link is missing, invalid, or expired.',
+    'auth.changePassword.resetRequestNew': 'Request a new reset link',
+    'auth.changePassword.backToLogin': 'Back to login',
+    'auth.changePassword.resetSubmit': 'Reset Password',
+    'auth.changePassword.resetSuccess': 'Password reset successfully.',
 
     'auth.forgotPassword.title': 'Forgot Password?',
     'auth.forgotPassword.desc': "Enter your email address and we'll send you a link to reset your password.",
@@ -138,6 +145,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.forgotPassword.backToLogin': 'Back to login',
     'auth.forgotPassword.checkEmail': 'Check your email',
     'auth.forgotPassword.sentTo': "We've sent a password reset link to",
+    'auth.forgotPassword.checkEmailHint': 'If the account exists, we sent a reset link that expires in 5 minutes.',
     'auth.forgotPassword.tryAgain': "Didn't receive the email? Try again",
 
     // Shortcuts cheatsheet
@@ -630,6 +638,13 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.changePassword.placeholder.confirm': 'Nhập lại mật khẩu mới',
     'auth.changePassword.success': 'Đổi mật khẩu thành công!',
     'auth.changePassword.error.mismatch': 'Mật khẩu mới không khớp!',
+    'auth.changePassword.resetTitle': 'Đặt lại mật khẩu',
+    'auth.changePassword.resetSubtitle': 'Thiết lập mật khẩu mới cho tài khoản của bạn.',
+    'auth.changePassword.resetInvalidLink': 'Liên kết đặt lại mật khẩu này bị thiếu, không hợp lệ hoặc đã hết hạn.',
+    'auth.changePassword.resetRequestNew': 'Yêu cầu liên kết mới',
+    'auth.changePassword.backToLogin': 'Quay lại đăng nhập',
+    'auth.changePassword.resetSubmit': 'Đặt lại mật khẩu',
+    'auth.changePassword.resetSuccess': 'Đặt lại mật khẩu thành công.',
 
     'auth.forgotPassword.title': 'Quên mật khẩu?',
     'auth.forgotPassword.desc': 'Nhập địa chỉ email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu.',
@@ -638,6 +653,7 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.forgotPassword.backToLogin': 'Quay lại đăng nhập',
     'auth.forgotPassword.checkEmail': 'Kiểm tra email của bạn',
     'auth.forgotPassword.sentTo': 'Chúng tôi đã gửi link đặt lại mật khẩu đến',
+    'auth.forgotPassword.checkEmailHint': 'Nếu tài khoản tồn tại, chúng tôi đã gửi một liên kết đặt lại mật khẩu có hiệu lực trong 5 phút.',
     'auth.forgotPassword.tryAgain': 'Không nhận được email? Thử lại',
 
     // Shortcuts cheatsheet
