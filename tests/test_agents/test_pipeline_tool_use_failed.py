@@ -41,9 +41,11 @@ def _make_pipeline():
     )
 
     plain_ai_msg = AIMessage(content="Here are your decks.")
+    guardrail_safe_msg = AIMessage(content="SAFE\nUser is asking about flashcards.")
 
+    # First client.invoke = guardrail (SAFE), second = respond node fallback after BadRequest
+    llm_mock.client.invoke.side_effect = [guardrail_safe_msg, plain_ai_msg]
     llm_mock.tool_client.invoke.side_effect = bad_request
-    llm_mock.client.invoke.return_value = plain_ai_msg
     llm_mock.generate_response_with_grammar.return_value = ("Here are your decks.", None)
     tts_mock.convert_text_to_speech.return_value = b"audio"
 
@@ -56,7 +58,8 @@ def test_tool_use_failed_falls_back_to_plain_client():
     result = pipeline.run(user_input="show me my decks", user_id="a1000000-0000-0000-0000-000000000001")
 
     assert result["response_text"] == "Here are your decks."
-    llm_mock.client.invoke.assert_called_once()
+    # client.invoke is called twice: once for guardrail, once for the respond-node fallback
+    assert llm_mock.client.invoke.call_count == 2
 
 
 def test_tool_use_failed_does_not_propagate_exception():
