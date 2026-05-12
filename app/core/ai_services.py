@@ -133,6 +133,13 @@ def run_langraph_agent(
     try:
         pipeline = get_voice_agent_pipeline()
         result = pipeline.run(user_input=user_input, history=history, voice_gender=voice_gender, voice_accent=voice_accent, category=category, topic=topic, user_id=user_id)
+
+        # Guardrail blocked: return the apology text with no audio — do not retry TTS
+        if result.get("guardrail_blocked"):
+            response_text = str(result.get("response_text", "")).strip()
+            logger.info("run_langraph_agent guardrail_blocked response_text_length=%d", len(response_text))
+            return response_text, b"", None, []
+
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
         grammar_raw: str | None = result.get("grammar_raw")

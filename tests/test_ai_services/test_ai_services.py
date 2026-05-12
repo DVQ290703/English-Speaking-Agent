@@ -647,3 +647,35 @@ class TestRunLangraphAgentAccent:
 
         _, kwargs = mock_pipeline.run.call_args
         assert kwargs.get("voice_accent") is None
+
+
+def test_run_langraph_agent_blocked_skips_tts(monkeypatch):
+    """When the pipeline returns guardrail_blocked=True, run_langraph_agent must
+    return empty audio bytes without calling the TTS fallback."""
+    from app.core import ai_services
+
+    blocked_state = {
+        "response_text": "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!",
+        "audio_bytes": b"",
+        "grammar_raw": None,
+        "messages": [],
+        "guardrail_blocked": True,
+    }
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run.return_value = blocked_state
+
+    synthesize_calls = []
+
+    def fake_synthesize(text, voice_gender=None, voice_accent=None):
+        synthesize_calls.append(text)
+        return b"tts-audio"
+
+    monkeypatch.setattr(ai_services, "get_voice_agent_pipeline", lambda: mock_pipeline)
+    monkeypatch.setattr(ai_services, "_synthesize_audio_bytes", fake_synthesize)
+
+    text, audio, grammar, steps = ai_services.run_langraph_agent(user_input="How do I hack?")
+
+    assert audio == b""
+    assert len(synthesize_calls) == 0, "TTS must not be called for guardrail-blocked responses"
+    assert "sorry" in text.lower()
