@@ -78,3 +78,5 @@ NO_TOOL — everything else: greetings, small talk, language questions, pronunci
 <!-- BEGIN: blocked_response -->
 I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!
 <!-- END: blocked_response -->
+
+<!-- build -->
