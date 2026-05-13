@@ -303,7 +303,7 @@ class TestPromptArchitecture:
 
         prompt = build_system_prompt(category="travel", topic="travel_airport")
 
-        assert "AI English-speaking coach" in prompt
+        assert "professional English-speaking coach" in prompt
         assert "## Category: travel" in prompt
         assert "## Topic: travel_airport" in prompt
         assert "airport" in prompt.lower()
