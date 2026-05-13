@@ -13,21 +13,6 @@ from app.services.elevenlabs_tts import ElevenLabsTTS
 from app.services.groq_llm import GroqLLMService
 from app.agents.state import AgentState
 
-_PREFLIGHT_SYSTEM_PROMPT = """You are a pre-flight classifier for an English learning voice assistant.
-
-Evaluate the user's message on TWO dimensions and reply in EXACTLY this format (two lines, no extra text):
-SAFETY: SAFE|UNSAFE
-TOOL: NEEDS_TOOL|NO_TOOL
-
-=== SAFETY ===
-SAFE — general conversation, language questions, educational/fictional/news context, any sensitive topic discussed for learning.
-UNSAFE — step-by-step harm instructions, violence against a specific target, sexual content involving minors, manipulation of real individuals.
-
-=== TOOL ===
-The assistant has flashcard tools (create deck, list decks, add card, review cards).
-NEEDS_TOOL — user explicitly requests OR is clearly responding to an assistant prompt to create/view/manage a deck or card, save/add a word, or review flashcards. Use the conversation history to resolve ambiguous short replies (e.g. a name given in response to "What would you like to name it?").
-NO_TOOL — everything else: greetings, small talk, language questions, pronunciation practice."""
-
 _BLOCKED_RESPONSE = "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!"
 
 
@@ -108,7 +93,8 @@ class VoiceAgentPipeline:
         blocked = False
         tool_intent = False
         try:
-            messages: list = [SystemMessage(content=_PREFLIGHT_SYSTEM_PROMPT)]
+            from app.prompts.prompt_builder import load_preflight_prompt
+            messages: list = [SystemMessage(content=load_preflight_prompt())]
             for line in state.get("history", [])[-4:]:
                 if line.startswith("User:"):
                     messages.append(HumanMessage(content=line[5:].strip()))

@@ -11,6 +11,8 @@ logger = get_logger("prompts")
 _SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
 _TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
 _GRAMMAR_INSTRUCTION_PATH = Path(__file__).with_name("grammar_instruction.md")
+_PREFLIGHT_PROMPT_PATH = Path(__file__).with_name("preflight_prompt.md")
+_BLOCKED_RESPONSE_PATH = Path(__file__).with_name("blocked_response.md")
 _PROMPTS_ROOT = Path(__file__).resolve().parent
 
 _BASE_FALLBACK = (
@@ -45,6 +47,28 @@ Grammar annotation rules:
   Do NOT include it when you are calling tools.\
 """
 
+_PREFLIGHT_FALLBACK = """\
+You are a pre-flight classifier for an English learning voice assistant.
+
+Evaluate the user's message on TWO dimensions and reply in EXACTLY this format (two lines, no extra text):
+SAFETY: SAFE|UNSAFE
+TOOL: NEEDS_TOOL|NO_TOOL
+
+=== SAFETY ===
+SAFE — general conversation, language questions, educational/fictional/news context, any sensitive topic discussed for learning.
+UNSAFE — step-by-step harm instructions, violence against a specific target, sexual content involving minors, manipulation of real individuals.
+
+=== TOOL ===
+The assistant has flashcard tools (create deck, list decks, add card, review cards).
+NEEDS_TOOL — user explicitly requests OR is clearly responding to an assistant prompt to create/view/manage a deck or card, save/add a word, or review flashcards. Use the conversation history to resolve ambiguous short replies (e.g. a name given in response to "What would you like to name it?").
+NO_TOOL — everything else: greetings, small talk, language questions, pronunciation practice.\
+"""
+
+_BLOCKED_RESPONSE_FALLBACK = (
+    "I'm sorry, I can't help with that topic. "
+    "Let's keep our practice focused on everyday English conversation!"
+)
+
 _CACHE: dict[str, Any] = {
     "base_mtime": None,
     "base": None,
@@ -52,6 +76,10 @@ _CACHE: dict[str, Any] = {
     "topics": None,
     "grammar_mtime": None,
     "grammar": None,
+    "preflight_mtime": None,
+    "preflight": None,
+    "blocked_response_mtime": None,
+    "blocked_response": None,
 }
 
 
@@ -113,6 +141,29 @@ def _load_grammar_instruction() -> str:
     _CACHE["grammar_mtime"] = mtime
     _CACHE["grammar"] = text
     logger.debug("prompt_builder grammar cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
+    return text
+
+
+def load_preflight_prompt() -> str:
+    try:
+        mtime = _PREFLIGHT_PROMPT_PATH.stat().st_mtime
+    except OSError:
+        logger.exception("preflight_prompt.md not found at %s — using inline fallback", _PREFLIGHT_PROMPT_PATH)
+        return _PREFLIGHT_FALLBACK
+
+    if _CACHE["preflight_mtime"] == mtime and isinstance(_CACHE["preflight"], str):
+        logger.debug("prompt_builder preflight cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["preflight"]))
+        return _CACHE["preflight"]
+
+    try:
+        text = _PREFLIGHT_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.exception("Failed to read preflight_prompt.md")
+        return _PREFLIGHT_FALLBACK
+
+    _CACHE["preflight_mtime"] = mtime
+    _CACHE["preflight"] = text
+    logger.debug("prompt_builder preflight cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
     return text
 
 
