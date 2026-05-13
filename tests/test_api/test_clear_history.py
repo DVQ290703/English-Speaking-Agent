@@ -124,7 +124,7 @@ def test_get_messages_with_scores_excludes_pre_clear_messages():
     cur.fetchone.return_value = (conv_id,)
     # fetchall: messages (post-clear only)
     cur.fetchall.return_value = [
-        (msg_id, "assistant", "text", "Hello after clear", now, None, None, None, None, None, None, None, None),
+        (msg_id, "assistant", "text", "Hello after clear", now, [], None, None, None, None, None, None, None, None),
     ]
 
     with (
