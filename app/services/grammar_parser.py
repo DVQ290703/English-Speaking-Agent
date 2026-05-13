@@ -64,8 +64,12 @@ def split_combined_output(raw: str) -> tuple[str, str | None]:
     """
     response_match = _RESPONSE_TAG_RE.search(raw)
     grammar_match = _GRAMMAR_TAG_RE.search(raw)
-    response_text = response_match.group(1).strip() if response_match else raw.strip()
     grammar_raw = grammar_match.group(1).strip() if grammar_match else None
+    if response_match:
+        response_text = response_match.group(1).strip()
+    else:
+        # No <response> tag — strip the <grammar> block before using raw as fallback
+        response_text = _GRAMMAR_TAG_RE.sub("", raw).strip()
     return response_text, grammar_raw
 
 

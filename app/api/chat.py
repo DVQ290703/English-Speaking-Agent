@@ -69,7 +69,7 @@ def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
           AND m.role IN ('user', 'assistant')
           AND m.text_content IS NOT NULL
           AND (c.cleared_at IS NULL OR m.created_at > c.cleared_at)
-        ORDER BY m.created_at DESC
+        ORDER BY m.created_at DESC, m.role ASC
         LIMIT %s
         """,
         (conv_id, limit),
