@@ -273,7 +273,7 @@ def extract_prompt_context(history: list[str]) -> tuple[str | None, str | None]:
 def build_system_prompt(
     category: str | None = None,
     topic: str | None = None,
-    include_grammar: bool = False,
+    include_grammar: bool = True,
 ) -> str:
     """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
     logger.debug(
