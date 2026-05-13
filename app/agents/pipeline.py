@@ -8,11 +8,10 @@ from langgraph.prebuilt import ToolNode
 from app.agents.tools.flashcard_tools import FLASHCARD_TOOLS
 from app.core.logger import logger
 from app.core.telemetry import span_context
+from app.core.settings import TOOL_CALL_CAP as _TOOL_CALL_CAP
 from app.services.elevenlabs_tts import ElevenLabsTTS
 from app.services.groq_llm import GroqLLMService
 from app.agents.state import AgentState
-
-_TOOL_CALL_CAP = 5
 
 _PREFLIGHT_SYSTEM_PROMPT = """You are a pre-flight classifier for an English learning voice assistant.
 

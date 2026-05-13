@@ -130,6 +130,7 @@ REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # Rate limiting
 RATE_LIMIT_RPM: int = int(os.getenv("RATE_LIMIT_RPM", "10"))
+TOOL_CALL_CAP: int = int(os.getenv("TOOL_CALL_CAP", "5"))
 
 # Input guardrails
 MAX_INPUT_CHARS: int = int(os.getenv("MAX_INPUT_CHARS", "2000"))
