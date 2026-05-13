@@ -118,9 +118,10 @@ def _load_sections() -> dict[str, str]:
     _CACHE["mtime"] = mtime
     _CACHE["sections"] = sections
     logger.debug(
-        "prompt_builder sections cache MISS - reloaded sections=%s chars=%d",
+        "prompt_builder sections cache MISS - reloaded sections=%s chars=%d mtime=%.3f",
         list(sections.keys()),
         len(text),
+        mtime,
     )
     return sections
 
