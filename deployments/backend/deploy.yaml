@@ -128,6 +128,9 @@ spec:
             - name: agent-prompts
               mountPath: /app/app/prompts/system_prompt.md
               subPath: system_prompt.md
+            - name: agent-prompts
+              mountPath: /app/app/prompts/grammar_instruction.md
+              subPath: grammar_instruction.md
 
       volumes:
         - name: agent-prompts
