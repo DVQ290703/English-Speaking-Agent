@@ -874,8 +874,8 @@ class TestGetConversationMessages:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id, "user", "text", "Hello AI", now, None, None, None, None, None, None, None, None),
-                (_new_uuid(), "assistant", "text", "Hello human!", now, None, None, None, None, None, None, None, None),
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
@@ -889,7 +889,7 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, "audio/key/path.mp3", None, None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, [], "audio/key/path.mp3", None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
@@ -900,7 +900,7 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, None, None, None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, [], None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
@@ -911,12 +911,35 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, None, "assistant/key.mp3", None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, [], None, "assistant/key.mp3", None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         assert r.json()["messages"][0]["assistant_audio_url"] == "/api/audio/assistant/key.mp3"
+
+    def test_get_messages_returns_assistant_suggestions(self):
+        now = datetime.now(timezone.utc)
+        suggestions = [
+            "I usually practice in the morning.",
+            "What routine works best for you?",
+            "In my experience, consistency matters most.",
+        ]
+        conn = _make_conn(
+            fetchone_side_effect=[(self._conv_id,)],
+            fetchall_value=[
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, suggestions, None, None, None, None, None, None, None, None),
+            ],
+        )
+
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["messages"][0]["suggestions"] == []
+        assert body["messages"][1]["suggestions"] == suggestions
 
     def test_get_messages_no_auth_returns_401(self):
         """HTTPBearer raises 401/403 when the Authorization header is missing."""

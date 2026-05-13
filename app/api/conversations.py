@@ -387,6 +387,7 @@ def get_conversation_messages_with_scores(
                     m.input_mode,
                     m.text_content,
                     m.created_at,
+                    m.suggestions,
                     ua.storage_key,
                     aa_tts.storage_key AS assistant_storage_key,
                     pa.overall_score,
@@ -411,7 +412,7 @@ def get_conversation_messages_with_scores(
             msg_rows = cur.fetchall()
 
             # batch-fetch all word details (one query, not N+1)
-            assessment_ids = [row[12] for row in msg_rows if row[12] is not None]
+            assessment_ids = [row[13] for row in msg_rows if row[13] is not None]
             word_map: dict[str, list[WordDetail]] = {}
             # key: word_detail DB id (uuid text) → list of PhonemeDetail
             phoneme_map: dict[str, list[PhonemeDetail]] = {}
@@ -457,9 +458,11 @@ def get_conversation_messages_with_scores(
                     )
 
     messages: list[MessageWithScoreOut] = []
-    for (msg_id, role, input_mode, text_content, created_at,
+    for (msg_id, role, input_mode, text_content, created_at, suggestions_raw,
          storage_key, assistant_storage_key, overall, accuracy, fluency, completeness,
          prosody, assessment_id) in msg_rows:
+
+        suggestions = suggestions_raw if role == "assistant" and isinstance(suggestions_raw, list) else []
 
         audio_url: str | None = None
         if storage_key:
@@ -487,6 +490,7 @@ def get_conversation_messages_with_scores(
                 input_mode=input_mode,
                 text_content=text_content,
                 created_at=created_at,
+                suggestions=suggestions,
                 audio_url=audio_url,
                 assistant_audio_url=assistant_audio_url,
                 score=score,

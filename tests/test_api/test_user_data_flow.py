@@ -196,8 +196,8 @@ class TestUserLifecycle:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id,    "user",      "text", "Hello, let's practice IELTS.", now, None, None, None, None, None, None, None, None),
-                (_uid(),          "assistant", "text", "Good job!",                   now, None, None, None, None, None, None, None, None),
+                (self._msg_id,    "user",      "text", "Hello, let's practice IELTS.", now, [], None, None, None, None, None, None, None, None),
+                (_uid(),          "assistant", "text", "Good job!",                   now, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
@@ -332,7 +332,7 @@ class TestUserIsolation:
         msg_id = _uid()
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_of_a,)],
-            fetchall_value=[(msg_id, "user", "text", "Hello", now, None, None, None, None, None, None, None, None)],
+            fetchall_value=[(msg_id, "user", "text", "Hello", now, [], None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(
@@ -359,9 +359,9 @@ class TestConversationHistory:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (_uid(), "user",      "text", "Turn 1 user",      t1, None, None, None, None, None, None, None, None),
-                (_uid(), "assistant", "text", "Turn 1 assistant",  t2, None, None, None, None, None, None, None, None),
-                (_uid(), "user",      "text", "Turn 2 user",      t3, None, None, None, None, None, None, None, None),
+                (_uid(), "user",      "text", "Turn 1 user",      t1, [], None, None, None, None, None, None, None, None),
+                (_uid(), "assistant", "text", "Turn 1 assistant",  t2, [], None, None, None, None, None, None, None, None),
+                (_uid(), "user",      "text", "Turn 2 user",      t3, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
