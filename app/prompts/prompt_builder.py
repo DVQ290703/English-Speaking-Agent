@@ -10,10 +10,12 @@ logger = get_logger("prompts")
 
 _SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
 _TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
-_GRAMMAR_INSTRUCTION_PATH = Path(__file__).with_name("grammar_instruction.md")
-_PREFLIGHT_PROMPT_PATH = Path(__file__).with_name("preflight_prompt.md")
-_BLOCKED_RESPONSE_PATH = Path(__file__).with_name("blocked_response.md")
 _PROMPTS_ROOT = Path(__file__).resolve().parent
+
+_SECTION_RE = re.compile(
+    r"<!--\s*BEGIN:\s*(\w+)\s*-->(.*?)<!--\s*END:\s*\1\s*-->",
+    re.DOTALL,
+)
 
 _BASE_FALLBACK = (
     "You are an AI English-speaking coach. Keep replies short, natural, "
@@ -70,16 +72,10 @@ _BLOCKED_RESPONSE_FALLBACK = (
 )
 
 _CACHE: dict[str, Any] = {
-    "base_mtime": None,
-    "base": None,
+    "mtime": None,
+    "sections": None,
     "topics_signature": None,
     "topics": None,
-    "grammar_mtime": None,
-    "grammar": None,
-    "preflight_mtime": None,
-    "preflight": None,
-    "blocked_response_mtime": None,
-    "blocked_response": None,
 }
 
 
@@ -89,105 +85,60 @@ def _normalize_key(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
 
 
-def _load_base_prompt() -> str:
+def _fallback_sections() -> dict[str, str]:
+    return {
+        "system_prompt": _BASE_FALLBACK,
+        "grammar_instruction": _GRAMMAR_FALLBACK,
+        "preflight_prompt": _PREFLIGHT_FALLBACK,
+        "blocked_response": _BLOCKED_RESPONSE_FALLBACK,
+    }
+
+
+def _load_sections() -> dict[str, str]:
     try:
         mtime = _SYSTEM_PROMPT_PATH.stat().st_mtime
     except OSError:
         logger.exception("system_prompt.md not found at %s", _SYSTEM_PROMPT_PATH)
-        logger.debug("prompt_builder using inline fallback base prompt")
-        return _BASE_FALLBACK
+        return _fallback_sections()
 
-    if _CACHE["base_mtime"] == mtime and isinstance(_CACHE["base"], str):
-        logger.debug(
-            "prompt_builder base prompt cache HIT mtime=%.3f chars=%d",
-            mtime,
-            len(_CACHE["base"]),
-        )
-        return _CACHE["base"]
+    if _CACHE["mtime"] == mtime and isinstance(_CACHE["sections"], dict):
+        logger.debug("prompt_builder sections cache HIT mtime=%.3f", mtime)
+        return _CACHE["sections"]
 
     try:
-        text = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+        text = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
     except OSError:
         logger.exception("Failed to read system_prompt.md")
-        return _BASE_FALLBACK
+        return _fallback_sections()
 
-    _CACHE["base_mtime"] = mtime
-    _CACHE["base"] = text
+    sections: dict[str, str] = {
+        m.group(1): m.group(2).strip()
+        for m in _SECTION_RE.finditer(text)
+    }
+    _CACHE["mtime"] = mtime
+    _CACHE["sections"] = sections
     logger.debug(
-        "prompt_builder base prompt cache MISS - reloaded from disk chars=%d mtime=%.3f",
+        "prompt_builder sections cache MISS - reloaded sections=%s chars=%d",
+        list(sections.keys()),
         len(text),
-        mtime,
     )
-    return text
+    return sections
+
+
+def _load_base_prompt() -> str:
+    return _load_sections().get("system_prompt") or _BASE_FALLBACK
 
 
 def _load_grammar_instruction() -> str:
-    try:
-        mtime = _GRAMMAR_INSTRUCTION_PATH.stat().st_mtime
-    except OSError:
-        logger.exception("grammar_instruction.md not found at %s — using inline fallback", _GRAMMAR_INSTRUCTION_PATH)
-        return _GRAMMAR_FALLBACK
-
-    if _CACHE["grammar_mtime"] == mtime and isinstance(_CACHE["grammar"], str):
-        logger.debug("prompt_builder grammar cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["grammar"]))
-        return _CACHE["grammar"]
-
-    try:
-        text = _GRAMMAR_INSTRUCTION_PATH.read_text(encoding="utf-8").strip()
-    except OSError:
-        logger.exception("Failed to read grammar_instruction.md")
-        return _GRAMMAR_FALLBACK
-
-    _CACHE["grammar_mtime"] = mtime
-    _CACHE["grammar"] = text
-    logger.debug("prompt_builder grammar cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
-    return text
+    return _load_sections().get("grammar_instruction") or _GRAMMAR_FALLBACK
 
 
 def load_preflight_prompt() -> str:
-    try:
-        mtime = _PREFLIGHT_PROMPT_PATH.stat().st_mtime
-    except OSError:
-        logger.exception("preflight_prompt.md not found at %s — using inline fallback", _PREFLIGHT_PROMPT_PATH)
-        return _PREFLIGHT_FALLBACK
-
-    if _CACHE["preflight_mtime"] == mtime and isinstance(_CACHE["preflight"], str):
-        logger.debug("prompt_builder preflight cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["preflight"]))
-        return _CACHE["preflight"]
-
-    try:
-        text = _PREFLIGHT_PROMPT_PATH.read_text(encoding="utf-8").strip()
-    except OSError:
-        logger.exception("Failed to read preflight_prompt.md")
-        return _PREFLIGHT_FALLBACK
-
-    _CACHE["preflight_mtime"] = mtime
-    _CACHE["preflight"] = text
-    logger.debug("prompt_builder preflight cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
-    return text
+    return _load_sections().get("preflight_prompt") or _PREFLIGHT_FALLBACK
 
 
 def load_blocked_response() -> str:
-    try:
-        mtime = _BLOCKED_RESPONSE_PATH.stat().st_mtime
-    except OSError:
-        logger.exception("blocked_response.md not found at %s — using inline fallback", _BLOCKED_RESPONSE_PATH)
-        return _BLOCKED_RESPONSE_FALLBACK
-
-    if _CACHE["blocked_response_mtime"] == mtime and isinstance(_CACHE["blocked_response"], str):
-        logger.debug("prompt_builder blocked_response cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["blocked_response"]))
-        return _CACHE["blocked_response"]
-
-    try:
-        text = _BLOCKED_RESPONSE_PATH.read_text(encoding="utf-8").strip()
-    except OSError:
-        logger.exception("Failed to read blocked_response.md")
-        return _BLOCKED_RESPONSE_FALLBACK
-
-    _CACHE["blocked_response_mtime"] = mtime
-    _CACHE["blocked_response"] = text
-    logger.debug("prompt_builder blocked_response cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
-    return text
+    return _load_sections().get("blocked_response") or _BLOCKED_RESPONSE_FALLBACK
 
 
 def _resolve_include_path(include_target: str, base_path: Path) -> Path:
