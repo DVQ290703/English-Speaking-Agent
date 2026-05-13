@@ -121,8 +121,9 @@ spec:
             allowPrivilegeEscalation: false
 
           # ── Prompt Mount ───────────────────────────────────────────────────
-          # system_prompt.md is managed via ConfigMap (agent-prompts) so it can
-          # be updated without a rebuild. See deployments/backend/prompts-configmap.yaml.
+          # system_prompt.md and grammar_instruction.md are managed via ConfigMap
+          # (agent-prompts) so they can be updated without a rebuild.
+          # See deployments/backend/prompts-configmap.yaml.
           # Deploy prompt changes: kubectl apply -f deployments/backend/prompts-configmap.yaml
           volumeMounts:
             - name: agent-prompts
