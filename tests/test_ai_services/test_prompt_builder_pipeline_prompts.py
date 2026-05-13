@@ -62,7 +62,7 @@ class TestLoadBlockedResponse:
         pb._CACHE["blocked_response_mtime"] = None
         pb._CACHE["blocked_response"] = None
         result = pb.load_blocked_response()
-        assert "practice" in result.lower()
+        assert result == pb._BLOCKED_RESPONSE_FALLBACK
 
     def test_cache_hit(self, tmp_path, monkeypatch):
         f = tmp_path / "blocked_response.md"
