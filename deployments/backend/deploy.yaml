@@ -129,15 +129,6 @@ spec:
             - name: agent-prompts
               mountPath: /app/app/prompts/system_prompt.md
               subPath: system_prompt.md
-            - name: agent-prompts
-              mountPath: /app/app/prompts/grammar_instruction.md
-              subPath: grammar_instruction.md
-            - name: agent-prompts
-              mountPath: /app/app/prompts/preflight_prompt.md
-              subPath: preflight_prompt.md
-            - name: agent-prompts
-              mountPath: /app/app/prompts/blocked_response.md
-              subPath: blocked_response.md
 
       volumes:
         - name: agent-prompts
