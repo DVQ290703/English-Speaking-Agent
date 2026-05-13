@@ -10,6 +10,7 @@ logger = get_logger("prompts")
 
 _SYSTEM_PROMPT_PATH = Path(__file__).with_name("system_prompt.md")
 _TOPIC_PROMPTS_PATH = Path(__file__).with_name("topic_prompts.md")
+_GRAMMAR_INSTRUCTION_PATH = Path(__file__).with_name("grammar_instruction.md")
 _PROMPTS_ROOT = Path(__file__).resolve().parent
 
 _BASE_FALLBACK = (
@@ -18,7 +19,7 @@ _BASE_FALLBACK = (
     "the learner keep speaking."
 )
 
-GRAMMAR_INSTRUCTION = """\
+_GRAMMAR_FALLBACK = """\
 ---
 
 RESPONSE FORMAT — always wrap your output in these XML tags, no exceptions:
@@ -49,6 +50,8 @@ _CACHE: dict[str, Any] = {
     "base": None,
     "topics_signature": None,
     "topics": None,
+    "grammar_mtime": None,
+    "grammar": None,
 }
 
 
@@ -87,6 +90,29 @@ def _load_base_prompt() -> str:
         len(text),
         mtime,
     )
+    return text
+
+
+def _load_grammar_instruction() -> str:
+    try:
+        mtime = _GRAMMAR_INSTRUCTION_PATH.stat().st_mtime
+    except OSError:
+        logger.warning("grammar_instruction.md not found at %s — using inline fallback", _GRAMMAR_INSTRUCTION_PATH)
+        return _GRAMMAR_FALLBACK
+
+    if _CACHE["grammar_mtime"] == mtime and isinstance(_CACHE["grammar"], str):
+        logger.debug("prompt_builder grammar cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["grammar"]))
+        return _CACHE["grammar"]
+
+    try:
+        text = _GRAMMAR_INSTRUCTION_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.exception("Failed to read grammar_instruction.md")
+        return _GRAMMAR_FALLBACK
+
+    _CACHE["grammar_mtime"] = mtime
+    _CACHE["grammar"] = text
+    logger.debug("prompt_builder grammar cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
     return text
 
 
@@ -298,7 +324,7 @@ def build_system_prompt(
         logger.debug("prompt_builder no category provided - base prompt only")
 
     if include_grammar:
-        prompt_parts.append(GRAMMAR_INSTRUCTION)
+        prompt_parts.append(_load_grammar_instruction())
         logger.debug("prompt_builder layer=grammar injected")
 
     final_prompt = "\n\n".join(part for part in prompt_parts if part)
