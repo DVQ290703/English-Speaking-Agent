@@ -18,6 +18,7 @@ from app.core.logger import logger
 
 _RESPONSE_TAG_RE = re.compile(r"<response>(.*?)</response>", re.DOTALL)
 _GRAMMAR_TAG_RE = re.compile(r"<grammar>(.*?)</grammar>", re.DOTALL)
+_SUGGESTIONS_TAG_RE = re.compile(r"<suggestions>(.*?)</suggestions>", re.DOTALL)
 _ANNOTATION_RE = re.compile(r"\{([^}]*?)->([^}]*?)\}")
 
 _CAT_MAP: dict[str, str] = {
@@ -56,20 +57,51 @@ class GrammarData:
     overall_score: int = 100
 
 
-def split_combined_output(raw: str) -> tuple[str, str | None]:
-    """Split <response>…</response><grammar>…</grammar> LLM output.
+def _parse_suggestions_raw(suggestions_raw: str | None) -> list[str]:
+    """Parse compact suggestions JSON. Never raises."""
+    if not suggestions_raw:
+        return []
+    try:
+        data = json.loads(suggestions_raw)
+    except json.JSONDecodeError:
+        logger.warning("parse_suggestions: failed to parse suggestions JSON")
+        return []
 
-    Returns (response_text, grammar_raw_json).
-    Falls back to (raw.strip(), None) when <response> tag is missing.
-    """
+    values = data.get("suggestions") if isinstance(data, dict) else None
+    if not isinstance(values, list):
+        return []
+
+    suggestions: list[str] = []
+    for value in values:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned:
+                suggestions.append(cleaned)
+        if len(suggestions) == 3:
+            break
+    return suggestions
+
+
+def split_combined_output_with_suggestions(raw: str) -> tuple[str, str | None, list[str]]:
+    """Split response, grammar, and suggestions sections from LLM output."""
     response_match = _RESPONSE_TAG_RE.search(raw)
     grammar_match = _GRAMMAR_TAG_RE.search(raw)
+    suggestions_match = _SUGGESTIONS_TAG_RE.search(raw)
+
     grammar_raw = grammar_match.group(1).strip() if grammar_match else None
+    suggestions_raw = suggestions_match.group(1).strip() if suggestions_match else None
+
     if response_match:
         response_text = response_match.group(1).strip()
     else:
-        # No <response> tag — strip the <grammar> block before using raw as fallback
-        response_text = _GRAMMAR_TAG_RE.sub("", raw).strip()
+        response_text = _SUGGESTIONS_TAG_RE.sub("", _GRAMMAR_TAG_RE.sub("", raw)).strip()
+
+    return response_text, grammar_raw, _parse_suggestions_raw(suggestions_raw)
+
+
+def split_combined_output(raw: str) -> tuple[str, str | None]:
+    """Split response and grammar from LLM output, preserving the original API."""
+    response_text, grammar_raw, _suggestions = split_combined_output_with_suggestions(raw)
     return response_text, grammar_raw
 
 
