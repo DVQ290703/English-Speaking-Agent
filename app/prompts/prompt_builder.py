@@ -97,7 +97,7 @@ def _load_grammar_instruction() -> str:
     try:
         mtime = _GRAMMAR_INSTRUCTION_PATH.stat().st_mtime
     except OSError:
-        logger.warning("grammar_instruction.md not found at %s — using inline fallback", _GRAMMAR_INSTRUCTION_PATH)
+        logger.exception("grammar_instruction.md not found at %s — using inline fallback", _GRAMMAR_INSTRUCTION_PATH)
         return _GRAMMAR_FALLBACK
 
     if _CACHE["grammar_mtime"] == mtime and isinstance(_CACHE["grammar"], str):
