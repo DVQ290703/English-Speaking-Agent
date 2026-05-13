@@ -323,7 +323,7 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_raw, tool_steps = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_raw, tool_steps, _suggestions = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
