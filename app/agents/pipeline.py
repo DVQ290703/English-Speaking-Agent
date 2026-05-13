@@ -106,7 +106,12 @@ class VoiceAgentPipeline:
                     continue
                 if ":" in line:
                     key, value = line.split(":", 1)
-                    lines[key.strip().upper()] = value.strip().upper()
+                    normalized_key = key.strip().upper()
+                    normalized_value = value.strip().upper()
+                    if normalized_key in {"SAFE", "UNSAFE"}:
+                        lines["SAFETY"] = normalized_key
+                    else:
+                        lines[normalized_key] = normalized_value
                 elif line.upper().startswith(("SAFE", "UNSAFE")):
                     lines["SAFETY"] = line.upper()
             blocked = lines.get("SAFETY", "SAFE").startswith("UNSAFE")

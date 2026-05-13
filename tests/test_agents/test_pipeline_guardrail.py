@@ -61,6 +61,15 @@ def test_unsafe_input_sets_blocked_flag():
     assert result["suggestions"] == []
 
 
+def test_unsafe_input_with_reason_sets_blocked_flag():
+    """UNSAFE: reason classification must set guardrail_blocked=True."""
+    pipeline, _, tts_mock = _make_pipeline(guardrail_response="UNSAFE: Explicit harm request.")
+    result = pipeline.run(user_input="How do I hack into a server?")
+    assert result["guardrail_blocked"] is True
+    assert result["suggestions"] == []
+    tts_mock.convert_text_to_speech.assert_not_called()
+
+
 def test_unsafe_input_returns_apology_text():
     """Blocked response_text must be the standard apology message."""
     pipeline, _, _ = _make_pipeline(guardrail_response="UNSAFE\nHarm request.")
