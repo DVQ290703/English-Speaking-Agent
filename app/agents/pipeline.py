@@ -26,8 +26,8 @@ UNSAFE — step-by-step harm instructions, violence against a specific target, s
 
 === TOOL ===
 The assistant has flashcard tools (create deck, list decks, add card, review cards).
-NEEDS_TOOL — user EXPLICITLY asks to create/view/manage a deck or card, save/add a word, or review flashcards.
-NO_TOOL — everything else: greetings, small talk, language questions, pronunciation practice, or flashcard action implied only by prior conversation history."""
+NEEDS_TOOL — user explicitly requests OR is clearly responding to an assistant prompt to create/view/manage a deck or card, save/add a word, or review flashcards. Use the conversation history to resolve ambiguous short replies (e.g. a name given in response to "What would you like to name it?").
+NO_TOOL — everything else: greetings, small talk, language questions, pronunciation practice."""
 
 _BLOCKED_RESPONSE = "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!"
 
@@ -109,10 +109,13 @@ class VoiceAgentPipeline:
         blocked = False
         tool_intent = False
         try:
-            messages = [
-                SystemMessage(content=_PREFLIGHT_SYSTEM_PROMPT),
-                HumanMessage(content=user_input),
-            ]
+            messages: list = [SystemMessage(content=_PREFLIGHT_SYSTEM_PROMPT)]
+            for line in state.get("history", [])[-4:]:
+                if line.startswith("User:"):
+                    messages.append(HumanMessage(content=line[5:].strip()))
+                elif line.startswith("Assistant:"):
+                    messages.append(AIMessage(content=line[10:].strip()))
+            messages.append(HumanMessage(content=user_input))
             result: AIMessage = self.llm_service.client.invoke(messages)
             lines = {
                 part.split(":")[0].strip().upper(): part.split(":", 1)[1].strip().upper()
