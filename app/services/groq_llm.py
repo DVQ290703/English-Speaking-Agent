@@ -1,5 +1,6 @@
 """Groq LLM service — generates speech-friendly responses via ChatGroq."""
 
+import json
 import os
 import time
 from pathlib import Path
@@ -110,3 +111,87 @@ class GroqLLMService:
 
         logger.info("GroqLLM response_length=%d", len(result))
         return result
+
+    def generate_response_with_grammar(
+        self,
+        user_input: str,
+        history: list[str] | None = None,
+        category: str | None = None,
+        topic: str | None = None,
+    ) -> tuple[str, str | None]:
+        """Generate a legacy JSON response with a compact grammar payload."""
+        history = history or []
+        logger.info(
+            "GroqLLM generate_response_with_grammar model=%s history_lines=%d input_length=%d",
+            self.model_name,
+            len(history),
+            len(user_input),
+        )
+
+        base_prompt = build_system_prompt(
+            category=category,
+            topic=topic,
+            include_grammar=False,
+        )
+        grammar_prompt = (
+            f"{base_prompt or SYSTEM_PROMPT}\n\n"
+            "Return only a valid JSON object with keys response_text and grammar. "
+            "grammar must use the compact shape "
+            '{"ann":"...","err":[{"cat":"...","sev":1,"msg":"..."}],"score":100}.'
+        )
+        messages: list = [SystemMessage(content=grammar_prompt)]
+
+        for line in history[-8:]:
+            if line.startswith("User:"):
+                messages.append(HumanMessage(content=line[5:].strip()))
+            elif line.startswith("Assistant:"):
+                messages.append(AIMessage(content=line[10:].strip()))
+
+        messages.append(HumanMessage(content=user_input))
+        structured_client = self.client.bind(response_format={"type": "json_object"})
+
+        with span_context("llm.generate_response_with_grammar", kind="llm") as span:
+            raw_output = ""
+            ttft_ms: float | None = None
+            t0 = time.perf_counter()
+            final_chunk = None
+            for chunk in structured_client.stream(messages):
+                content = chunk.content or ""
+                if ttft_ms is None and content:
+                    ttft_ms = (time.perf_counter() - t0) * 1000
+                raw_output += content
+                final_chunk = chunk
+
+            usage: dict = {}
+            if final_chunk is not None:
+                usage = getattr(final_chunk, "usage_metadata", {}) or {}
+
+            span.set(
+                model=self.model_name,
+                prompt_tokens=usage.get("input_tokens", 0),
+                completion_tokens=usage.get("output_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                ttft_ms=ttft_ms,
+            )
+
+        try:
+            data = json.loads(raw_output)
+            if not isinstance(data, dict):
+                raise ValueError("structured response is not a JSON object")
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.warning("GroqLLM grammar response invalid JSON; falling back to plain response")
+            return self.generate_response(
+                user_input,
+                history=history,
+                category=category,
+                topic=topic,
+            ), None
+
+        response_text = str(data.get("response_text") or "").strip()
+        grammar = data.get("grammar")
+        grammar_raw = (
+            json.dumps(grammar, ensure_ascii=False, separators=(",", ":"))
+            if grammar is not None
+            else None
+        )
+        return response_text, grammar_raw
