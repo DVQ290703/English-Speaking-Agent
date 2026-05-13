@@ -44,3 +44,31 @@ class TestLoadPreflightPrompt:
         pb._CACHE["preflight_mtime"] = f.stat().st_mtime
         pb._CACHE["preflight"] = "cached"
         assert pb.load_preflight_prompt() == "cached"
+
+
+class TestLoadBlockedResponse:
+    def test_returns_file_content_when_file_exists(self, tmp_path, monkeypatch):
+        f = tmp_path / "blocked_response.md"
+        f.write_text("blocked content", encoding="utf-8")
+        import app.prompts.prompt_builder as pb
+        monkeypatch.setattr(pb, "_BLOCKED_RESPONSE_PATH", f)
+        pb._CACHE["blocked_response_mtime"] = None
+        pb._CACHE["blocked_response"] = None
+        assert pb.load_blocked_response() == "blocked content"
+
+    def test_returns_fallback_when_file_missing(self, tmp_path, monkeypatch):
+        import app.prompts.prompt_builder as pb
+        monkeypatch.setattr(pb, "_BLOCKED_RESPONSE_PATH", tmp_path / "nonexistent.md")
+        pb._CACHE["blocked_response_mtime"] = None
+        pb._CACHE["blocked_response"] = None
+        result = pb.load_blocked_response()
+        assert "practice" in result.lower()
+
+    def test_cache_hit(self, tmp_path, monkeypatch):
+        f = tmp_path / "blocked_response.md"
+        f.write_text("cached blocked", encoding="utf-8")
+        import app.prompts.prompt_builder as pb
+        monkeypatch.setattr(pb, "_BLOCKED_RESPONSE_PATH", f)
+        pb._CACHE["blocked_response_mtime"] = f.stat().st_mtime
+        pb._CACHE["blocked_response"] = "cached blocked"
+        assert pb.load_blocked_response() == "cached blocked"

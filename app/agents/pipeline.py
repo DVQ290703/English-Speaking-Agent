@@ -9,12 +9,10 @@ from app.agents.tools.flashcard_tools import FLASHCARD_TOOLS
 from app.core.logger import logger
 from app.core.telemetry import span_context
 from app.core.settings import TOOL_CALL_CAP as _TOOL_CALL_CAP
+from app.prompts.prompt_builder import load_blocked_response, load_preflight_prompt
 from app.services.elevenlabs_tts import ElevenLabsTTS
 from app.services.groq_llm import GroqLLMService
 from app.agents.state import AgentState
-
-_BLOCKED_RESPONSE = "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!"
-
 
 def _sanitize_tool_messages(messages: list) -> list:
     """Ensure all ToolMessages have non-empty string content.
@@ -93,7 +91,6 @@ class VoiceAgentPipeline:
         blocked = False
         tool_intent = False
         try:
-            from app.prompts.prompt_builder import load_preflight_prompt
             messages: list = [SystemMessage(content=load_preflight_prompt())]
             for line in state.get("history", [])[-4:]:
                 if line.startswith("User:"):
@@ -119,7 +116,7 @@ class VoiceAgentPipeline:
                 **state,
                 "guardrail_blocked": True,
                 "tool_intent": False,
-                "response_text": _BLOCKED_RESPONSE,
+                "response_text": load_blocked_response(),
                 "audio_bytes": b"",
             }
 

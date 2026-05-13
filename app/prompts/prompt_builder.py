@@ -167,6 +167,29 @@ def load_preflight_prompt() -> str:
     return text
 
 
+def load_blocked_response() -> str:
+    try:
+        mtime = _BLOCKED_RESPONSE_PATH.stat().st_mtime
+    except OSError:
+        logger.exception("blocked_response.md not found at %s — using inline fallback", _BLOCKED_RESPONSE_PATH)
+        return _BLOCKED_RESPONSE_FALLBACK
+
+    if _CACHE["blocked_response_mtime"] == mtime and isinstance(_CACHE["blocked_response"], str):
+        logger.debug("prompt_builder blocked_response cache HIT mtime=%.3f chars=%d", mtime, len(_CACHE["blocked_response"]))
+        return _CACHE["blocked_response"]
+
+    try:
+        text = _BLOCKED_RESPONSE_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.exception("Failed to read blocked_response.md")
+        return _BLOCKED_RESPONSE_FALLBACK
+
+    _CACHE["blocked_response_mtime"] = mtime
+    _CACHE["blocked_response"] = text
+    logger.debug("prompt_builder blocked_response cache MISS - reloaded from disk chars=%d mtime=%.3f", len(text), mtime)
+    return text
+
+
 def _resolve_include_path(include_target: str, base_path: Path) -> Path:
     candidate = (base_path.parent / include_target.strip()).resolve()
     try:
