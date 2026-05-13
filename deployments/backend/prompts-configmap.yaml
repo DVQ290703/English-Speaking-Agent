@@ -64,8 +64,8 @@ data:
     - "eg" field is optional — omit for simple or obvious errors
     - No errors: ann=<original message unchanged>, err=[], score=100
     - score = 100 minus (critical_count×15 + major_count×8 + minor_count×3), minimum 0
-    - Include the <grammar> block ONLY in your final conversational reply.
-      Do NOT include it when you are calling tools.
+    - Include the <grammar> block in every text reply — even turns where you also called a tool.
+      Do NOT include it only when your response IS a tool call with no spoken text.
     <!-- END: grammar_instruction -->
 
     <!-- BEGIN: preflight_prompt -->
