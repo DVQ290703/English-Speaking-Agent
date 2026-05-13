@@ -6,6 +6,9 @@
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_conversations_deleted_at ON conversations(deleted_at) WHERE deleted_at IS NOT NULL;
 
+-- Store next-turn suggestions generated for assistant messages
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS suggestions JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 -- Allow standalone assessments: message_id nullable, add user_id
 ALTER TABLE pronunciation_assessments ALTER COLUMN message_id DROP NOT NULL;
 ALTER TABLE pronunciation_assessments ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
