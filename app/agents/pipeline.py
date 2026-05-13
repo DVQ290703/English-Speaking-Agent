@@ -138,6 +138,12 @@ class VoiceAgentPipeline:
             include_grammar=True,
         )
         base_prompt = dynamic_prompt or SYSTEM_PROMPT
+        if state.get("tool_intent") and not iterations:
+            base_prompt += (
+                "\n\n[TOOL CONTEXT] The user's current message continues an ongoing flashcard "
+                "workflow. Use the conversation history to determine the correct flashcard tool "
+                "and arguments — do not ask for clarification, infer from context and call the tool now."
+            )
         user_id = state.get("user_id")
         messages_to_send: list = [SystemMessage(content=base_prompt)]
 
