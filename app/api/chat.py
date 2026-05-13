@@ -323,7 +323,7 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_raw, tool_steps, _suggestions = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
@@ -340,6 +340,17 @@ def chat_respond(
         response_audio_bytes = _synthesize_audio_bytes(output_result.text, voice_gender=voice_gender, voice_accent=voice_accent)
     response_text = output_result.text
     _all_flags.extend(output_result.flags)
+
+    redacted_suggestions: list[str] = []
+    for suggestion in suggestions:
+        suggestion_result = _output_guardrails.check(suggestion)
+        redacted_text = suggestion_result.text
+        if suggestion.endswith((".", "!", "?")) and not redacted_text.endswith(suggestion[-1]):
+            redacted_text = f"{redacted_text}{suggestion[-1]}"
+        redacted_suggestions.append(redacted_text)
+        _all_flags.extend(suggestion_result.flags)
+    suggestions = redacted_suggestions
+
     _guardrail_decisions["output_pii_redacted"] = "contains_pii" in _all_flags
     # ── End Output Guardrails ──────────────────────────────────────────────
 
@@ -379,10 +390,10 @@ def chat_respond(
             )
             cur.execute(
                 """
-                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content)
-                VALUES (%s, %s, %s, 'assistant', 'text', %s)
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content, suggestions)
+                VALUES (%s, %s, %s, 'assistant', 'text', %s, %s::jsonb)
                 """,
-                (assistant_message_id, conv_id, turn_id, response_text),
+                (assistant_message_id, conv_id, turn_id, response_text, _json.dumps(suggestions)),
             )
             cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
 
@@ -510,4 +521,5 @@ def chat_respond(
         grammar_summary=grammar_summary,
         grammar_detail=grammar_detail,
         tool_steps=tool_steps,
+        suggestions=suggestions,
     )

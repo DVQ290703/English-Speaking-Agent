@@ -137,6 +137,7 @@ class ChatResponse(BaseModel):
     )
     grammar_detail: GrammarDetailResponse | None = None
     tool_steps: list[ToolCallStep] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class MessageOut(BaseModel):

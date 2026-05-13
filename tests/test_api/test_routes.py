@@ -14,6 +14,7 @@ All external services (DB, MinIO, LLM, TTS, STT) are mocked.
 import base64
 import hashlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -703,6 +704,59 @@ class TestChatRespond:
                 headers=self._headers(),
             )
         assert r.status_code == 404
+
+    def test_chat_respond_returns_and_stores_suggestions(self):
+        suggestions = [
+            "I usually practice after work.",
+            "What should I focus on next?",
+            "In my experience, short daily practice works best.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, cursor):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"] == suggestions
+
+        assistant_insert = [
+            call for call in cursor.execute.call_args_list
+            if "insert into messages" in " ".join(call.args[0].lower().split())
+            and "'assistant'" in call.args[0].lower()
+        ][0]
+        assert assistant_insert.args[1][-1] == json.dumps(suggestions)
+
+    def test_chat_respond_redacts_pii_from_suggestions(self):
+        suggestions = [
+            "Email me at learner@example.com.",
+            "What should I practice next?",
+            "In my experience, repetition helps.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, _):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"][0] == "Email me at [EMAIL REDACTED]."
 
 
 # ===========================================================================
