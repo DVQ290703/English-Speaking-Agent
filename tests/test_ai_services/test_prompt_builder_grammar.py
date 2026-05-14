@@ -154,3 +154,35 @@ class TestBuildSystemPromptGrammar:
 
         assert "GRAMMAR BLOCK" in prompt
         assert "SUGGESTIONS BLOCK" not in prompt
+
+    def test_grammar_and_suggestions_absent_when_use_structured_output(self, tmp_path, monkeypatch):
+        import app.prompts.prompt_builder as pb
+
+        f = _write_sections_file(
+            tmp_path,
+            system_prompt="base",
+            grammar_instruction="GRAMMAR BLOCK",
+            suggestions_instruction="SUGGESTIONS BLOCK",
+        )
+        monkeypatch.setattr(pb, "_SYSTEM_PROMPT_PATH", f)
+        _reset_cache(pb)
+
+        prompt = pb.build_system_prompt(include_grammar=True, use_structured_output=True)
+        assert "GRAMMAR BLOCK" not in prompt
+        assert "SUGGESTIONS BLOCK" not in prompt
+
+    def test_structured_output_false_preserves_existing_behaviour(self, tmp_path, monkeypatch):
+        import app.prompts.prompt_builder as pb
+
+        f = _write_sections_file(
+            tmp_path,
+            system_prompt="base",
+            grammar_instruction="GRAMMAR BLOCK",
+            suggestions_instruction="SUGGESTIONS BLOCK",
+        )
+        monkeypatch.setattr(pb, "_SYSTEM_PROMPT_PATH", f)
+        _reset_cache(pb)
+
+        prompt = pb.build_system_prompt(include_grammar=True, use_structured_output=False)
+        assert "GRAMMAR BLOCK" in prompt
+        assert "SUGGESTIONS BLOCK" in prompt

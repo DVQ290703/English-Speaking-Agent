@@ -331,14 +331,16 @@ def build_system_prompt(
     topic: str | None = None,
     include_grammar: bool = True,
     include_suggestions: bool = True,
+    use_structured_output: bool = False,
 ) -> str:
     """Compose a system prompt with optional grammar and suggestions instructions."""
     logger.debug(
-        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s include_suggestions=%s",
+        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s include_suggestions=%s use_structured_output=%s",
         category,
         topic,
         include_grammar,
         include_suggestions,
+        use_structured_output,
     )
 
     prompt_parts = [_load_base_prompt()]
@@ -407,12 +409,14 @@ def build_system_prompt(
     else:
         logger.debug("prompt_builder no category provided - base prompt only")
 
-    if include_grammar:
+    if include_grammar and not use_structured_output:
         prompt_parts.append(_load_grammar_instruction())
         logger.debug("prompt_builder layer=grammar injected")
         if include_suggestions:
             prompt_parts.append(_load_suggestions_instruction())
             logger.debug("prompt_builder layer=suggestions injected")
+    elif include_grammar and use_structured_output:
+        logger.debug("prompt_builder layer=grammar skipped use_structured_output=True")
 
     final_prompt = "\n\n".join(part for part in prompt_parts if part)
     logger.debug(
