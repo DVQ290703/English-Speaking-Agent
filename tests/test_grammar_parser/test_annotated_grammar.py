@@ -224,3 +224,50 @@ class TestParseAnnotatedGrammar:
         raw = '{"ann":"good sentence","err":[],"score":95}'
         result = self._call(raw, "good sentence")
         assert result.overall_score == 95
+
+
+class TestGrammarDataFromStructuredOutput:
+    def test_none_grammar_returns_empty_data_and_none_raw(self):
+        from app.services.grammar_parser import grammar_data_from_structured_output
+        data, raw = grammar_data_from_structured_output(None, "hello")
+        assert data.errors == []
+        assert data.overall_score == 100
+        assert raw is None
+
+    def test_grammar_with_no_errors(self):
+        from app.agents.output_models import GrammarOutput
+        from app.services.grammar_parser import grammar_data_from_structured_output
+        g = GrammarOutput(ann="I went to school.", err=[], score=100)
+        data, raw = grammar_data_from_structured_output(g, "I went to school.")
+        assert data.errors == []
+        assert data.overall_score == 100
+        assert raw is not None
+        import json
+        parsed = json.loads(raw)
+        assert parsed["score"] == 100
+
+    def test_grammar_with_error_produces_grammar_data(self):
+        from app.agents.output_models import GrammarOutput, GrammarErrorOutput
+        from app.services.grammar_parser import grammar_data_from_structured_output
+        g = GrammarOutput(
+            ann="yesterday I {go->went} to school",
+            err=[GrammarErrorOutput(cat="vt", sev=2, msg="Past tense required.")],
+            score=85,
+        )
+        data, raw = grammar_data_from_structured_output(g, "yesterday I go to school")
+        assert len(data.errors) == 1
+        assert data.errors[0].original == "go"
+        assert data.errors[0].corrected == "went"
+        assert data.overall_score == 85
+        assert raw is not None
+
+    def test_grammar_raw_is_valid_json_with_required_keys(self):
+        from app.agents.output_models import GrammarOutput
+        from app.services.grammar_parser import grammar_data_from_structured_output
+        import json
+        g = GrammarOutput(ann="Good.", err=[], score=100)
+        _, raw = grammar_data_from_structured_output(g, "Good.")
+        parsed = json.loads(raw)
+        assert "ann" in parsed
+        assert "err" in parsed
+        assert "score" in parsed

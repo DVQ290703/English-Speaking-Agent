@@ -16,6 +16,11 @@ from dataclasses import dataclass, field
 
 from app.core.logger import logger
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.agents.output_models import GrammarOutput
+
 _RESPONSE_TAG_RE = re.compile(r"<response>(.*?)</response>", re.DOTALL)
 _GRAMMAR_TAG_RE = re.compile(r"<grammar>(.*?)</grammar>", re.DOTALL)
 _SUGGESTIONS_TAG_RE = re.compile(r"<suggestions[^>]*>(.*?)</suggestions>", re.DOTALL)
@@ -181,3 +186,18 @@ def parse_annotated_grammar(grammar_raw: str | None, user_input: str) -> Grammar
             len(user_input),
         )
         return GrammarData()
+
+
+def grammar_data_from_structured_output(
+    grammar: "GrammarOutput | None",
+    user_input: str,
+) -> tuple[GrammarData, str | None]:
+    """Convert a typed GrammarOutput Pydantic model into (GrammarData, grammar_raw JSON).
+
+    Returns (GrammarData(), None) when grammar is None (no errors found).
+    Reuses parse_annotated_grammar so all existing annotation logic is preserved.
+    """
+    if grammar is None:
+        return GrammarData(), None
+    grammar_raw = grammar.model_dump_json()
+    return parse_annotated_grammar(grammar_raw, user_input), grammar_raw
