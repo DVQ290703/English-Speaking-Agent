@@ -18,7 +18,7 @@ from app.core.logger import logger
 
 _RESPONSE_TAG_RE = re.compile(r"<response>(.*?)</response>", re.DOTALL)
 _GRAMMAR_TAG_RE = re.compile(r"<grammar>(.*?)</grammar>", re.DOTALL)
-_SUGGESTIONS_TAG_RE = re.compile(r"<suggestions>(.*?)</suggestions>", re.DOTALL)
+_SUGGESTIONS_TAG_RE = re.compile(r"<suggestions[^>]*>(.*?)</suggestions>", re.DOTALL)
 _ANNOTATION_RE = re.compile(r"\{([^}]*?)->([^}]*?)\}")
 
 _CAT_MAP: dict[str, str] = {
