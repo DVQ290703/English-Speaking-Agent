@@ -299,12 +299,13 @@ def build_system_prompt(
     include_grammar: bool = True,
     include_suggestions: bool = True,
 ) -> str:
-    """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
+    """Compose a system prompt with optional grammar and suggestions instructions."""
     logger.debug(
-        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s",
+        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s include_suggestions=%s",
         category,
         topic,
         include_grammar,
+        include_suggestions,
     )
 
     prompt_parts = [_load_base_prompt()]

@@ -237,7 +237,7 @@ class MessageWithScoreOut(BaseModel):
     input_mode: str | None = None
     text_content: str | None = None
     created_at: datetime
-    suggestions: list[str] = []
+    suggestions: list[str] = Field(default_factory=list)
     audio_url: str | None = None
     assistant_audio_url: str | None = None
     score: MessageScoreOut | None = None
