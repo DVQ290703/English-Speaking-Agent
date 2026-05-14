@@ -20,7 +20,8 @@ _SECTION_RE = re.compile(
 _BASE_FALLBACK = (
     "You are an AI English-speaking coach. Keep replies short, natural, "
     "supportive, and easy to say aloud. Ask one follow-up question that helps "
-    "the learner keep speaking."
+    "the learner keep speaking. Greetings and check-ins like 'Can you hear me?' "
+    "are normal conversation — respond to them warmly, never refuse."
 )
 
 _GRAMMAR_FALLBACK = """\
@@ -29,14 +30,14 @@ _GRAMMAR_FALLBACK = """\
 RESPONSE FORMAT — always wrap your output in these XML tags, no exceptions:
 
 <response>
-[Your conversational coaching reply here — natural, warm, encouraging]
+[Your conversational coaching reply here — natural, warm, encouraging. PLAIN TEXT ONLY: no **bold**, no *italics*, no markdown.]
 </response>
 <grammar>
 {"ann":"<user sentence with {wrong->correct} markers>","err":[{"cat":"<code>","sev":<1|2|3>,"msg":"<one explanation sentence>","eg":"<optional example>"}],"score":<0-100>}
 </grammar>
 
 Grammar annotation rules:
-- ann: copy the user's LATEST message verbatim, wrapping each error as {wrong->correct}
+- ann: copy the user's LATEST message verbatim, wrapping EVERY error as {wrong->correct} — do not skip errors
 - Insertion (missing word): {->word}  |  Deletion (extra word): {word->}
 - Category codes: vt=verb tense, art=article, prep=preposition, sv=subject-verb agreement,
   sp=spelling, wc=word choice, punc=punctuation, wo=word order, pl=plural/singular, other=catch-all
@@ -45,6 +46,8 @@ Grammar annotation rules:
 - "eg" field is optional — omit for simple or obvious errors
 - No errors: ann=<original message unchanged>, err=[], score=100
 - score = 100 minus (critical_count×15 + major_count×8 + minor_count×3), minimum 0
+- ann/err captures ALL errors. The <response> block speaks about only the ONE most impactful error (highest severity). These are independent — never omit an error from ann just because you didn't mention it in <response>.
+- Context-aware tense: use the full conversation history to determine the correct tense. If prior turns or time words (yesterday, last week, earlier) establish a past-tense context, a present-tense verb in the user's message is a verb-tense error (vt, sev:2). Example: user said "yesterday I went to the cinema" then says "I see a great film" → flag {see->saw}.
 - Include the <grammar> block ONLY in your final conversational reply.
   Do NOT include it when you are calling tools.\
 """
@@ -117,7 +120,7 @@ def _load_sections() -> dict[str, str]:
     try:
         mtime = _SYSTEM_PROMPT_PATH.stat().st_mtime
     except OSError:
-        logger.exception("system_prompt.md not found at %s", _SYSTEM_PROMPT_PATH)
+        logger.exception("system_prompt.md not found at %s — ALL prompts will use fallbacks", _SYSTEM_PROMPT_PATH)
         return _fallback_sections()
 
     if _CACHE["mtime"] == mtime and isinstance(_CACHE["sections"], dict):
@@ -127,7 +130,7 @@ def _load_sections() -> dict[str, str]:
     try:
         text = _SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
     except OSError:
-        logger.exception("Failed to read system_prompt.md")
+        logger.exception("Failed to read system_prompt.md — ALL prompts will use fallbacks")
         return _fallback_sections()
 
     sections: dict[str, str] = {
@@ -146,23 +149,53 @@ def _load_sections() -> dict[str, str]:
 
 
 def _load_base_prompt() -> str:
-    return _load_sections().get("system_prompt") or _BASE_FALLBACK
+    sections = _load_sections()
+    value = sections.get("system_prompt")
+    if value:
+        logger.info("prompt_builder base_prompt=file")
+        return value
+    logger.info("prompt_builder base_prompt=fallback (section missing from file)")
+    return _BASE_FALLBACK
 
 
 def _load_grammar_instruction() -> str:
-    return _load_sections().get("grammar_instruction") or _GRAMMAR_FALLBACK
+    sections = _load_sections()
+    value = sections.get("grammar_instruction")
+    if value:
+        logger.info("prompt_builder grammar_instruction=file")
+        return value
+    logger.info("prompt_builder grammar_instruction=fallback (section missing from file)")
+    return _GRAMMAR_FALLBACK
 
 
 def _load_suggestions_instruction() -> str:
-    return _load_sections().get("suggestions_instruction") or _SUGGESTIONS_FALLBACK
+    sections = _load_sections()
+    value = sections.get("suggestions_instruction")
+    if value:
+        logger.info("prompt_builder suggestions_instruction=file")
+        return value
+    logger.info("prompt_builder suggestions_instruction=fallback (section missing from file)")
+    return _SUGGESTIONS_FALLBACK
 
 
 def load_preflight_prompt() -> str:
-    return _load_sections().get("preflight_prompt") or _PREFLIGHT_FALLBACK
+    sections = _load_sections()
+    value = sections.get("preflight_prompt")
+    if value:
+        logger.info("prompt_builder preflight_prompt=file")
+        return value
+    logger.info("prompt_builder preflight_prompt=fallback (section missing from file)")
+    return _PREFLIGHT_FALLBACK
 
 
 def load_blocked_response() -> str:
-    return _load_sections().get("blocked_response") or _BLOCKED_RESPONSE_FALLBACK
+    sections = _load_sections()
+    value = sections.get("blocked_response")
+    if value:
+        logger.info("prompt_builder blocked_response=file")
+        return value
+    logger.info("prompt_builder blocked_response=fallback (section missing from file)")
+    return _BLOCKED_RESPONSE_FALLBACK
 
 
 def _resolve_include_path(include_target: str, base_path: Path) -> Path:

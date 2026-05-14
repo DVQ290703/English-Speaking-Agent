@@ -62,7 +62,7 @@ def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
         return []
     cur.execute(
         """
-        SELECT m.role, m.text_content
+        SELECT m.role, m.text_content, m.raw_content
         FROM messages m
         JOIN conversations c ON c.id = m.conversation_id
         WHERE m.conversation_id = %s
@@ -75,7 +75,7 @@ def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
         (conv_id, limit),
     )
     rows = cur.fetchall()
-    return [{"role": row[0], "content": row[1]} for row in reversed(rows)]
+    return [{"role": row[0], "content": row[1], "raw_content": row[2]} for row in reversed(rows)]
 
 
 def _insert_audio_asset(
@@ -311,11 +311,14 @@ def chat_respond(
             logger.exception("MinIO upload failed for user audio message_id=%s", user_message_id)
 
     # Convert DB history (list[dict]) to the "Role: text" string format the pipeline expects.
+    # For assistant turns, prefer raw_content (full XML) over text_content so the model sees
+    # its prior format and continues to use XML tags — avoids few-shot format contamination.
     # category and topic are passed directly to run_langraph_agent() for typed prompt routing.
     history_lines: list[str] = []
     for msg in conversation_history:
         role_label = "User" if msg["role"] == "user" else "Assistant"
-        history_lines.append(f"{role_label}: {msg['content']}")
+        content = msg.get("raw_content") or msg["content"]
+        history_lines.append(f"{role_label}: {content}")
 
     set_msg_id(assistant_message_id)
     logger.info(
@@ -323,7 +326,7 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions = run_langraph_agent(
+    response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions, raw_output = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
@@ -390,10 +393,10 @@ def chat_respond(
             )
             cur.execute(
                 """
-                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content, suggestions)
-                VALUES (%s, %s, %s, 'assistant', 'text', %s, %s::jsonb)
+                INSERT INTO messages (id, conversation_id, turn_id, role, input_mode, text_content, raw_content, suggestions)
+                VALUES (%s, %s, %s, 'assistant', 'text', %s, %s, %s::jsonb)
                 """,
-                (assistant_message_id, conv_id, turn_id, response_text, _json.dumps(suggestions)),
+                (assistant_message_id, conv_id, turn_id, response_text, raw_output, _json.dumps(suggestions)),
             )
             cur.execute("UPDATE conversations SET updated_at = NOW() WHERE id = %s", (conv_id,))
 

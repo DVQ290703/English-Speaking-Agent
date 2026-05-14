@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     voice_gender: str | None
     voice_accent: str | None
     grammar_raw: str | None  # raw compact JSON from <grammar> tag; None on failure
+    raw_output: str | None   # full LLM output including all XML tags; used to persist format context in history
     suggestions: list[str]   # next-turn suggestions parsed from the final LLM response
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"

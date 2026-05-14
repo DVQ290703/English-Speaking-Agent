@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role                TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     input_mode          TEXT CHECK (input_mode IN ('text', 'audio')),
     text_content        TEXT,
+    raw_content         TEXT,
     suggestions         JSONB NOT NULL DEFAULT '[]',
     language_code       TEXT CHECK (language_code ~ '^[a-z]{2}(-[A-Z]{2})?$'),
     token_count         INT,

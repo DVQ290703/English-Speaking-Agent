@@ -148,7 +148,12 @@ class VoiceAgentPipeline:
             topic=state.get("topic"),
             include_grammar=True,
         )
-        base_prompt = dynamic_prompt or SYSTEM_PROMPT
+        if dynamic_prompt:
+            logger.info("respond_node system_prompt=dynamic chars=%d", len(dynamic_prompt))
+            base_prompt = dynamic_prompt
+        else:
+            logger.info("respond_node system_prompt=fallback SYSTEM_PROMPT (build_system_prompt returned empty)")
+            base_prompt = SYSTEM_PROMPT
         if state.get("tool_intent") and not iterations:
             base_prompt += (
                 "\n\n[TOOL CONTEXT] The user's current message continues an ongoing flashcard "
@@ -255,11 +260,12 @@ class VoiceAgentPipeline:
 
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
-            f"Assistant: {response_text}",
+            f"Assistant: {raw_output}",
         ]
         return {
             **state,
             "response_text": response_text,
+            "raw_output": raw_output,
             "history": history,
             "grammar_raw": grammar_raw,
             "suggestions": suggestions,
