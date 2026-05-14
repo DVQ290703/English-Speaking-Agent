@@ -114,9 +114,9 @@ class VoiceAgentPipeline:
                         lines[normalized_key] = normalized_value
                 elif line.upper().startswith(("SAFE", "UNSAFE")):
                     lines["SAFETY"] = line.upper()
-            blocked = lines.get("SAFETY", "SAFE").startswith("UNSAFE")
+            blocked = lines.get("SAFETY", "SAFE").startswith("UNSAFE") or lines.get("SCOPE", "IN_SCOPE").startswith("OUT_OF_SCOPE")
             tool_intent = lines.get("TOOL", "NO_TOOL").startswith("NEEDS_TOOL")
-            logger.debug("preflight_node safety=%s tool=%s", lines.get("SAFETY"), lines.get("TOOL"))
+            logger.debug("preflight_node safety=%s scope=%s tool=%s", lines.get("SAFETY"), lines.get("SCOPE"), lines.get("TOOL"))
         except Exception as exc:
             logger.warning("preflight_node llm_error — failing open/closed: %s", exc)
 
