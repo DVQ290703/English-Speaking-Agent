@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS topics                          CASCADE;
 DROP TABLE IF EXISTS categories                      CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens          CASCADE;
 DROP TABLE IF EXISTS auth_sessions                   CASCADE;
+DROP TABLE IF EXISTS oauth_accounts                  CASCADE;
 DROP TABLE IF EXISTS users                           CASCADE;
 
 DROP FUNCTION IF EXISTS set_updated_at() CASCADE;

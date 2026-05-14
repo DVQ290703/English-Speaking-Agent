@@ -218,7 +218,14 @@ def find_or_create_user(provider: str, identity: dict) -> tuple[str, str | None]
                     (row[0],),
                 )
                 user_row = cur.fetchone()
-                return row[0], (user_row[0] if user_row else None)
+                if user_row:
+                    return row[0], user_row[0]
+                # oauth_accounts points to a deleted user — delete the stale link
+                # and fall through to re-create the user below
+                cur.execute(
+                    "DELETE FROM oauth_accounts WHERE provider = %s AND provider_user_id = %s",
+                    (provider, provider_user_id),
+                )
 
             user_id: str | None = None
 
