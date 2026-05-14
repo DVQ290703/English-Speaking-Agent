@@ -35,6 +35,21 @@ def _stub_langchain():
         sys.modules["langchain_core"] = lc_core
         sys.modules["langchain_core.messages"] = lc_msgs
 
+    if "langchain_core.runnables" not in sys.modules:
+        lc_run = types.ModuleType("langchain_core.runnables")
+        lc_run.RunnableConfig = MagicMock
+        sys.modules["langchain_core.runnables"] = lc_run
+
+    if "langchain_core.tools" not in sys.modules:
+        lc_tools = types.ModuleType("langchain_core.tools")
+
+        def _tool_decorator(f):
+            f.name = f.__name__
+            return f
+
+        lc_tools.tool = _tool_decorator
+        sys.modules["langchain_core.tools"] = lc_tools
+
     if "langchain_groq" not in sys.modules:
         lg = types.ModuleType("langchain_groq")
         lg.ChatGroq = MagicMock
@@ -184,3 +199,25 @@ class TestGenerateResponseWithGrammarStreaming:
 
         assert result_text == "Fallback response"
         assert raw is None
+
+
+class TestStructuredClientInit:
+    def test_structured_client_is_set_on_init(self):
+        """GroqLLMService.__init__ sets structured_client via with_structured_output."""
+        from app.agents.output_models import AgentOutput
+
+        service = GroqLLMService(model_name="test-model")
+
+        assert hasattr(service, "structured_client")
+        service.client.with_structured_output.assert_called_once_with(
+            AgentOutput, method="json_mode"
+        )
+
+    def test_structured_client_is_return_value_of_with_structured_output(self):
+        """structured_client is the exact object returned by with_structured_output."""
+        from app.agents.output_models import AgentOutput
+
+        service = GroqLLMService(model_name="test-model")
+        expected = service.client.with_structured_output.return_value
+
+        assert service.structured_client is expected
