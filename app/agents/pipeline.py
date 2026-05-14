@@ -139,14 +139,19 @@ class VoiceAgentPipeline:
         iterations = state.get("_tool_call_iterations", 3)
         logger.debug("respond_node start input_length=%d tool_iterations=%d", len(state["user_input"]), iterations)
 
-        # Build message list from history + any prior tool messages in this turn
         from app.prompts.prompt_builder import build_system_prompt
         from app.services.groq_llm import SYSTEM_PROMPT
+
+        # Compute routing flags before building prompt so we know which mode to use
+        cap_reached = iterations >= _TOOL_CALL_CAP
+        intent_requires_tool = state.get("tool_intent", False) or iterations > 0
+        use_tools = not cap_reached and bool(state.get("user_id")) and intent_requires_tool
 
         dynamic_prompt = build_system_prompt(
             category=state.get("category"),
             topic=state.get("topic"),
             include_grammar=True,
+            use_structured_output=not use_tools,
         )
         if dynamic_prompt:
             logger.info("respond_node system_prompt=dynamic chars=%d", len(dynamic_prompt))
@@ -160,7 +165,7 @@ class VoiceAgentPipeline:
                 "workflow. Use the conversation history to determine the correct flashcard tool "
                 "and arguments — do not ask for clarification, infer from context and call the tool now."
             )
-        user_id = state.get("user_id")
+
         messages_to_send: list = [SystemMessage(content=base_prompt)]
 
         for line in state.get("history", [])[-8:]:
@@ -171,96 +176,133 @@ class VoiceAgentPipeline:
 
         messages_to_send.append(HumanMessage(content=state["user_input"]))
 
-        # Append any ToolMessages from previous iterations in this turn.
-        # Sanitize first: Groq rejects ToolMessages with empty/None/[] content.
         if state.get("messages"):
             messages_to_send.extend(_sanitize_tool_messages(state["messages"]))
 
-        cap_reached = iterations >= _TOOL_CALL_CAP
-        # tool_intent was decided once in preflight_node (state) — no extra LLM call here.
-        # Mid-loop (iterations > 0) we're already inside a tool-call cycle; keep tool_client.
-        intent_requires_tool = state.get("tool_intent", False) or iterations > 0
-        use_tools = not cap_reached and bool(state.get("user_id")) and intent_requires_tool
         if state.get("user_id") and not intent_requires_tool:
             logger.debug("respond_node tool_gated_off preflight=NO_TOOL")
-        llm = self.llm_service.tool_client if use_tools else self.llm_service.client
         logger.debug(
             "respond_node invoking_llm client=%s messages=%d cap_reached=%s intent_requires_tool=%s",
-            "tool_client" if use_tools else "plain",
+            "tool_client" if use_tools else "structured",
             len(messages_to_send),
             cap_reached,
             intent_requires_tool,
         )
 
-        with span_context("llm.respond", kind="llm") as span:
-            try:
-                ai_msg: AIMessage = llm.invoke(messages_to_send)
-            except RateLimitError as exc:
-                span.fail(str(exc))
-                logger.warning(
-                    "respond_node rate_limited iteration=%d: %s",
-                    iterations,
-                    exc,
+        raw_output: str | None = None
+        response_text: str = ""
+        grammar_raw: str | None = None
+        suggestions: list[str] = []
+
+        if use_tools:
+            with span_context("llm.respond", kind="llm") as span:
+                try:
+                    ai_msg: AIMessage = self.llm_service.tool_client.invoke(messages_to_send)
+                except RateLimitError as exc:
+                    span.fail(str(exc))
+                    logger.warning("respond_node rate_limited iteration=%d: %s", iterations, exc)
+                    return {
+                        **state,
+                        "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
+                        "messages": [],
+                        "_tool_call_iterations": iterations,
+                        "grammar_raw": None,
+                        "suggestions": [],
+                    }
+                except BadRequestError as exc:
+                    span.fail(str(exc))
+                    logger.warning(
+                        "respond_node tool_use_failed — model emitted malformed tool call, retrying with plain client: %s",
+                        exc,
+                    )
+                    ai_msg = self.llm_service.client.invoke(messages_to_send)
+                usage = getattr(ai_msg, "usage_metadata", {}) or {}
+                span.set(
+                    model=self.llm_service.model_name,
+                    prompt_tokens=usage.get("input_tokens", 0),
+                    completion_tokens=usage.get("output_tokens", 0),
+                    total_tokens=usage.get("total_tokens", 0),
+                )
+
+            logger.debug(
+                "respond_node llm_response has_tool_calls=%s content_length=%d",
+                bool(ai_msg.tool_calls),
+                len(ai_msg.content or ""),
+            )
+
+            if ai_msg.tool_calls:
+                tool_names = [tc["name"] for tc in ai_msg.tool_calls]
+                tool_args = [{tc["name"]: tc.get("args", {})} for tc in ai_msg.tool_calls]
+                logger.info(
+                    "respond_node tool_calls_detected count=%d tools=%s args=%s iteration=%d",
+                    len(ai_msg.tool_calls),
+                    tool_names,
+                    tool_args,
+                    iterations + 1,
                 )
                 return {
                     **state,
-                    "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
-                    "messages": [],
-                    "_tool_call_iterations": iterations,
-                    "grammar_raw": None,
-                    "suggestions": [],
+                    "messages": [ai_msg],
+                    "_tool_call_iterations": iterations + 1,
+                    "response_text": state.get("response_text", ""),
                 }
-            except BadRequestError as exc:
-                span.fail(str(exc))
-                logger.warning(
-                    "respond_node tool_use_failed — model emitted malformed tool call, retrying with plain client: %s",
-                    exc,
-                )
-                ai_msg = self.llm_service.client.invoke(messages_to_send)
-            usage = getattr(ai_msg, "usage_metadata", {}) or {}
-            span.set(
-                model=self.llm_service.model_name,
-                prompt_tokens=usage.get("input_tokens", 0),
-                completion_tokens=usage.get("output_tokens", 0),
-                total_tokens=usage.get("total_tokens", 0),
+
+            # LLM chose not to use a tool — XML parse fallback
+            from app.services.grammar_parser import split_combined_output_with_suggestions
+            raw_output = ai_msg.content or ""
+            response_text, grammar_raw, suggestions = split_combined_output_with_suggestions(raw_output)
+
+        else:
+            # Structured output path — AgentOutput returned directly, never has .tool_calls
+            from app.agents.output_models import AgentOutput
+            from app.services.grammar_parser import grammar_data_from_structured_output
+
+            with span_context("llm.respond", kind="llm") as span:
+                try:
+                    agent_out: AgentOutput = self.llm_service.structured_client.invoke(messages_to_send)
+                    span.set(model=self.llm_service.model_name)
+                except RateLimitError as exc:
+                    span.fail(str(exc))
+                    logger.warning("respond_node rate_limited iteration=%d: %s", iterations, exc)
+                    return {
+                        **state,
+                        "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
+                        "messages": [],
+                        "_tool_call_iterations": iterations,
+                        "grammar_raw": None,
+                        "suggestions": [],
+                    }
+                except Exception as exc:
+                    span.fail(str(exc))
+                    logger.warning(
+                        "respond_node structured_output_failed — falling back to XML parse: %s", exc
+                    )
+                    from app.services.grammar_parser import split_combined_output_with_suggestions
+                    try:
+                        fallback_msg: AIMessage = self.llm_service.client.invoke(messages_to_send)
+                        raw_output = fallback_msg.content or ""
+                    except Exception as fallback_exc:
+                        logger.error("respond_node fallback_also_failed: %s", fallback_exc)
+                        raw_output = ""
+                    response_text, grammar_raw, suggestions = split_combined_output_with_suggestions(
+                        raw_output
+                    )
+                else:
+                    response_text = agent_out.response_text
+                    _, grammar_raw = grammar_data_from_structured_output(
+                        agent_out.grammar, state["user_input"]
+                    )
+                    suggestions = agent_out.suggestions[:3]
+
+            logger.debug(
+                "respond_node structured_response response_preview=%r grammar_present=%s",
+                response_text[:120] if response_text else "",
+                grammar_raw is not None,
             )
-
-        logger.debug(
-            "respond_node llm_response has_tool_calls=%s content_length=%d",
-            bool(ai_msg.tool_calls),
-            len(ai_msg.content or ""),
-        )
-
-        if ai_msg.tool_calls:
-            tool_names = [tc["name"] for tc in ai_msg.tool_calls]
-            tool_args = [{tc["name"]: tc.get("args", {})} for tc in ai_msg.tool_calls]
-            logger.info(
-                "respond_node tool_calls_detected count=%d tools=%s args=%s iteration=%d",
-                len(ai_msg.tool_calls),
-                tool_names,
-                tool_args,
-                iterations + 1,
-            )
-            return {
-                **state,
-                "messages": [ai_msg],
-                "_tool_call_iterations": iterations + 1,
-                "response_text": state.get("response_text", ""),
-            }
-
-        # No tool calls — final response; split <response> and <grammar> sections
-        from app.services.grammar_parser import split_combined_output_with_suggestions
-        raw_output = ai_msg.content or ""
-        response_text, grammar_raw, suggestions = split_combined_output_with_suggestions(raw_output)
-        logger.debug(
-            "respond_node no_tool_calls response_preview=%r grammar_present=%s",
-            response_text[:120],
-            grammar_raw is not None,
-        )
 
         history = state.get("history", []) + [
             f"User: {state['user_input']}",
-            f"Assistant: {raw_output}",
+            f"Assistant: {response_text}",
         ]
         return {
             **state,
@@ -269,7 +311,7 @@ class VoiceAgentPipeline:
             "history": history,
             "grammar_raw": grammar_raw,
             "suggestions": suggestions,
-            "messages": [ai_msg],
+            "messages": [],
             "_tool_call_iterations": iterations,
         }
 
