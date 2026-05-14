@@ -278,8 +278,17 @@ class VoiceAgentPipeline:
                         "respond_node structured_output_failed — falling back to XML parse: %s", exc
                     )
                     from app.services.grammar_parser import split_combined_output_with_suggestions
+                    # Rebuild messages with XML-formatted prompt so the model returns
+                    # grammar/suggestions even on the fallback path.
+                    fallback_prompt = build_system_prompt(
+                        category=state.get("category"),
+                        topic=state.get("topic"),
+                        include_grammar=True,
+                        use_structured_output=False,
+                    ) or base_prompt
+                    fallback_messages = [SystemMessage(content=fallback_prompt)] + messages_to_send[1:]
                     try:
-                        fallback_msg: AIMessage = self.llm_service.client.invoke(messages_to_send)
+                        fallback_msg: AIMessage = self.llm_service.client.invoke(fallback_messages)
                         raw_output = fallback_msg.content or ""
                     except Exception as fallback_exc:
                         logger.error("respond_node fallback_also_failed: %s", fallback_exc)

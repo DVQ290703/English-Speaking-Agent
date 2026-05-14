@@ -70,6 +70,39 @@ Suggestion rules:
 - The 75-word limit applies only to the spoken <response> block, not this JSON block.\
 """
 
+_STRUCTURED_OUTPUT_INSTRUCTION = """\
+---
+
+RESPONSE FORMAT — you MUST reply ONLY with a single valid JSON object. No prose, no markdown, no extra text before or after.
+
+Required schema:
+{
+  "response_text": "<your coaching reply — plain text only, no markdown, no XML tags>",
+  "grammar": {
+    "ann": "<user sentence with {wrong->correct} markers for every error>",
+    "err": [{"cat": "<code>", "sev": <1|2|3>, "msg": "<one explanation sentence>", "eg": "<optional example>"}],
+    "score": <0-100>
+  },
+  "suggestions": ["<simple continuation>", "<follow-up question>", "<opinion or experience>"]
+}
+
+Set "grammar" to null if the user's message has no grammar errors.
+
+Grammar annotation rules (same logic as always):
+- ann: copy the user's LATEST message verbatim, wrapping EVERY error as {wrong->correct}
+- Insertion (missing word): {->word}  |  Deletion (extra word): {word->}
+- Category codes: vt=verb tense, art=article, prep=preposition, sv=subject-verb agreement, sp=spelling, wc=word choice, punc=punctuation, wo=word order, pl=plural/singular, other=catch-all
+- Severity: 1=minor  2=major  3=critical
+- err[i] corresponds to the i-th annotation in ann, in order
+- score = 100 minus (critical×15 + major×8 + minor×3), minimum 0
+- Context-aware tense: use conversation history to determine the correct tense
+- "response_text" speaks about only the ONE most impactful error; ann/err captures ALL errors
+
+Suggestions rules:
+- Always include exactly 3 suggestions the learner can say directly next turn
+- Make them meaningfully different: simple continuation, follow-up question, opinion or experience\
+"""
+
 _PREFLIGHT_FALLBACK = """\
 You are a pre-flight classifier for an English learning voice assistant.
 
@@ -176,6 +209,16 @@ def _load_suggestions_instruction() -> str:
         return value
     logger.info("prompt_builder suggestions_instruction=fallback (section missing from file)")
     return _SUGGESTIONS_FALLBACK
+
+
+def _load_structured_output_instruction() -> str:
+    sections = _load_sections()
+    value = sections.get("structured_output_instruction")
+    if value:
+        logger.info("prompt_builder structured_output_instruction=file")
+        return value
+    logger.info("prompt_builder structured_output_instruction=fallback (section missing from file)")
+    return _STRUCTURED_OUTPUT_INSTRUCTION
 
 
 def load_preflight_prompt() -> str:
@@ -416,7 +459,8 @@ def build_system_prompt(
             prompt_parts.append(_load_suggestions_instruction())
             logger.debug("prompt_builder layer=suggestions injected")
     elif include_grammar and use_structured_output:
-        logger.debug("prompt_builder layer=grammar skipped use_structured_output=True")
+        prompt_parts.append(_load_structured_output_instruction())
+        logger.debug("prompt_builder layer=structured_output_instruction injected")
 
     final_prompt = "\n\n".join(part for part in prompt_parts if part)
     logger.debug(
