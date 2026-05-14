@@ -125,7 +125,7 @@ class VoiceAgentPipeline:
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response, invoking tools if the LLM requests them."""
-        iterations = state.get("_tool_call_iterations", 0)
+        iterations = state.get("_tool_call_iterations", 3)
         logger.debug("respond_node start input_length=%d tool_iterations=%d", len(state["user_input"]), iterations)
 
         # Build message list from history + any prior tool messages in this turn
