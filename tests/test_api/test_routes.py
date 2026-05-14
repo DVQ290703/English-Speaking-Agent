@@ -14,6 +14,7 @@ All external services (DB, MinIO, LLM, TTS, STT) are mocked.
 import base64
 import hashlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -611,7 +612,7 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -634,7 +635,7 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -647,7 +648,7 @@ class TestChatRespond:
         with (
             _client(self._new_conv_conn()) as (c, _),
             patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
             patch("app.api.chat._upload"),
         ):
@@ -695,7 +696,7 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None, [], [])),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -703,6 +704,59 @@ class TestChatRespond:
                 headers=self._headers(),
             )
         assert r.status_code == 404
+
+    def test_chat_respond_returns_and_stores_suggestions(self):
+        suggestions = [
+            "I usually practice after work.",
+            "What should I focus on next?",
+            "In my experience, short daily practice works best.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, cursor):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"] == suggestions
+
+        assistant_insert = [
+            call for call in cursor.execute.call_args_list
+            if "insert into messages" in " ".join(call.args[0].lower().split())
+            and "'assistant'" in call.args[0].lower()
+        ][0]
+        assert assistant_insert.args[1][-1] == json.dumps(suggestions)
+
+    def test_chat_respond_redacts_pii_from_suggestions(self):
+        suggestions = [
+            "Email me at learner@example.com.",
+            "What should I practice next?",
+            "In my experience, repetition helps.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, _):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"][0] == "Email me at [EMAIL REDACTED]."
 
 
 # ===========================================================================
@@ -729,7 +783,7 @@ class TestChatRespondVoiceAccent:
     def test_voice_accent_is_forwarded_to_run_langraph_agent(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [])) as mock_agent,
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [], [])) as mock_agent,
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -746,7 +800,7 @@ class TestChatRespondVoiceAccent:
     def test_missing_voice_accent_passes_none_to_run_langraph_agent(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [])) as mock_agent,
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [], [])) as mock_agent,
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -820,8 +874,8 @@ class TestGetConversationMessages:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id, "user", "text", "Hello AI", now, None, None, None, None, None, None, None, None),
-                (_new_uuid(), "assistant", "text", "Hello human!", now, None, None, None, None, None, None, None, None),
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
@@ -835,7 +889,7 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, "audio/key/path.mp3", None, None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, [], "audio/key/path.mp3", None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
@@ -846,7 +900,7 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, None, None, None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, [], None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
@@ -857,12 +911,35 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, None, "assistant/key.mp3", None, None, None, None, None, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, [], None, "assistant/key.mp3", None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         assert r.json()["messages"][0]["assistant_audio_url"] == "/api/audio/assistant/key.mp3"
+
+    def test_get_messages_returns_assistant_suggestions(self):
+        now = datetime.now(timezone.utc)
+        suggestions = [
+            "I usually practice in the morning.",
+            "What routine works best for you?",
+            "In my experience, consistency matters most.",
+        ]
+        conn = _make_conn(
+            fetchone_side_effect=[(self._conv_id,)],
+            fetchall_value=[
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, suggestions, None, None, None, None, None, None, None, None),
+            ],
+        )
+
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["messages"][0]["suggestions"] == []
+        assert body["messages"][1]["suggestions"] == suggestions
 
     def test_get_messages_no_auth_returns_401(self):
         """HTTPBearer raises 401/403 when the Authorization header is missing."""

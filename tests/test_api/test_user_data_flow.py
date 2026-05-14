@@ -159,7 +159,7 @@ class TestUserLifecycle:
             }
         )
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Good job!", b"audio", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good job!", b"audio", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -196,8 +196,8 @@ class TestUserLifecycle:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id,    "user",      "text", "Hello, let's practice IELTS.", now, None, None, None, None, None, None, None, None),
-                (_uid(),          "assistant", "text", "Good job!",                   now, None, None, None, None, None, None, None, None),
+                (self._msg_id,    "user",      "text", "Hello, let's practice IELTS.", now, [], None, None, None, None, None, None, None, None),
+                (_uid(),          "assistant", "text", "Good job!",                   now, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
@@ -238,7 +238,7 @@ class TestContinueConversation:
     def test_continue_conversation_returns_same_conv_id(self):
         conn = self._existing_conv_conn(turn_number=2)
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Great!", b"audio", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great!", b"audio", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -254,7 +254,7 @@ class TestContinueConversation:
         """Third message → turn_number should be 3."""
         conn = self._existing_conv_conn(turn_number=3)
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("OK!", b"", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("OK!", b"", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -332,7 +332,7 @@ class TestUserIsolation:
         msg_id = _uid()
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_of_a,)],
-            fetchall_value=[(msg_id, "user", "text", "Hello", now, None, None, None, None, None, None, None, None)],
+            fetchall_value=[(msg_id, "user", "text", "Hello", now, [], None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
             r = c.get(
@@ -359,9 +359,9 @@ class TestConversationHistory:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (_uid(), "user",      "text", "Turn 1 user",      t1, None, None, None, None, None, None, None, None),
-                (_uid(), "assistant", "text", "Turn 1 assistant",  t2, None, None, None, None, None, None, None, None),
-                (_uid(), "user",      "text", "Turn 2 user",      t3, None, None, None, None, None, None, None, None),
+                (_uid(), "user",      "text", "Turn 1 user",      t1, [], None, None, None, None, None, None, None, None),
+                (_uid(), "assistant", "text", "Turn 1 assistant",  t2, [], None, None, None, None, None, None, None, None),
+                (_uid(), "user",      "text", "Turn 2 user",      t3, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
@@ -434,7 +434,7 @@ class TestConversationTitle:
     def test_chat_with_known_topic_returns_200(self):
         conn = self._chat_conn_with_topic(topic_found=True)
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Reply", b"", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply", b"", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -449,7 +449,7 @@ class TestConversationTitle:
     def test_chat_with_unknown_topic_still_creates_conversation(self):
         conn = self._chat_conn_with_topic(topic_found=False)
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Fallback", b"", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Fallback", b"", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):
@@ -470,7 +470,7 @@ class TestConversationTitle:
             }
         )
         with (
-            patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"", None, [])),
+            patch("app.api.chat.run_langraph_agent", return_value=("Hello!", b"", None, [], [])),
             patch("app.api.chat.store_user_audio", return_value=None),
             patch("app.api.chat._upload"),
         ):

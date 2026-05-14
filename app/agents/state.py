@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     voice_gender: str | None
     voice_accent: str | None
     grammar_raw: str | None  # raw compact JSON from <grammar> tag; None on failure
+    suggestions: list[str]   # next-turn suggestions parsed from the final LLM response
     category: str | None      # routing context — e.g. "daily_conversation"
     topic: str | None         # routing context — e.g. "ordering_food"
     user_id: str | None       # authenticated user UUID — passed via RunnableConfig to tools; gates tool-client selection

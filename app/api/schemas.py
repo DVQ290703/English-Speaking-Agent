@@ -137,6 +137,7 @@ class ChatResponse(BaseModel):
     )
     grammar_detail: GrammarDetailResponse | None = None
     tool_steps: list[ToolCallStep] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
 
 
 class MessageOut(BaseModel):
@@ -236,6 +237,7 @@ class MessageWithScoreOut(BaseModel):
     input_mode: str | None = None
     text_content: str | None = None
     created_at: datetime
+    suggestions: list[str] = Field(default_factory=list)
     audio_url: str | None = None
     assistant_audio_url: str | None = None
     score: MessageScoreOut | None = None

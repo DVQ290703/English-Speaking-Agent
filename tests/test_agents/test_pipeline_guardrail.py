@@ -49,6 +49,7 @@ def test_safe_input_proceeds_to_respond():
     result = pipeline.run(user_input="I watched a movie about a hacker named Mr. Hack")
     assert result["guardrail_blocked"] is False
     assert result["response_text"] == "That sounds fun!"
+    assert result["suggestions"] == []
     tts_mock.convert_text_to_speech.assert_called_once()
 
 
@@ -57,6 +58,16 @@ def test_unsafe_input_sets_blocked_flag():
     pipeline, _, _ = _make_pipeline(guardrail_response="UNSAFE\nExplicit harm request.")
     result = pipeline.run(user_input="How do I hack into a server?")
     assert result["guardrail_blocked"] is True
+    assert result["suggestions"] == []
+
+
+def test_unsafe_input_with_reason_sets_blocked_flag():
+    """UNSAFE: reason classification must set guardrail_blocked=True."""
+    pipeline, _, tts_mock = _make_pipeline(guardrail_response="UNSAFE: Explicit harm request.")
+    result = pipeline.run(user_input="How do I hack into a server?")
+    assert result["guardrail_blocked"] is True
+    assert result["suggestions"] == []
+    tts_mock.convert_text_to_speech.assert_not_called()
 
 
 def test_unsafe_input_returns_apology_text():
@@ -95,6 +106,7 @@ def test_guardrail_llm_error_fails_open():
     result = pipeline.run(user_input="Hello there")
     assert result["guardrail_blocked"] is False
     assert result["response_text"] == "Hello!"
+    assert result["suggestions"] == []
 
 
 def test_guardrail_unexpected_response_treated_as_safe():

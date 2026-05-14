@@ -40,6 +40,75 @@ class TestSplitCombinedOutput:
         text, gram = self._call(raw)
         assert text == "Line one.\nLine two."
 
+    def test_splits_response_grammar_and_suggestions(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = (
+            "<response>Nice answer.</response>"
+            '<grammar>{"ann":"I like hiking.","err":[],"score":100}</grammar>'
+            '<suggestions>{"suggestions":["I usually hike on weekends.","What trails do you recommend?","In my experience, hiking helps me clear my head."]}</suggestions>'
+        )
+
+        text, grammar, suggestions = split_combined_output_with_suggestions(raw)
+
+        assert text == "Nice answer."
+        assert grammar == '{"ann":"I like hiking.","err":[],"score":100}'
+        assert suggestions == [
+            "I usually hike on weekends.",
+            "What trails do you recommend?",
+            "In my experience, hiking helps me clear my head.",
+        ]
+
+    def test_missing_suggestions_returns_empty_list(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = '<response>Hello!</response><grammar>{"ann":"x","err":[],"score":100}</grammar>'
+
+        assert split_combined_output_with_suggestions(raw) == (
+            "Hello!",
+            '{"ann":"x","err":[],"score":100}',
+            [],
+        )
+
+    def test_malformed_suggestions_returns_empty_list(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = "<response>Hello!</response><suggestions>not json</suggestions>"
+
+        assert split_combined_output_with_suggestions(raw) == ("Hello!", None, [])
+
+    def test_non_list_suggestions_returns_empty_list(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = '<response>Hello!</response><suggestions>{"suggestions":"ask more"}</suggestions>'
+
+        assert split_combined_output_with_suggestions(raw) == ("Hello!", None, [])
+
+    def test_more_than_three_suggestions_keeps_first_three(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = (
+            "<response>Hello!</response>"
+            '<suggestions>{"suggestions":["one","two","three","four"]}</suggestions>'
+        )
+
+        assert split_combined_output_with_suggestions(raw) == ("Hello!", None, ["one", "two", "three"])
+
+    def test_missing_response_tag_strips_grammar_and_suggestions_blocks(self):
+        from app.services.grammar_parser import split_combined_output_with_suggestions
+
+        raw = (
+            "Hello outside tags"
+            '<grammar>{"ann":"x","err":[],"score":100}</grammar>'
+            '<suggestions>{"suggestions":["one"]}</suggestions>'
+        )
+
+        assert split_combined_output_with_suggestions(raw) == (
+            "Hello outside tags",
+            '{"ann":"x","err":[],"score":100}',
+            ["one"],
+        )
+
 
 class TestParseAnnotatedGrammar:
     def _call(self, grammar_raw, user_input=""):

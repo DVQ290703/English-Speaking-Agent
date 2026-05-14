@@ -49,6 +49,24 @@ Grammar annotation rules:
   Do NOT include it when you are calling tools.\
 """
 
+_SUGGESTIONS_FALLBACK = """\
+---
+
+SUGGESTIONS FORMAT - include this block in every final text reply:
+
+<suggestions>
+{"suggestions":["<simple continuation>","<follow-up question>","<opinion or experience response>"]}
+</suggestions>
+
+Suggestion rules:
+- Generate exactly 3 suggestions for the learner's next turn.
+- Each suggestion must be one natural English phrase or sentence the learner can say directly.
+- Make the 3 suggestions meaningfully different: simple continuation, follow-up question, and opinion or experience response.
+- Keep each suggestion concise and relevant to the latest assistant response and conversation history.
+- Do not include suggestions when your response is only a tool call with no spoken text.
+- The 75-word limit applies only to the spoken <response> block, not this JSON block.\
+"""
+
 _PREFLIGHT_FALLBACK = """\
 You are a pre-flight classifier for an English learning voice assistant.
 
@@ -89,6 +107,7 @@ def _fallback_sections() -> dict[str, str]:
     return {
         "system_prompt": _BASE_FALLBACK,
         "grammar_instruction": _GRAMMAR_FALLBACK,
+        "suggestions_instruction": _SUGGESTIONS_FALLBACK,
         "preflight_prompt": _PREFLIGHT_FALLBACK,
         "blocked_response": _BLOCKED_RESPONSE_FALLBACK,
     }
@@ -132,6 +151,10 @@ def _load_base_prompt() -> str:
 
 def _load_grammar_instruction() -> str:
     return _load_sections().get("grammar_instruction") or _GRAMMAR_FALLBACK
+
+
+def _load_suggestions_instruction() -> str:
+    return _load_sections().get("suggestions_instruction") or _SUGGESTIONS_FALLBACK
 
 
 def load_preflight_prompt() -> str:
@@ -274,13 +297,15 @@ def build_system_prompt(
     category: str | None = None,
     topic: str | None = None,
     include_grammar: bool = True,
+    include_suggestions: bool = True,
 ) -> str:
-    """Compose a system prompt: base -> category layer -> topic layer -> grammar instruction."""
+    """Compose a system prompt with optional grammar and suggestions instructions."""
     logger.debug(
-        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s",
+        "prompt_builder build_system_prompt called category=%r topic=%r include_grammar=%s include_suggestions=%s",
         category,
         topic,
         include_grammar,
+        include_suggestions,
     )
 
     prompt_parts = [_load_base_prompt()]
@@ -352,6 +377,9 @@ def build_system_prompt(
     if include_grammar:
         prompt_parts.append(_load_grammar_instruction())
         logger.debug("prompt_builder layer=grammar injected")
+        if include_suggestions:
+            prompt_parts.append(_load_suggestions_instruction())
+            logger.debug("prompt_builder layer=suggestions injected")
 
     final_prompt = "\n\n".join(part for part in prompt_parts if part)
     logger.debug(

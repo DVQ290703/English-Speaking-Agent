@@ -178,6 +178,7 @@ class TestChatResponse:
         assert r.audio_mime == "audio/mpeg"
         assert r.user_audio_url is None
         assert r.assistant_audio_url is None
+        assert r.suggestions == []
 
     def test_chat_response_with_audio(self):
         r = ChatResponse(
@@ -187,6 +188,20 @@ class TestChatResponse:
             conversation_id="conv-1",
         )
         assert r.audio_base64 == "base64data"
+
+    def test_chat_response_with_suggestions(self):
+        r = ChatResponse(
+            user_input="hi",
+            response_text="hello",
+            conversation_id="conv-1",
+            suggestions=["I can add one detail.", "What do you think?", "In my experience, it helps."],
+        )
+
+        assert r.suggestions == [
+            "I can add one detail.",
+            "What do you think?",
+            "In my experience, it helps.",
+        ]
 
     def test_chat_response_missing_conversation_id_raises(self):
         with pytest.raises(ValidationError):

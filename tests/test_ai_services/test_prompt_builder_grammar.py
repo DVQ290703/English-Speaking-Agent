@@ -25,6 +25,7 @@ class TestLoadSections:
             tmp_path,
             system_prompt="base content",
             grammar_instruction="grammar content",
+            suggestions_instruction="suggestions content",
             preflight_prompt="preflight content",
             blocked_response="blocked content",
         )
@@ -34,6 +35,7 @@ class TestLoadSections:
         sections = pb._load_sections()
         assert sections["system_prompt"] == "base content"
         assert sections["grammar_instruction"] == "grammar content"
+        assert sections["suggestions_instruction"] == "suggestions content"
         assert sections["preflight_prompt"] == "preflight content"
         assert sections["blocked_response"] == "blocked content"
 
@@ -118,3 +120,37 @@ class TestBuildSystemPromptGrammar:
 
         prompt = pb.build_system_prompt(include_grammar=False)
         assert "GRAMMAR BLOCK" not in prompt
+
+    def test_suggestions_block_appended_with_grammar(self, tmp_path, monkeypatch):
+        import app.prompts.prompt_builder as pb
+
+        f = _write_sections_file(
+            tmp_path,
+            system_prompt="base",
+            grammar_instruction="GRAMMAR BLOCK",
+            suggestions_instruction="SUGGESTIONS BLOCK",
+        )
+        monkeypatch.setattr(pb, "_SYSTEM_PROMPT_PATH", f)
+        _reset_cache(pb)
+
+        prompt = pb.build_system_prompt(include_grammar=True)
+
+        assert "GRAMMAR BLOCK" in prompt
+        assert "SUGGESTIONS BLOCK" in prompt
+
+    def test_suggestions_block_absent_when_disabled(self, tmp_path, monkeypatch):
+        import app.prompts.prompt_builder as pb
+
+        f = _write_sections_file(
+            tmp_path,
+            system_prompt="base",
+            grammar_instruction="GRAMMAR BLOCK",
+            suggestions_instruction="SUGGESTIONS BLOCK",
+        )
+        monkeypatch.setattr(pb, "_SYSTEM_PROMPT_PATH", f)
+        _reset_cache(pb)
+
+        prompt = pb.build_system_prompt(include_grammar=True, include_suggestions=False)
+
+        assert "GRAMMAR BLOCK" in prompt
+        assert "SUGGESTIONS BLOCK" not in prompt

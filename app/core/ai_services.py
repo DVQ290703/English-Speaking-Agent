@@ -124,8 +124,8 @@ def run_langraph_agent(
     category: str | None = None,
     topic: str | None = None,
     user_id: str | None = None,
-) -> tuple[str, bytes, str | None, list]:
-    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_raw, tool_steps)."""
+) -> tuple[str, bytes, str | None, list, list[str]]:
+    """Run the conversation pipeline and return (response_text, audio_bytes, grammar_raw, tool_steps, suggestions)."""
     from app.agents.tool_steps import extract_tool_steps
 
     history = history or []
@@ -138,11 +138,12 @@ def run_langraph_agent(
         if result.get("guardrail_blocked"):
             response_text = str(result.get("response_text", "")).strip()
             logger.info("run_langraph_agent guardrail_blocked response_text_length=%d", len(response_text))
-            return response_text, b"", None, []
+            return response_text, b"", None, [], []
 
         response_text = str(result.get("response_text", "")).strip()
         audio_bytes: bytes = result.get("audio_bytes") or b""
         grammar_raw: str | None = result.get("grammar_raw")
+        suggestions: list[str] = result.get("suggestions") or []
         tool_steps = extract_tool_steps(result.get("messages", []))
 
         logger.info(
@@ -157,7 +158,7 @@ def run_langraph_agent(
             if not audio_bytes and not tool_steps:
                 logger.warning("Pipeline returned text but empty audio - retrying TTS directly")
                 audio_bytes = _synthesize_audio_bytes(response_text, voice_gender=voice_gender, voice_accent=voice_accent)
-            return response_text, audio_bytes, grammar_raw, tool_steps
+            return response_text, audio_bytes, grammar_raw, tool_steps, suggestions
 
         logger.warning("Pipeline returned empty response_text - using fallback")
     except Exception:
@@ -165,4 +166,4 @@ def run_langraph_agent(
 
     fallback_text = "Sorry, I couldn't process your request right now."
     logger.info("Returning fallback response")
-    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender, voice_accent=voice_accent), None, []
+    return fallback_text, _synthesize_audio_bytes(fallback_text, voice_gender=voice_gender, voice_accent=voice_accent), None, [], []

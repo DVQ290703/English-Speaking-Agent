@@ -99,11 +99,21 @@ class VoiceAgentPipeline:
                     messages.append(AIMessage(content=line[10:].strip()))
             messages.append(HumanMessage(content=user_input))
             result: AIMessage = self.llm_service.client.invoke(messages)
-            lines = {
-                part.split(":")[0].strip().upper(): part.split(":", 1)[1].strip().upper()
-                for part in (result.content or "").strip().splitlines()
-                if ":" in part
-            }
+            lines: dict[str, str] = {}
+            for raw_line in (result.content or "").strip().splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    normalized_key = key.strip().upper()
+                    normalized_value = value.strip().upper()
+                    if normalized_key in {"SAFE", "UNSAFE"}:
+                        lines["SAFETY"] = normalized_key
+                    else:
+                        lines[normalized_key] = normalized_value
+                elif line.upper().startswith(("SAFE", "UNSAFE")):
+                    lines["SAFETY"] = line.upper()
             blocked = lines.get("SAFETY", "SAFE").startswith("UNSAFE")
             tool_intent = lines.get("TOOL", "NO_TOOL").startswith("NEEDS_TOOL")
             logger.debug("preflight_node safety=%s tool=%s", lines.get("SAFETY"), lines.get("TOOL"))
@@ -118,6 +128,7 @@ class VoiceAgentPipeline:
                 "tool_intent": False,
                 "response_text": load_blocked_response(),
                 "audio_bytes": b"",
+                "suggestions": [],
             }
 
         logger.debug("preflight_node safe tool_intent=%s", tool_intent)
@@ -192,6 +203,7 @@ class VoiceAgentPipeline:
                     "messages": [],
                     "_tool_call_iterations": iterations,
                     "grammar_raw": None,
+                    "suggestions": [],
                 }
             except BadRequestError as exc:
                 span.fail(str(exc))
@@ -232,9 +244,9 @@ class VoiceAgentPipeline:
             }
 
         # No tool calls — final response; split <response> and <grammar> sections
-        from app.services.grammar_parser import split_combined_output
+        from app.services.grammar_parser import split_combined_output_with_suggestions
         raw_output = ai_msg.content or ""
-        response_text, grammar_raw = split_combined_output(raw_output)
+        response_text, grammar_raw, suggestions = split_combined_output_with_suggestions(raw_output)
         logger.debug(
             "respond_node no_tool_calls response_preview=%r grammar_present=%s",
             response_text[:120],
@@ -250,6 +262,7 @@ class VoiceAgentPipeline:
             "response_text": response_text,
             "history": history,
             "grammar_raw": grammar_raw,
+            "suggestions": suggestions,
             "messages": [ai_msg],
             "_tool_call_iterations": iterations,
         }
@@ -299,6 +312,7 @@ class VoiceAgentPipeline:
             "voice_gender": voice_gender,
             "voice_accent": voice_accent,
             "grammar_raw": None,
+            "suggestions": [],
             "category": category,
             "topic": topic,
             "user_id": user_id,

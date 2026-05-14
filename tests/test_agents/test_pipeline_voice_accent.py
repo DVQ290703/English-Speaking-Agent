@@ -37,14 +37,16 @@ class TestPipelineVoiceAccent:
 
     def test_voice_accent_uk_passed_to_tts(self):
         pipeline, mock_tts = self._make_pipeline()
-        pipeline.run(user_input="Hi", voice_gender="female", voice_accent="uk")
+        result = pipeline.run(user_input="Hi", voice_gender="female", voice_accent="uk")
+        assert result["suggestions"] == []
         mock_tts.convert_text_to_speech.assert_called_once()
         _, kwargs = mock_tts.convert_text_to_speech.call_args
         assert kwargs.get("voice_accent") == "uk"
 
     def test_voice_accent_none_passed_to_tts(self):
         pipeline, mock_tts = self._make_pipeline()
-        pipeline.run(user_input="Hi", voice_gender="male", voice_accent=None)
+        result = pipeline.run(user_input="Hi", voice_gender="male", voice_accent=None)
+        assert result["suggestions"] == []
         mock_tts.convert_text_to_speech.assert_called_once()
         _, kwargs = mock_tts.convert_text_to_speech.call_args
         assert kwargs.get("voice_accent") is None
