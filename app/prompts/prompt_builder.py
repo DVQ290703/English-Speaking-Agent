@@ -86,7 +86,7 @@ Required schema:
   "suggestions": ["<simple continuation>", "<follow-up question>", "<opinion or experience>"]
 }
 
-Set "grammar" to null if the user's message has no grammar errors.
+If the user's message has no grammar errors, set "grammar" to {"ann": "<original message unchanged>", "err": [], "score": 100} — never use null.
 
 Grammar annotation rules (same logic as always):
 - ann: copy the user's LATEST message verbatim, wrapping EVERY error as {wrong->correct}
@@ -121,8 +121,8 @@ NO_TOOL — everything else: greetings, small talk, language questions, pronunci
 """
 
 _BLOCKED_RESPONSE_FALLBACK = (
-    "I'm sorry, I can't help with that topic. "
-    "Let's keep our practice focused on everyday English conversation!"
+    "That's outside what I can help with here. "
+    "Tell me what you'd like to practice in English today."
 )
 
 _CACHE: dict[str, Any] = {
