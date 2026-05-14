@@ -20,10 +20,16 @@ sys.modules.setdefault("langchain_groq", _lc_groq)
 class TestPipelineVoiceAccent:
     def _make_pipeline(self):
         from langchain_core.messages import AIMessage
+        from app.agents.output_models import AgentOutput
         mock_llm = MagicMock()
-        ai_msg = AIMessage(content="Hello!")
-        mock_llm.client.invoke.return_value = ai_msg
-        mock_llm.tool_client.invoke.return_value = ai_msg
+        # preflight
+        mock_llm.client.invoke.return_value = AIMessage(content="SAFETY: SAFE\nTOOL: NO_TOOL")
+        # respond node uses structured_client on non-tool path
+        mock_llm.structured_client.invoke.return_value = AgentOutput(
+            response_text="Hello!",
+            suggestions=[],
+        )
+        mock_llm.tool_client.invoke.return_value = AIMessage(content="Hello!")
         mock_llm.model_name = "test-model"
         mock_tts = MagicMock()
         mock_tts.convert_text_to_speech.return_value = b"mp3"

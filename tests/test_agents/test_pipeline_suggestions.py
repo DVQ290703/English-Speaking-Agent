@@ -15,28 +15,29 @@ sys.modules.setdefault("langchain_groq", _lc_groq)
 
 def test_pipeline_parses_suggestions_from_final_llm_response():
     from langchain_core.messages import AIMessage
-
+    from app.agents.output_models import AgentOutput, GrammarOutput
     from app.agents.pipeline import VoiceAgentPipeline
 
     llm_mock = MagicMock()
     llm_mock.model_name = "test-model"
-    llm_mock.client.invoke.side_effect = [
-        AIMessage(content="SAFETY: SAFE\nTOOL: NO_TOOL"),
-        AIMessage(
-            content=(
-                "<response>Nice answer.</response>"
-                '<grammar>{"ann":"I like hiking.","err":[],"score":100}</grammar>'
-                '<suggestions>{"suggestions":["I usually hike on weekends.","What trails do you recommend?","In my experience, hiking helps me clear my head."]}</suggestions>'
-            )
-        ),
-    ]
+    # preflight via client.invoke
+    llm_mock.client.invoke.return_value = AIMessage(content="SAFETY: SAFE\nTOOL: NO_TOOL")
+    # respond node uses structured_client.invoke on non-tool path
+    llm_mock.structured_client.invoke.return_value = AgentOutput(
+        response_text="Nice answer.",
+        grammar=GrammarOutput(ann="I like hiking.", err=[], score=100),
+        suggestions=[
+            "I usually hike on weekends.",
+            "What trails do you recommend?",
+            "In my experience, hiking helps me clear my head.",
+        ],
+    )
     llm_mock.tool_client.invoke.side_effect = AssertionError("tool client should not be used")
 
     tts_mock = MagicMock()
     tts_mock.convert_text_to_speech.return_value = b"audio"
 
     pipeline = VoiceAgentPipeline(llm_service=llm_mock, tts_service=tts_mock)
-
     result = pipeline.run(user_input="I like hiking.")
 
     assert result["response_text"] == "Nice answer."
