@@ -38,6 +38,7 @@ export interface Message {
   assessmentNote?: string;
   toolSteps?: ToolCallStep[];
   grammarChecked?: boolean;
+  suggestions?: string[];
 }
 
 const PHONEME_TIPS_BASE: Record<string, string> = {
@@ -159,6 +160,7 @@ interface MessageBubbleProps {
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
+  onSuggestionClick?: (text: string) => void;
 }
 
 function TypingIndicator() {
@@ -216,6 +218,7 @@ export default function MessageBubble({
   expandable,
   expanded,
   onToggleExpanded,
+  onSuggestionClick,
 }: MessageBubbleProps) {
   const t = useT();
   const isAgent = message.role === 'agent';
@@ -304,6 +307,20 @@ export default function MessageBubble({
         </button>
         {isAgent && !message.typing && (message.toolSteps?.length ?? 0) > 0 && (
           <ReasoningSteps steps={message.toolSteps!} />
+        )}
+        {isAgent && !message.typing && (message.suggestions?.length ?? 0) > 0 && onSuggestionClick && (
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {message.suggestions!.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onSuggestionClick(s)}
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
         )}
       </div>
     </div>

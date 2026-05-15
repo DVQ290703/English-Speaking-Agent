@@ -12,6 +12,7 @@ type WindowWithWebkit = Window &
 export interface UseVoiceRecorderParams {
   selectedMicId: string;
   onSend: (blob: Blob) => void;
+  autoSend?: boolean;
 }
 
 export interface UseVoiceRecorderResult {
@@ -152,6 +153,7 @@ function computeWaveformBars(audioBuffer: AudioBuffer, barCount: number): number
 export default function useVoiceRecorder({
   selectedMicId,
   onSend,
+  autoSend = false,
 }: UseVoiceRecorderParams): UseVoiceRecorderResult {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [recordingTime, setRecordingTime] = useState(0);
@@ -161,6 +163,11 @@ export default function useVoiceRecorder({
   const [waveformData, setWaveformData] = useState<number[]>(Array(WAVEFORM_BAR_COUNT).fill(0));
   const [cleanBlob, setCleanBlob] = useState<Blob | null>(null);
   const [error, setError] = useState<RecorderError>(null);
+
+  const onSendRef = useRef(onSend);
+  const autoSendRef = useRef(autoSend);
+  useEffect(() => { onSendRef.current = onSend; }, [onSend]);
+  useEffect(() => { autoSendRef.current = autoSend; }, [autoSend]);
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -367,12 +374,47 @@ export default function useVoiceRecorder({
       void decodeAudioBuffer(blob)
         .then((audioBuf) => {
           if (cancelGenRef.current !== gen) return;
-          setWaveformData(computeWaveformBars(audioBuf, WAVEFORM_BAR_COUNT));
           const clean = trimGateEncode(audioBuf);
           cleanBlobRef.current = clean;
           setCleanBlob(clean);
+          if (autoSendRef.current) {
+            onSendRef.current(clean);
+            setStatus('done');
+            sendTimerRef.current = setTimeout(() => {
+              sendTimerRef.current = null;
+              revokeUrl();
+              audioBlobRef.current = null;
+              cleanBlobRef.current = null;
+              setAudioBlob(null);
+              setCleanBlob(null);
+              setRecordingTime(0);
+              setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
+              setStatus('idle');
+            }, 800);
+          } else {
+            setWaveformData(computeWaveformBars(audioBuf, WAVEFORM_BAR_COUNT));
+          }
         })
-        .catch(() => { /* use raw blob on decode failure */ });
+        .catch(() => {
+          if (autoSendRef.current && cancelGenRef.current === gen) {
+            const rawBlob = audioBlobRef.current;
+            if (rawBlob) {
+              onSendRef.current(rawBlob);
+              setStatus('done');
+              sendTimerRef.current = setTimeout(() => {
+                sendTimerRef.current = null;
+                revokeUrl();
+                audioBlobRef.current = null;
+                cleanBlobRef.current = null;
+                setAudioBlob(null);
+                setCleanBlob(null);
+                setRecordingTime(0);
+                setWaveformData(Array(WAVEFORM_BAR_COUNT).fill(0));
+                setStatus('idle');
+              }, 800);
+            }
+          }
+        });
     };
 
     if (recorder.state === 'inactive') {
@@ -381,7 +423,7 @@ export default function useVoiceRecorder({
       recorder.onstop = handleStop;
       recorder.stop();
     }
-  }, [stopVisualizer, stopTimer, releaseStream]);
+  }, [stopVisualizer, stopTimer, releaseStream, revokeUrl]);
 
   useEffect(() => {
     stopFnRef.current = stop;

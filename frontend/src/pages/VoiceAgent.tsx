@@ -1160,6 +1160,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                         ? () => setExpandedMsgId((prev) => (prev === msg.id ? null : msg.id))
                         : undefined
                     }
+                    onSuggestionClick={
+                      isConnected && !agentTyping
+                        ? (text) => void sendChatMessage(text)
+                        : undefined
+                    }
                   />
                 );
               })}

@@ -1,5 +1,5 @@
 // frontend/src/components/voice-agent/VoiceRecorderComponent.tsx
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react';
+import { type KeyboardEvent, type RefObject } from 'react';
 import { CheckCircle, Mic, SendHorizontal, Square } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
 import useVoiceRecorder from '../../hooks/useVoiceRecorder';
@@ -30,77 +30,6 @@ function formatTime(s: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/**
- * Full-width waveform that fills blue as the audio plays.
- * DOM updates are direct (no setState) for smooth 60fps playback.
- * Click anywhere to seek.
- */
-function PlaybackWaveform({
-  data,
-  audioRef,
-}: {
-  data: number[];
-  audioRef: React.RefObject<HTMLAudioElement | null>;
-}) {
-  const barRefs = useRef<HTMLDivElement[]>([]);
-  const playheadRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const update = () => {
-      const frac = audio.duration > 0 ? audio.currentTime / audio.duration : 0;
-      const playedCount = Math.floor(frac * data.length);
-      barRefs.current.forEach((el, i) => {
-        if (!el) return;
-        el.style.background =
-          i < playedCount ? '#3b82f6' : '#cbd5e1';
-      });
-      if (playheadRef.current) {
-        playheadRef.current.style.left = `${frac * 100}%`;
-        playheadRef.current.style.opacity = frac > 0 ? '1' : '0';
-      }
-    };
-
-    audio.addEventListener('timeupdate', update);
-    return () => audio.removeEventListener('timeupdate', update);
-  }, [audioRef, data.length]);
-
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    if (!audio || !audio.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    audio.currentTime = ((e.clientX - rect.left) / rect.width) * audio.duration;
-  };
-
-  return (
-    <div
-      onClick={handleClick}
-      className="relative flex items-center w-full h-12 cursor-pointer overflow-hidden"
-      title="Click to seek"
-    >
-      {data.map((val, i) => (
-        <div
-          key={i}
-          ref={(el) => {
-            if (el) barRefs.current[i] = el;
-            else delete barRefs.current[i];
-          }}
-          className="flex-1 rounded-sm transition-none"
-          style={{ height: `${Math.max(3, val * 44)}px`, background: '#cbd5e1' }}
-        />
-      ))}
-      {/* Playhead — absolute overlay line */}
-      <div
-        ref={playheadRef}
-        className="absolute top-0 bottom-0 w-0.5 bg-indigo-500 opacity-0 pointer-events-none"
-        style={{ left: '0%' }}
-      />
-    </div>
-  );
-}
-
 export default function VoiceRecorderComponent({
   inputRef,
   isConnected,
@@ -118,21 +47,15 @@ export default function VoiceRecorderComponent({
   const {
     status,
     recordingTime,
-    audioUrl,
     visualizerData,
-    waveformData,
     error,
     start,
     stop,
-    retake,
-    send,
     cancel,
-  } = useVoiceRecorder({ selectedMicId, onSend: onSendRecording });
-
-  const audioRef = useRef<HTMLAudioElement>(null);
+  } = useVoiceRecorder({ selectedMicId, onSend: onSendRecording, autoSend: true });
 
   const isRecording = status === 'recording';
-  const isExpandedState = status === 'confirm' || status === 'done';
+  const isExpandedState = status === 'done';
   const recordDisabled = agentTyping || isExpandedState;
 
   if (!isConnected) {
@@ -177,46 +100,6 @@ export default function VoiceRecorderComponent({
                 style={{ height: `${Math.max(3, (val / 255) * 44)}px` }}
               />
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Review panel: audio player + waveform ── */}
-      {status === 'confirm' && (
-        <div className="mx-3 mt-3 rounded-lg border border-gray-200 bg-white px-3 py-3 space-y-2">
-
-          {/* Audio playback */}
-          <audio
-            ref={audioRef}
-            key={audioUrl}
-            controls
-            src={audioUrl ?? undefined}
-            preload="auto"
-            className="w-full"
-          />
-
-          {/* Decoded waveform with playback fill */}
-          <PlaybackWaveform data={waveformData} audioRef={audioRef} />
-
-          {/* Duration */}
-          <div className="text-[10px] text-gray-400 text-right">{formatTime(recordingTime)}</div>
-
-          {/* Actions */}
-          <div className="flex gap-2 justify-between">
-            <button
-              type="button"
-              onClick={retake}
-              className="px-3 py-1.5 rounded text-xs border border-gray-300 text-gray-600 hover:bg-gray-50"
-            >
-              Retake
-            </button>
-            <button
-              type="button"
-              onClick={send}
-              className="px-3 py-1.5 rounded text-xs bg-blue-600 text-white hover:bg-blue-500"
-            >
-              Send
-            </button>
           </div>
         </div>
       )}
