@@ -193,6 +193,7 @@ deploy-backend:
     - job: build-backend
   before_script: *gcp_before_script
   script:
+    - kubectl apply -f deployments/backend/prompts-configmap.yaml
     - kubectl apply -f deployments/backend/deploy.yaml
     - DATE=$(date +%Y%m%d)
     - VERSION_TAG="${IMAGE_BACKEND}:${DATE}-${CI_COMMIT_SHORT_SHA}"
@@ -217,6 +218,7 @@ deploy-backend-manifest:
   needs: []
   before_script: *gcp_before_script
   script:
+    - kubectl apply -f deployments/backend/prompts-configmap.yaml
     - kubectl apply -f deployments/backend/deploy.yaml
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
