@@ -23,25 +23,32 @@ os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
 # ---------------------------------------------------------------------------
 
 class TestNormalizeHistory:
-    def _call(self, history_raw, topic=None):
+    def _call(self, history_raw, category=None):
         # Import here to avoid module-level side effects
         from app.core.ai_services import normalize_history
-        return normalize_history(history_raw=history_raw, topic=topic)
+        return normalize_history(history_raw=history_raw, category=category)
 
     def test_normalize_history_no_history_no_topic_returns_empty(self):
-        result = self._call(None, topic=None)
+        result = self._call(None, category=None)
         assert result == []
 
-    def test_normalize_history_topic_only_returns_topic_line(self):
-        result = self._call(None, topic="IELTS Part 1")
-        assert result == ["Topic: IELTS Part 1"]
+    def test_normalize_history_topic_only_returns_empty(self):
+        result = self._call(None, category="IELTS Part 1")
+        assert result == []
 
-    def test_normalize_history_topic_whitespace_stripped(self):
-        result = self._call(None, topic="  Daily  ")
-        assert result == ["Topic: Daily"]
+    def test_normalize_history_topic_whitespace_is_ignored(self):
+        result = self._call(None, category="  Daily  ")
+        assert result == []
 
     def test_normalize_history_blank_topic_not_added(self):
-        result = self._call(None, topic="   ")
+        result = self._call(None, category="   ")
+        assert result == []
+
+    def test_normalize_history_ignores_category_and_topic_metadata(self):
+        from app.core.ai_services import normalize_history
+
+        result = normalize_history(history_raw=None, category="Travel", topic="Airport Check-in")
+
         assert result == []
 
     def test_normalize_history_valid_json_list_of_dicts(self):
@@ -49,28 +56,27 @@ class TestNormalizeHistory:
             {"role": "user", "text": "Hello"},
             {"role": "assistant", "text": "Hi there"},
         ])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: Hello" in result
         assert "Assistant: Hi there" in result
 
-    def test_normalize_history_prepends_topic_before_messages(self):
+    def test_normalize_history_does_not_prepend_topic_before_messages(self):
         history = json.dumps([{"role": "user", "text": "Hello"}])
-        result = self._call(history, topic="Travel")
-        assert result[0] == "Topic: Travel"
-        assert "User: Hello" in result
+        result = self._call(history, category="Travel")
+        assert result == ["User: Hello"]
 
-    def test_normalize_history_invalid_json_returns_topic_only(self):
-        result = self._call("not valid json {{", topic="Travel")
-        assert result == ["Topic: Travel"]
+    def test_normalize_history_invalid_json_returns_empty(self):
+        result = self._call("not valid json {{", category="Travel")
+        assert result == []
 
-    def test_normalize_history_non_list_json_returns_topic_only(self):
-        result = self._call(json.dumps({"key": "value"}), topic="Travel")
-        assert result == ["Topic: Travel"]
+    def test_normalize_history_non_list_json_returns_empty(self):
+        result = self._call(json.dumps({"key": "value"}), category="Travel")
+        assert result == []
 
     def test_normalize_history_limits_to_last_10_items(self):
         items = [{"role": "user", "text": f"msg {i}"} for i in range(20)]
         history = json.dumps(items)
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         # 10 items → 10 lines
         assert len(result) == 10
 
@@ -79,19 +85,19 @@ class TestNormalizeHistory:
             {"role": "user", "text": ""},
             {"role": "assistant", "text": "Valid reply"},
         ])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: " not in result
         assert "Assistant: Valid reply" in result
 
     def test_normalize_history_string_items_included(self):
         history = json.dumps(["User: hi", "Assistant: hello"])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "User: hi" in result
         assert "Assistant: hello" in result
 
     def test_normalize_history_empty_string_items_skipped(self):
         history = json.dumps(["", "  ", "User: hello"])
-        result = self._call(history, topic=None)
+        result = self._call(history, category=None)
         assert "" not in result
         assert "User: hello" in result
 
@@ -188,6 +194,9 @@ class TestRunLangraphAgent:
         mock_pipeline.run.return_value = {
             "response_text": response_text,
             "audio_bytes": audio_bytes,
+            "grammar_raw": None,
+            "messages": [],
+            "suggestions": ["Try one.", "Ask one?", "Share one."],
         }
         return mock_pipeline
 
@@ -196,10 +205,12 @@ class TestRunLangraphAgent:
 
         with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("Tell me about IELTS", history=[])
+            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("Tell me about IELTS", history=[])
 
         assert text == "Great answer!"
         assert audio == b"mp3data"
+        assert grammar is None
+        assert suggestions == ["Try one.", "Ask one?", "Share one."]
 
     def test_run_langraph_agent_passes_history(self):
         mock_pipeline = self._mock_pipeline()
@@ -210,7 +221,7 @@ class TestRunLangraphAgent:
             run_langraph_agent("Next question", history=history)
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Next question", history=history, voice_gender=None
+            user_input="Next question", history=history, voice_gender=None, voice_accent=None, category=None, topic=None, user_id=None
         )
 
     def test_run_langraph_agent_none_history_defaults_to_empty(self):
@@ -220,11 +231,11 @@ class TestRunLangraphAgent:
             from app.core.ai_services import run_langraph_agent
             run_langraph_agent("Hello", history=None)
 
-        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None)
+        mock_pipeline.run.assert_called_once_with(user_input="Hello", history=[], voice_gender=None, voice_accent=None, category=None, topic=None, user_id=None)
 
     def test_run_langraph_agent_empty_response_text_returns_fallback(self):
         mock_pipeline = MagicMock()
-        mock_pipeline.run.return_value = {"response_text": "", "audio_bytes": b""}
+        mock_pipeline.run.return_value = {"response_text": "", "audio_bytes": b"", "grammar_raw": None, "messages": []}
 
         mock_tts_pipeline = MagicMock()
         mock_tts_pipeline.tts_service.convert_text_to_speech.return_value = b"fallback-audio"
@@ -234,10 +245,12 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback-audio"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("test")
+            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback-audio"
+        assert grammar is None
+        assert suggestions == []
 
     def test_run_langraph_agent_pipeline_exception_returns_fallback(self):
         mock_pipeline = MagicMock()
@@ -248,26 +261,30 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("test")
+            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback"
+        assert grammar is None
+        assert suggestions == []
 
     def test_run_langraph_agent_text_no_audio_retries_tts(self):
         """When pipeline returns text but empty audio, _synthesize_audio_bytes is called."""
         mock_pipeline = MagicMock()
-        mock_pipeline.run.return_value = {"response_text": "Nice job!", "audio_bytes": b""}
+        mock_pipeline.run.return_value = {"response_text": "Nice job!", "audio_bytes": b"", "grammar_raw": None, "messages": []}
 
         with (
             patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline),
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"retry-audio") as mock_synth,
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio = run_langraph_agent("question")
+            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("question")
 
-        mock_synth.assert_called_once_with("Nice job!", voice_gender=None)
+        mock_synth.assert_called_once_with("Nice job!", voice_gender=None, voice_accent=None)
         assert text == "Nice job!"
         assert audio == b"retry-audio"
+        assert grammar is None
+        assert suggestions == []
 
     def test_run_langraph_agent_passes_voice_gender(self):
         mock_pipeline = self._mock_pipeline()
@@ -277,8 +294,45 @@ class TestRunLangraphAgent:
             run_langraph_agent("Hello", history=[], voice_gender="Female")
 
         mock_pipeline.run.assert_called_once_with(
-            user_input="Hello", history=[], voice_gender="Female"
+            user_input="Hello", history=[], voice_gender="Female", voice_accent=None, category=None, topic=None, user_id=None
         )
+
+
+# ---------------------------------------------------------------------------
+# dynamic prompt architecture
+# ---------------------------------------------------------------------------
+
+class TestPromptArchitecture:
+    def test_build_system_prompt_layers_base_category_and_topic(self):
+        from app.prompts.prompt_builder import build_system_prompt
+
+        prompt = build_system_prompt(category="travel", topic="travel_airport")
+
+        assert "professional English-speaking coach" in prompt
+        assert "## Category: travel" in prompt
+        assert "## Topic: travel_airport" in prompt
+        assert "airport" in prompt.lower()
+
+    def test_build_system_prompt_uses_unknown_topic_fallback(self):
+        from app.prompts.prompt_builder import build_system_prompt
+
+        prompt = build_system_prompt(category="daily", topic="Meeting a neighbor")
+
+        assert "## Category: daily" in prompt
+        assert "Meeting a neighbor" in prompt
+
+
+    def test_extract_prompt_context_reads_category_and_topic_lines(self):
+        from app.prompts.prompt_builder import extract_prompt_context
+
+        category, topic = extract_prompt_context([
+            "Category: Job Interview",
+            "Topic: Salary negotiation",
+            "User: hello",
+        ])
+
+        assert category == "Job Interview"
+        assert topic == "Salary negotiation"
 
 
 # ---------------------------------------------------------------------------
@@ -288,51 +342,51 @@ class TestRunLangraphAgent:
 class TestElevenLabsTTS:
     def test_resolve_voice_id_uses_male_voice_when_requested(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_US_MALE_VOICE_ID", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_US_FEMALE_VOICE_ID", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("  Male  ") == "male-voice"
+        assert ElevenLabsTTS()._resolve_voice_id("  Male  ", "us") == "male-voice"
 
     def test_resolve_voice_id_uses_female_voice_when_requested(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_US_MALE_VOICE_ID", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_US_FEMALE_VOICE_ID", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("Female") == "female-voice"
+        assert ElevenLabsTTS()._resolve_voice_id("Female", "us") == "female-voice"
 
-    def test_resolve_voice_id_explicit_gender_does_not_fallback_to_default(self, monkeypatch):
+    def test_resolve_voice_id_falls_back_to_default_when_gender_env_unset(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
+        monkeypatch.delenv("ELEVENLABS_US_MALE_VOICE_ID", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("Male") == ""
+        assert ElevenLabsTTS()._resolve_voice_id("male", "us") == "default-voice"
 
     def test_resolve_voice_id_does_not_use_female_when_male_requested(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.delenv("ELEVENLABS_US_MALE_VOICE_ID", raising=False)
+        monkeypatch.setenv("ELEVENLABS_US_FEMALE_VOICE_ID", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("Male") == ""
+        assert ElevenLabsTTS()._resolve_voice_id("male", "us") == ""
 
     def test_resolve_voice_id_does_not_use_male_when_female_requested(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.setenv("ELEVENLABS_US_MALE_VOICE_ID", "male-voice")
+        monkeypatch.delenv("ELEVENLABS_US_FEMALE_VOICE_ID", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("Female") == ""
+        assert ElevenLabsTTS()._resolve_voice_id("female", "us") == ""
 
     def test_resolve_voice_id_invalid_gender_uses_default(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_VOICE_ID", "default-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_US_MALE_VOICE_ID", "male-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -340,8 +394,8 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_no_gender_requires_default_voice(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_male", "male-voice")
-        monkeypatch.setenv("ELEVENLABS_VOICE_ID_female", "female-voice")
+        monkeypatch.setenv("ELEVENLABS_US_MALE_VOICE_ID", "male-voice")
+        monkeypatch.setenv("ELEVENLABS_US_FEMALE_VOICE_ID", "female-voice")
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -349,12 +403,12 @@ class TestElevenLabsTTS:
 
     def test_resolve_voice_id_returns_empty_when_no_voice_configured(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.delenv("ELEVENLABS_US_MALE_VOICE_ID", raising=False)
+        monkeypatch.delenv("ELEVENLABS_US_FEMALE_VOICE_ID", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
-        assert ElevenLabsTTS()._resolve_voice_id("Female") == ""
+        assert ElevenLabsTTS()._resolve_voice_id("female", "us") == ""
 
     def test_convert_text_to_speech_missing_api_key_does_not_call_http(self, monkeypatch):
         monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
@@ -371,8 +425,8 @@ class TestElevenLabsTTS:
     def test_convert_text_to_speech_missing_voice_id_does_not_call_http(self, monkeypatch):
         monkeypatch.setenv("ELEVENLABS_API_KEY", "test-key")
         monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_male", raising=False)
-        monkeypatch.delenv("ELEVENLABS_VOICE_ID_female", raising=False)
+        monkeypatch.delenv("ELEVENLABS_US_MALE_VOICE_ID", raising=False)
+        monkeypatch.delenv("ELEVENLABS_US_FEMALE_VOICE_ID", raising=False)
 
         from app.services.elevenlabs_tts import ElevenLabsTTS
 
@@ -539,3 +593,96 @@ class TestElevenLabsTTS:
             result = ElevenLabsTTS().convert_text_to_speech("Hello")
 
         assert result == b""
+
+
+class TestSynthesizeAudioBytesAccent:
+    def test_synthesize_forwards_voice_accent_to_tts(self):
+        mock_pipeline = MagicMock()
+        mock_pipeline.tts_service.convert_text_to_speech.return_value = b"mp3"
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import _synthesize_audio_bytes
+            _synthesize_audio_bytes("Hello", voice_gender="female", voice_accent="uk")
+
+        mock_pipeline.tts_service.convert_text_to_speech.assert_called_once_with(
+            "Hello", voice_gender="female", voice_accent="uk"
+        )
+
+    def test_synthesize_voice_accent_defaults_to_none(self):
+        mock_pipeline = MagicMock()
+        mock_pipeline.tts_service.convert_text_to_speech.return_value = b"mp3"
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import _synthesize_audio_bytes
+            _synthesize_audio_bytes("Hello")
+
+        mock_pipeline.tts_service.convert_text_to_speech.assert_called_once_with(
+            "Hello", voice_gender=None, voice_accent=None
+        )
+
+
+class TestRunLangraphAgentAccent:
+    def _mock_pipeline(self, response_text="Reply!", audio_bytes=b"mp3"):
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.return_value = {
+            "response_text": response_text,
+            "audio_bytes": audio_bytes,
+            "grammar_raw": None,
+            "messages": [],
+            "suggestions": ["Try one.", "Ask one?", "Share one."],
+        }
+        return mock_pipeline
+
+    def test_run_langraph_agent_forwards_voice_accent_to_pipeline(self):
+        mock_pipeline = self._mock_pipeline()
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import run_langraph_agent
+            run_langraph_agent("Hi", voice_gender="male", voice_accent="uk")
+
+        mock_pipeline.run.assert_called_once()
+        _, kwargs = mock_pipeline.run.call_args
+        assert kwargs.get("voice_accent") == "uk"
+
+    def test_run_langraph_agent_voice_accent_defaults_to_none(self):
+        mock_pipeline = self._mock_pipeline()
+
+        with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
+            from app.core.ai_services import run_langraph_agent
+            run_langraph_agent("Hi")
+
+        _, kwargs = mock_pipeline.run.call_args
+        assert kwargs.get("voice_accent") is None
+
+
+def test_run_langraph_agent_blocked_skips_tts(monkeypatch):
+    """When the pipeline returns guardrail_blocked=True, run_langraph_agent must
+    return empty audio bytes without calling the TTS fallback."""
+    from app.core import ai_services
+
+    blocked_state = {
+        "response_text": "I'm sorry, I can't help with that topic. Let's keep our practice focused on everyday English conversation!",
+        "audio_bytes": b"",
+        "grammar_raw": None,
+        "messages": [],
+        "guardrail_blocked": True,
+    }
+
+    mock_pipeline = MagicMock()
+    mock_pipeline.run.return_value = blocked_state
+
+    synthesize_calls = []
+
+    def fake_synthesize(text, voice_gender=None, voice_accent=None):
+        synthesize_calls.append(text)
+        return b"tts-audio"
+
+    monkeypatch.setattr(ai_services, "get_voice_agent_pipeline", lambda: mock_pipeline)
+    monkeypatch.setattr(ai_services, "_synthesize_audio_bytes", fake_synthesize)
+
+    text, audio, grammar, steps, suggestions = ai_services.run_langraph_agent(user_input="How do I hack?")
+
+    assert audio == b""
+    assert suggestions == []
+    assert len(synthesize_calls) == 0, "TTS must not be called for guardrail-blocked responses"
+    assert "sorry" in text.lower()
