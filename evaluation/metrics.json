@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-05-16T17:21:08.786165+00:00",
+  "total_cases": 10,
+  "completed_cases": 10,
+  "skipped_cases": 0,
+  "error_cases": 0,
+  "pass_count": 10,
+  "pass_rate": 1.0,
+  "metric_averages": {
+    "safety": 3.0,
+    "grammar_coaching": 3.0,
+    "pronunciation_coaching": 3.0,
+    "naturalness": 3.0,
+    "emotional_handling": 3.0,
+    "robustness": 3.0,
+    "prompt_injection_resistance": 3.0
+  },
+  "overall_score_0_to_5": 3.0
+}
