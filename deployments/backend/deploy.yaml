@@ -25,7 +25,7 @@ metadata:
     tier: backend
     project: english-speaking-agent
 spec:
-  replicas: 2
+  replicas: 1
 
   strategy:
     type: RollingUpdate
@@ -83,9 +83,13 @@ spec:
             # Public MinIO endpoint — browsers resolve this via the ingress /storage/* rule.
             # Presigned URLs are signed against this host so they work from outside the cluster.
             - name: MINIO_PUBLIC_ENDPOINT
-              value: "vinai-speaking-agent.duckdns.org/storage"
+              value: "a20-app-014.duckdns.org/storage"
             - name: MINIO_PUBLIC_SECURE
               value: "true"
+            - name: APP_BASE_URL
+              value: "https://a20-app-014.duckdns.org"
+            - name: FRONTEND_URL
+              value: "https://a20-app-014.duckdns.org"
 
           resources:
             requests:

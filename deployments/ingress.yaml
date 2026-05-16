@@ -5,7 +5,7 @@
 #
 # After applying:
 #   1. Get Ingress IP: kubectl get ingress vinai-ingress -n english-speaking-agent
-#   2. Point vinai-speaking-agent.duckdns.org → that IP in DuckDNS
+#   2. Point a20-app-014.duckdns.org → that IP in DuckDNS
 #   3. Wait 15-20 min for GCP to provision the SSL cert
 # =============================================================================
 # ── GCP Managed Certificate ───────────────────────────────────────────────────
@@ -18,7 +18,7 @@ metadata:
   namespace: english-speaking-agent
 spec:
   domains:
-    - vinai-speaking-agent.duckdns.org
+    - a20-app-014.duckdns.org
 
 ---
 
@@ -58,7 +58,7 @@ metadata:
     networking.gke.io/v1beta1.FrontendConfig: "vinai-frontend-config"
 spec:
   rules:
-    - host: vinai-speaking-agent.duckdns.org
+    - host: a20-app-014.duckdns.org
       http:
         paths:
           # Backend API — must be listed before /* to take priority
