@@ -63,7 +63,7 @@ export default function FlashcardStudyPage() {
       return false;
     }
   });
-  const [history, setHistory] = useState<Card[]>([]);
+  const [_history, _setHistory] = useState<Card[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoNextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -248,6 +248,7 @@ export default function FlashcardStudyPage() {
     }
   }, [
     currentCard?.id,
+    currentCard,
     isFlipped,
     autoPlay,
     autoNext,
@@ -337,6 +338,7 @@ export default function FlashcardStudyPage() {
     handleBack,
     handleNextManual,
     isFlipped,
+    isVi,
     playAudio,
     shortcutsOpen,
     zoomedImage,
@@ -502,10 +504,11 @@ export default function FlashcardStudyPage() {
                 { duration: 1500 },
               );
             }}
-            className={`rounded-full transition-all duration-300 ${autoPlay
+            className={`rounded-full transition-all duration-300 ${
+              autoPlay
                 ? 'text-primary bg-primary/10 hover:bg-primary/20'
                 : 'text-muted-foreground hover:bg-muted/20'
-              }`}
+            }`}
             title={
               isVi
                 ? autoPlay
@@ -530,10 +533,11 @@ export default function FlashcardStudyPage() {
                 { duration: 1500, icon: <Zap className="w-4 h-4 text-yellow-500" /> },
               );
             }}
-            className={`rounded-full transition-all duration-300 ${autoNext
+            className={`rounded-full transition-all duration-300 ${
+              autoNext
                 ? 'text-yellow-500 bg-yellow-500/10 hover:bg-yellow-500/20'
                 : 'text-muted-foreground hover:bg-muted/20'
-              }`}
+            }`}
             title={
               isVi
                 ? autoNext

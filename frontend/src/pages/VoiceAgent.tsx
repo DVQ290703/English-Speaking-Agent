@@ -11,11 +11,9 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { Circle, Mic, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
-
-
 import { useAuth } from '../auth/AuthContext';
 import { getAuthSession } from '../auth/tokenStorage';
-import { fetchGrammarFeedback, assessPronunciation } from '../api/chat';
+import { fetchGrammarFeedback } from '../api/chat';
 import { fetchForTopic, fetchMessagesWithScores } from '../api/conversations';
 import type { MessageWithScoreOut, ConversationSummary } from '../api/conversations';
 import {
@@ -80,42 +78,42 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
   const mistakes: Mistake[] | undefined =
     m.score?.words && m.score.words.length
       ? m.score.words.flatMap((w) => {
-        const err = w.error_type;
-        const acc = Math.round(w.accuracy_score ?? 0);
-        const phonemes = (w.phonemes ?? []).map((p) => ({
-          phoneme: p.phoneme,
-          accuracy_score: Math.round(p.accuracy_score ?? 0),
-        }));
-        const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
-        const phonemeNote =
-          lowPhonemes.length > 0
-            ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
-            : '';
-        if (err && err !== 'None') {
-          const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
-          return [
-            {
-              wrong: w.word,
-              correct: w.word,
-              type: type as Mistake['type'],
-              note: `Accuracy ${acc}%${phonemeNote}`,
-              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-            },
-          ];
-        }
-        if (acc < 90 || lowPhonemes.length > 0) {
-          return [
-            {
-              wrong: w.word,
-              correct: w.word,
-              type: 'Pronunciation' as Mistake['type'],
-              note: `Accuracy ${acc}%${phonemeNote}`,
-              phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
-            },
-          ];
-        }
-        return [];
-      })
+          const err = w.error_type;
+          const acc = Math.round(w.accuracy_score ?? 0);
+          const phonemes = (w.phonemes ?? []).map((p) => ({
+            phoneme: p.phoneme,
+            accuracy_score: Math.round(p.accuracy_score ?? 0),
+          }));
+          const lowPhonemes = phonemes.filter((p) => p.accuracy_score < 80);
+          const phonemeNote =
+            lowPhonemes.length > 0
+              ? ` Phonemes: ${lowPhonemes.map((p) => `${p.phoneme} ${p.accuracy_score}%`).join(', ')}`
+              : '';
+          if (err && err !== 'None') {
+            const type = err === 'Mispronunciation' ? 'Pronunciation' : 'Fluency';
+            return [
+              {
+                wrong: w.word,
+                correct: w.word,
+                type: type as Mistake['type'],
+                note: `Accuracy ${acc}%${phonemeNote}`,
+                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+              },
+            ];
+          }
+          if (acc < 90 || lowPhonemes.length > 0) {
+            return [
+              {
+                wrong: w.word,
+                correct: w.word,
+                type: 'Pronunciation' as Mistake['type'],
+                note: `Accuracy ${acc}%${phonemeNote}`,
+                phonemes: lowPhonemes.length > 0 ? lowPhonemes : undefined,
+              },
+            ];
+          }
+          return [];
+        })
       : undefined;
 
   return {
@@ -129,13 +127,13 @@ function mapDbMessageToFrontend(m: MessageWithScoreOut, idx: number): Message {
     assessmentStatus: m.score ? 'available' : 'unavailable',
     scoreDetails: m.score
       ? {
-        overall: Math.round(m.score.overall_score ?? 0),
-        pronunciation: Math.round(m.score.overall_score ?? 0),
-        fluency: Math.round(m.score.fluency_score ?? 0),
-        accuracy: Math.round(m.score.accuracy_score ?? 0),
-        completeness:
-          m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
-      }
+          overall: Math.round(m.score.overall_score ?? 0),
+          pronunciation: Math.round(m.score.overall_score ?? 0),
+          fluency: Math.round(m.score.fluency_score ?? 0),
+          accuracy: Math.round(m.score.accuracy_score ?? 0),
+          completeness:
+            m.score.completeness_score != null ? Math.round(m.score.completeness_score) : undefined,
+        }
       : undefined,
     mistakes,
   };
@@ -148,7 +146,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     toggleSidebar: () => void;
   }>();
   const navigate = useNavigate();
-  const { lang, t } = useLanguage();
+  const { lang: _lang, t } = useLanguage();
   const [isDark] = useDarkMode();
   const { isAuthenticated, logout } = useAuth();
 
@@ -189,9 +187,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-
-  const { micDevices, selectedMicId, selectedMicIdRef, setSelectedMicId, refreshMicDevicesRef } =
-    useMicDevices();
+  const {
+    micDevices,
+    selectedMicId,
+    selectedMicIdRef,
+    setSelectedMicId,
+    refreshMicDevicesRef: _refreshMicDevicesRef,
+  } = useMicDevices();
 
   const isConnected = status === 'connected';
   const isConnecting = status === 'connecting';
@@ -199,7 +201,8 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [messages, setMessages] = useState<Message[]>(initialState.messages);
   const sessionIdRef = useRef<string | null>(initialState.sessionId);
   const [expandedMsgIds, setExpandedMsgIds] = useState<number[] | null>(null);
-  const selectedMsgId = expandedMsgIds && expandedMsgIds.length > 0 ? expandedMsgIds[expandedMsgIds.length - 1] : null;
+  const selectedMsgId =
+    expandedMsgIds && expandedMsgIds.length > 0 ? expandedMsgIds[expandedMsgIds.length - 1] : null;
   const selectedMsg =
     selectedMsgId !== null ? (messages.find((m) => m.id === selectedMsgId) ?? null) : null;
   // Prefer the most recent user message that contains assessment information
@@ -346,10 +349,14 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   /* eslint-enable react-hooks/immutability */
 
   // No-op stubs — VoiceRecorderComponent manages its own mic lifecycle now.
-  const noopSetMicEnabled = useCallback((_: boolean) => { }, []);
+  const noopSetMicEnabled = useCallback((_: boolean) => {}, []);
   const noopUserMicIntentRef = useRef(false);
-  const { mediaStreamRef, startUserAudioCapture, stopUserAudioCapture, releaseMediaStream } =
-    useAudioCapture(selectedMicIdRef);
+  const {
+    mediaStreamRef: _mediaStreamRef,
+    startUserAudioCapture: _startUserAudioCapture,
+    stopUserAudioCapture: _stopUserAudioCapture,
+    releaseMediaStream: _releaseMediaStream,
+  } = useAudioCapture(selectedMicIdRef);
 
   const {
     ttsActiveRef,
@@ -406,11 +413,11 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
     const lastMsg = messages[messages.length - 1];
     const isAgentMsg = lastMsg?.role === 'agent';
-    
+
     let isAgentTextUpdate = false;
     if (isAgentMsg) {
       if (lastMsg.text !== lastAgentTextRef.current) {
-         isAgentTextUpdate = true;
+        isAgentTextUpdate = true;
       }
       lastAgentTextRef.current = lastMsg.text;
     } else {
@@ -624,7 +631,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setStatusSync,
     t,
     topic,
-    ttsActiveRef,
     stopAllAudio,
   ]);
 
@@ -677,7 +683,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
         );
         setIsTopicLimitReached(Boolean(data.limit_reached));
       })
-      .catch(() => { })
+      .catch(() => {})
       .finally(() => setConvsLoading(false));
   }, [convsRefreshKey, topic]);
 
@@ -712,7 +718,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       clearLocalAudioUrls();
     };
   }, [clearTimers, clearLocalAudioUrls]);
-
 
   // Load a DB conversation in-place (no full page reload): reset all local
   // state, restore conversationIdRef, update the URL, then fetch messages.
@@ -920,7 +925,6 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       data-va="root"
       className={`h-full overflow-hidden bg-[#f5f7fa] text-gray-800 flex flex-col${isDark ? ' va-dark' : ''}`}
     >
-
       {/* Description bar */}
       {(topic || customTopicLabel) && (
         <div
@@ -962,12 +966,13 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               data-testid="button-connect"
               onClick={handleConnect}
               disabled={isConnecting}
-              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${isConnected
-                ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
-                : isConnecting
-                  ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
-                  : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
-                }`}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
+                isConnected
+                  ? 'bg-red-600/80 hover:bg-red-600 text-gray-900 border border-red-500/50'
+                  : isConnecting
+                    ? 'bg-blue-600/50 text-blue-300 border border-blue-300 cursor-not-allowed'
+                    : 'bg-white text-gray-900 hover:bg-gray-100 border border-gray-300'
+              }`}
             >
               {isConnected
                 ? t('va.connect.disconnect')
@@ -1031,8 +1036,9 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           )}
           <div
             data-va="left"
-            className={`${showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
-              } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
+            className={`${
+              showLeftPanelMobile ? 'fixed left-0 top-0 bottom-0 z-7001 w-72 shadow-2xl' : 'hidden'
+            } md:relative md:z-auto md:w-[320px] md:flex md:shadow-none shrink-0 border-r border-gray-200 flex-col bg-white overflow-visible`}
           >
             <LeftAudioPanel
               gender={gender}
@@ -1188,33 +1194,34 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     onReplay={replay}
                     expandable={expandable}
                     isExpanded={
-                      expandedMsgIds === null 
-                        ? (latestUserMsg?.id === msg.id && Array.isArray(msg.mistakes) && msg.mistakes.length > 0)
+                      expandedMsgIds === null
+                        ? latestUserMsg?.id === msg.id &&
+                          Array.isArray(msg.mistakes) &&
+                          msg.mistakes.length > 0
                         : expandedMsgIds.includes(msg.id)
                     }
                     onToggleExpanded={
                       expandable
-                        ? () => setExpandedMsgIds((prev) => {
-                          if (prev === null) {
-                            if (latestUserMsg?.id === msg.id) {
-                              return [];
-                            } else {
-                              return latestUserMsg ? [latestUserMsg.id, msg.id] : [msg.id];
-                            }
-                          } else {
-                            if (prev.includes(msg.id)) {
-                              return prev.filter((id) => id !== msg.id);
-                            } else {
-                              return [...prev, msg.id];
-                            }
-                          }
-                        })
+                        ? () =>
+                            setExpandedMsgIds((prev) => {
+                              if (prev === null) {
+                                if (latestUserMsg?.id === msg.id) {
+                                  return [];
+                                } else {
+                                  return latestUserMsg ? [latestUserMsg.id, msg.id] : [msg.id];
+                                }
+                              } else {
+                                if (prev.includes(msg.id)) {
+                                  return prev.filter((id) => id !== msg.id);
+                                } else {
+                                  return [...prev, msg.id];
+                                }
+                              }
+                            })
                         : undefined
                     }
                     onSuggestionClick={
-                      isConnected && !agentTyping
-                        ? (text) => void sendChatMessage(text)
-                        : undefined
+                      isConnected && !agentTyping ? (text) => void sendChatMessage(text) : undefined
                     }
                   />
                 );

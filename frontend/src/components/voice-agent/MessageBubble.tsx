@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Bot, Mic, Play, User, Volume2 } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
 import ReasoningSteps from './ReasoningSteps';
@@ -157,18 +157,28 @@ export const PHONEME_TIPS: Record<string, string> = (() => {
 })();
 
 // MultiDiffText helper for Grammar Accordion
-function MultiDiffText({ text, targets, type }: { text: string; targets: string[]; type: 'wrong' | 'correct' }) {
+function MultiDiffText({
+  text,
+  targets,
+  type,
+}: {
+  text: string;
+  targets: string[];
+  type: 'wrong' | 'correct';
+}) {
   if (!targets.length || !text) return <>{text}</>;
 
-  const cleanTargets = targets.map(t => t.replace(/^[^\w']+|[^\w']+$/g, '')).filter(Boolean);
+  const cleanTargets = targets.map((t) => t.replace(/^[^\w']+|[^\w']+$/g, '')).filter(Boolean);
   if (!cleanTargets.length) return <>{text}</>;
 
-  const regexStr = cleanTargets.map(t => {
-    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const isWordStart = /^[\w']/.test(t);
-    const isWordEnd = /[\w']$/.test(t);
-    return `${isWordStart ? '\\b' : ''}${escaped}${isWordEnd ? '\\b' : ''}`;
-  }).join('|');
+  const regexStr = cleanTargets
+    .map((t) => {
+      const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const isWordStart = /^[\w']/.test(t);
+      const isWordEnd = /[\w']$/.test(t);
+      return `${isWordStart ? '\\b' : ''}${escaped}${isWordEnd ? '\\b' : ''}`;
+    })
+    .join('|');
 
   const regex = new RegExp(`(${regexStr})`, 'gi');
   const parts = text.split(regex);
@@ -176,7 +186,7 @@ function MultiDiffText({ text, targets, type }: { text: string; targets: string[
   return (
     <>
       {parts.map((part, i) => {
-        const isMatch = cleanTargets.some(t => t.toLowerCase() === part.toLowerCase());
+        const isMatch = cleanTargets.some((t) => t.toLowerCase() === part.toLowerCase());
         if (isMatch) {
           if (type === 'wrong') {
             return (
@@ -297,8 +307,9 @@ export default function MessageBubble({
   const grammarCorrectedSentence = useMemo(() => {
     if (message.grammarCorrectedSentence) return message.grammarCorrectedSentence;
     let corrected = message.text;
-    const grammarMistakes = message.mistakes?.filter(m => m.type === 'Grammar' || m.type === 'Word choice') || [];
-    grammarMistakes.forEach(m => {
+    const grammarMistakes =
+      message.mistakes?.filter((m) => m.type === 'Grammar' || m.type === 'Word choice') || [];
+    grammarMistakes.forEach((m) => {
       const cleanWrong = m.wrong?.replace(/^[^\w']+|[^\w']+$/g, '');
       if (cleanWrong && m.correct) {
         const escaped = cleanWrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -312,8 +323,10 @@ export default function MessageBubble({
   const renderExpandedDetails = () => {
     if (!message.mistakes || message.mistakes.length === 0) return null;
 
-    const pronErrors = message.mistakes.filter(m => m.type === 'Pronunciation');
-    const gramErrors = message.mistakes.filter(m => m.type === 'Grammar' || m.type === 'Word choice');
+    const pronErrors = message.mistakes.filter((m) => m.type === 'Pronunciation');
+    const gramErrors = message.mistakes.filter(
+      (m) => m.type === 'Grammar' || m.type === 'Word choice',
+    );
 
     return (
       <div
@@ -326,9 +339,14 @@ export default function MessageBubble({
               Pronunciation Issues
             </h5>
             {pronErrors.map((mistake, idx) => (
-              <div key={idx} className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-orange-50/50 dark:bg-[#151515] border border-orange-100/50 dark:border-neutral-800 shadow-sm transition-colors">
+              <div
+                key={idx}
+                className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-orange-50/50 dark:bg-[#151515] border border-orange-100/50 dark:border-neutral-800 shadow-sm transition-colors"
+              >
                 <div className="flex flex-col justify-center items-start border-r border-orange-200/50 dark:border-neutral-800 pr-3">
-                  <span className="text-xl font-bold text-gray-900 dark:text-[#EAEAEA] mb-1">{mistake.wrong}</span>
+                  <span className="text-xl font-bold text-gray-900 dark:text-[#EAEAEA] mb-1">
+                    {mistake.wrong}
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-mono text-orange-600 dark:text-orange-400/80 bg-orange-100/50 dark:bg-orange-900/30 px-2 py-0.5 rounded transition-colors">
                       /{mistake.correct || mistake.wrong}/
@@ -346,16 +364,23 @@ export default function MessageBubble({
                   {mistake.phonemes && mistake.phonemes.length > 0 ? (
                     <div className="flex flex-wrap gap-1 mb-1.5">
                       {mistake.phonemes.map((p, pidx) => (
-                        <span key={pidx} className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${p.accuracy_score < 80 ? 'bg-red-100/70 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-100/70 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
+                        <span
+                          key={pidx}
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${p.accuracy_score < 80 ? 'bg-red-100/70 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-100/70 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}
+                        >
                           {p.phoneme} {p.accuracy_score}%
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1">Score: {message.scoreDetails?.pronunciation || '< 90'}</span>
+                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1">
+                      Score: {message.scoreDetails?.pronunciation || '< 90'}
+                    </span>
                   )}
                   {mistake.note && (
-                    <span className="text-[11px] text-gray-600 dark:text-neutral-400 leading-snug">{mistake.note}</span>
+                    <span className="text-[11px] text-gray-600 dark:text-neutral-400 leading-snug">
+                      {mistake.note}
+                    </span>
                   )}
                 </div>
               </div>
@@ -370,21 +395,32 @@ export default function MessageBubble({
             </h5>
             <div className="flex flex-col gap-2 p-3 rounded-xl bg-violet-50/30 dark:bg-[#151515] border border-violet-100/50 dark:border-neutral-800 shadow-sm transition-colors">
               <div className="p-2.5 rounded-lg bg-green-50/50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20 transition-colors">
-                <span className="text-[9px] font-bold uppercase tracking-wider text-green-600/70 dark:text-green-500/70 block mb-1">Corrected Sentence</span>
+                <span className="text-[9px] font-bold uppercase tracking-wider text-green-600/70 dark:text-green-500/70 block mb-1">
+                  Corrected Sentence
+                </span>
                 <p className="text-sm text-gray-800 dark:text-[#EAEAEA] leading-relaxed">
-                  <MultiDiffText text={grammarCorrectedSentence} targets={gramErrors.map(g => g.correct)} type="correct" />
+                  <MultiDiffText
+                    text={grammarCorrectedSentence}
+                    targets={gramErrors.map((g) => g.correct)}
+                    type="correct"
+                  />
                 </p>
               </div>
               <div className="flex flex-col gap-1.5 mt-1">
-                {gramErrors.map((mistake, idx) => (
-                  mistake.note && (
-                    <div key={idx} className="p-2.5 rounded-lg bg-violet-100/40 dark:bg-violet-900/20 border border-violet-200/40 dark:border-violet-800/30 transition-colors">
-                      <p className="text-xs text-violet-800 dark:text-violet-300/90 leading-relaxed">
-                        <span className="font-bold mr-1.5 opacity-80">{mistake.correct}:</span>{mistake.note}
-                      </p>
-                    </div>
-                  )
-                ))}
+                {gramErrors.map(
+                  (mistake, idx) =>
+                    mistake.note && (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-lg bg-violet-100/40 dark:bg-violet-900/20 border border-violet-200/40 dark:border-violet-800/30 transition-colors"
+                      >
+                        <p className="text-xs text-violet-800 dark:text-violet-300/90 leading-relaxed">
+                          <span className="font-bold mr-1.5 opacity-80">{mistake.correct}:</span>
+                          {mistake.note}
+                        </p>
+                      </div>
+                    ),
+                )}
               </div>
             </div>
           </div>
@@ -424,10 +460,11 @@ export default function MessageBubble({
               matched = true;
               const isPronunciation = mistake.type === 'Pronunciation';
 
-              const baseClass = "transition-all duration-200 rounded px-[2px] mx-[-2px] font-semibold";
+              const baseClass =
+                'transition-all duration-200 rounded px-[2px] mx-[-2px] font-semibold';
               const underlineClass = isPronunciation
-                ? "underline decoration-wavy decoration-orange-500 dark:decoration-orange-400/80 underline-offset-4 text-orange-700 dark:text-orange-300"
-                : "underline decoration-dashed decoration-violet-500 dark:decoration-violet-400/80 underline-offset-4 text-violet-700 dark:text-violet-300";
+                ? 'underline decoration-wavy decoration-orange-500 dark:decoration-orange-400/80 underline-offset-4 text-orange-700 dark:text-orange-300'
+                : 'underline decoration-dashed decoration-violet-500 dark:decoration-violet-400/80 underline-offset-4 text-violet-700 dark:text-violet-300';
 
               newResult.push(
                 <span
@@ -435,7 +472,7 @@ export default function MessageBubble({
                   className={`${baseClass} ${underlineClass} ${!isExpanded ? 'hover:bg-gray-100 dark:hover:bg-white/10' : ''}`}
                 >
                   {part}
-                </span>
+                </span>,
               );
             } else if (part) {
               newResult.push(part);
@@ -453,7 +490,7 @@ export default function MessageBubble({
             className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-orange-100 text-orange-700 border border-orange-200"
           >
             ! {mistake.wrong}
-          </span>
+          </span>,
         );
       }
 
@@ -469,10 +506,11 @@ export default function MessageBubble({
       style={{ animation: 'fadeSlideIn 0.3s ease-out' }}
     >
       <div
-        className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center mb-0.5 ${isAgent
-          ? 'bg-blue-100 border-2 border-blue-300 dark:bg-[#1A1A1A] dark:border-[#333]'
-          : 'bg-violet-100 border-2 border-violet-300 dark:bg-[#1A1A1A] dark:border-[#333]'
-          }`}
+        className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center mb-0.5 ${
+          isAgent
+            ? 'bg-blue-100 border-2 border-blue-300 dark:bg-[#1A1A1A] dark:border-[#333]'
+            : 'bg-violet-100 border-2 border-violet-300 dark:bg-[#1A1A1A] dark:border-[#333]'
+        }`}
       >
         {isAgent ? (
           <Bot className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -500,15 +538,17 @@ export default function MessageBubble({
           onClick={canSelect ? onToggleExpanded : undefined}
           disabled={!canSelect}
           aria-pressed={canSelect ? Boolean(isExpanded) : undefined}
-          className={`text-left px-3.5 py-2.5 rounded-2xl text-[15px] leading-relaxed whitespace-pre-wrap relative transition-all shadow-sm ${isAgent
-            ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm cursor-default dark:bg-[#121212] dark:border-[#222222] dark:text-[#EAEAEA]'
-            : `bg-violet-50/50 border text-gray-800 rounded-tr-sm dark:bg-[#1A1A1A] dark:text-[#EAEAEA] ${canSelect
-              ? isExpanded
-                ? 'border-violet-300 ring-4 ring-violet-500/10 bg-violet-50 cursor-pointer dark:bg-[#1E1A24] dark:border-violet-500/40 dark:ring-violet-500/10'
-                : 'border-violet-200 hover:border-violet-300 hover:bg-violet-50/80 cursor-pointer dark:border-[#2A2A2A] dark:hover:border-violet-700/50 dark:hover:bg-[#1E1A24]'
-              : 'border-violet-200 cursor-default dark:border-[#2A2A2A]'
-            }`
-            }`}
+          className={`text-left px-3.5 py-2.5 rounded-2xl text-[15px] leading-relaxed whitespace-pre-wrap relative transition-all shadow-sm ${
+            isAgent
+              ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm cursor-default dark:bg-[#121212] dark:border-[#222222] dark:text-[#EAEAEA]'
+              : `bg-violet-50/50 border text-gray-800 rounded-tr-sm dark:bg-[#1A1A1A] dark:text-[#EAEAEA] ${
+                  canSelect
+                    ? isExpanded
+                      ? 'border-violet-300 ring-4 ring-violet-500/10 bg-violet-50 cursor-pointer dark:bg-[#1E1A24] dark:border-violet-500/40 dark:ring-violet-500/10'
+                      : 'border-violet-200 hover:border-violet-300 hover:bg-violet-50/80 cursor-pointer dark:border-[#2A2A2A] dark:hover:border-violet-700/50 dark:hover:bg-[#1E1A24]'
+                    : 'border-violet-200 cursor-default dark:border-[#2A2A2A]'
+                }`
+          }`}
         >
           <div className="w-full">
             {message.typing ? (
@@ -533,10 +573,9 @@ export default function MessageBubble({
               message.text
             )}
           </div>
-
         </button>
 
-        <div 
+        <div
           className={`grid w-full transform-gpu will-change-[grid-template-rows,opacity,margin] transition-[grid-template-rows,opacity,margin-top] duration-400 ease-[cubic-bezier(0.2,1,0.2,1)] ${isExpanded && canSelect ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0 mt-0'}`}
         >
           <div className="overflow-hidden min-h-0 w-full flex justify-end">
@@ -546,20 +585,23 @@ export default function MessageBubble({
         {isAgent && !message.typing && (message.toolSteps?.length ?? 0) > 0 && (
           <ReasoningSteps steps={message.toolSteps!} />
         )}
-        {isAgent && !message.typing && (message.suggestions?.length ?? 0) > 0 && onSuggestionClick && (
-          <div className="flex flex-wrap gap-1.5 mt-1">
-            {message.suggestions!.map((s, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onSuggestionClick(s)}
-                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors dark:bg-[#161616] dark:border-[#333] dark:text-blue-400 dark:hover:bg-[#1E1E1E] dark:hover:border-[#444]"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
+        {isAgent &&
+          !message.typing &&
+          (message.suggestions?.length ?? 0) > 0 &&
+          onSuggestionClick && (
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {message.suggestions!.map((s, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onSuggestionClick(s)}
+                  className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors dark:bg-[#161616] dark:border-[#333] dark:text-blue-400 dark:hover:bg-[#1E1E1E] dark:hover:border-[#444]"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
       </div>
     </div>
   );

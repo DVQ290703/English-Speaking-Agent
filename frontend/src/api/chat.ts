@@ -56,7 +56,7 @@ export interface GrammarFeedbackPayload {
   overall_score?: number;
 }
 
-function extensionFromMimeType(mimeType: string): string {
+function _extensionFromMimeType(mimeType: string): string {
   const mime = (mimeType || '').toLowerCase();
   if (mime.includes('webm')) return 'webm';
   if (mime.includes('ogg')) return 'ogg';
@@ -284,7 +284,6 @@ export async function transcribeAudio(token: string, audioBlob: Blob): Promise<s
   }
   return (data as { text?: string }).text ?? '';
 }
-
 
 export async function assessPronunciation({
   token,

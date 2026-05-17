@@ -124,8 +124,10 @@ function TopicCard({ topic, accent, onStart }) {
   const translatedTitle = t(`topic.${topic.key}.title`);
   const translatedDesc = t(`topic.${topic.key}.desc`);
 
-  const displayTitle = translatedTitle !== `topic.${topic.key}.title` ? translatedTitle : (topic.title ?? '');
-  const displayDesc = translatedDesc !== `topic.${topic.key}.desc` ? translatedDesc : (topic.desc ?? '');
+  const displayTitle =
+    translatedTitle !== `topic.${topic.key}.title` ? translatedTitle : (topic.title ?? '');
+  const displayDesc =
+    translatedDesc !== `topic.${topic.key}.desc` ? translatedDesc : (topic.desc ?? '');
   const levelKey = DIFFICULTY_TO_LEVEL[topic.level] ?? topic.level;
   return (
     <button
@@ -183,8 +185,8 @@ function CategoryTabsRow({ categories, onStart }) {
                   : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
               }`}
             >
-              {t(`category.${cat.name}.name`) !== `category.${cat.name}.name` 
-                ? t(`category.${cat.name}.name`) 
+              {t(`category.${cat.name}.name`) !== `category.${cat.name}.name`
+                ? t(`category.${cat.name}.name`)
                 : (cat.displayName ?? cat.name)}
             </button>
           ))}

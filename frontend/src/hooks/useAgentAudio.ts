@@ -39,7 +39,7 @@ export default function useAgentAudio({
   setAgentSpeaking,
   languageRef,
   genderRef,
-  userMicIntentRef,
+  userMicIntentRef: _userMicIntentRef,
   messagesRef,
   timersRef,
 }: UseAgentAudioParams): UseAgentAudioResult {
@@ -220,7 +220,7 @@ export default function useAgentAudio({
         timersRef.current.push(speakEnd);
       }
     },
-    [genderRef, languageRef, setAgentSpeaking, setMicEnabled, timersRef, userMicIntentRef],
+    [genderRef, languageRef, setAgentSpeaking, setMicEnabled, timersRef],
   );
 
   const playAgentAudio = useCallback(
@@ -287,7 +287,7 @@ export default function useAgentAudio({
       startPlayback(audioUrl);
       return audioUrl;
     },
-    [setAgentSpeaking, setMicEnabled, trimLocalAudioUrls, userMicIntentRef],
+    [setAgentSpeaking, setMicEnabled, trimLocalAudioUrls],
   );
 
   const playMessageAudio = useCallback(

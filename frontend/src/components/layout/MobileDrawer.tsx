@@ -58,9 +58,7 @@ export function MobileDrawer({ isOpen, onClose, title, children }: MobileDrawerP
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-2 pb-6">
-              {children}
-            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-2 pb-6">{children}</div>
           </motion.div>
         </>
       )}

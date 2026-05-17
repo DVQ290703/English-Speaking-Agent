@@ -75,7 +75,9 @@ export default function ForgotPasswordPage() {
             ) : (
               <>
                 <h2>{t('auth.forgotPassword.checkEmail')}</h2>
-                <p>{t('auth.forgotPassword.sentTo')} {email}</p>
+                <p>
+                  {t('auth.forgotPassword.sentTo')} {email}
+                </p>
               </>
             )}
           </div>
@@ -85,7 +87,7 @@ export default function ForgotPasswordPage() {
               <label className="field">
                 <span>{t('auth.forgotPassword.emailLabel')}</span>
                 <div className="relative" style={{ marginTop: '0.5rem' }}>
-                   <input
+                  <input
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -96,7 +98,12 @@ export default function ForgotPasswordPage() {
                 </div>
               </label>
 
-              <button type="submit" className="submit-btn" disabled={loading} style={{ marginTop: '1rem' }}>
+              <button
+                type="submit"
+                className="submit-btn"
+                disabled={loading}
+                style={{ marginTop: '1rem' }}
+              >
                 {loading ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -115,7 +122,8 @@ export default function ForgotPasswordPage() {
                 <Send className="w-8 h-8" />
               </div>
               <p className="text-sm text-gray-600 mb-2">
-                {t('auth.forgotPassword.sentTo')} <span className="font-semibold text-gray-900">{email}</span>
+                {t('auth.forgotPassword.sentTo')}{' '}
+                <span className="font-semibold text-gray-900">{email}</span>
               </p>
               <p className="text-xs text-gray-500 mb-6">
                 {t('auth.forgotPassword.checkEmailHint')}

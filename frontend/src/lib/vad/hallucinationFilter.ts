@@ -15,7 +15,9 @@ export const KNOWN_HALLUCINATIONS = [
 export const HALLUCINATION_ALLOWLIST = ['yes', 'no', 'ok', 'hi', 'bye', 'yeah', 'nope'];
 
 export function containsNonLatinScript(text: string): boolean {
-  return /[\u0400-\u04FF]|[\u0600-\u06FF]|[\u3000-\u9FFF]|[\uAC00-\uD7AF]|[\u0E00-\u0E7F]/.test(text);
+  return /[\u0400-\u04FF]|[\u0600-\u06FF]|[\u3000-\u9FFF]|[\uAC00-\uD7AF]|[\u0E00-\u0E7F]/.test(
+    text,
+  );
 }
 
 export function containsWhisperMetaTag(text: string): boolean {
@@ -51,7 +53,7 @@ export function isHallucinatedTranscript(transcript: string): boolean {
   // Guard 5: Known phrases
   if (KNOWN_HALLUCINATIONS.some((h) => lower.includes(h))) return true;
 
-  // Guard 6: Non-Latin script 
+  // Guard 6: Non-Latin script
   if (containsNonLatinScript(t)) return true;
 
   // Guard 7: Whisper Meta-tags (Chặn [speaking Russian])

@@ -143,13 +143,15 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.changePassword.resetSuccess': 'Password reset successfully.',
 
     'auth.forgotPassword.title': 'Forgot Password?',
-    'auth.forgotPassword.desc': "Enter your email address and we'll send you a link to reset your password.",
+    'auth.forgotPassword.desc':
+      "Enter your email address and we'll send you a link to reset your password.",
     'auth.forgotPassword.emailLabel': 'Email Address',
     'auth.forgotPassword.submit': 'Send Reset Link',
     'auth.forgotPassword.backToLogin': 'Back to login',
     'auth.forgotPassword.checkEmail': 'Check your email',
     'auth.forgotPassword.sentTo': "We've sent a password reset link to",
-    'auth.forgotPassword.checkEmailHint': 'If the account exists, we sent a reset link that expires in 5 minutes.',
+    'auth.forgotPassword.checkEmailHint':
+      'If the account exists, we sent a reset link that expires in 5 minutes.',
     'auth.forgotPassword.tryAgain': "Didn't receive the email? Try again",
 
     // Shortcuts cheatsheet
@@ -215,72 +217,90 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.ielts_describe_person.title': 'Describe a Person',
     'topic.ielts_describe_person.desc': 'Describe someone important or interesting in your life',
     'topic.ielts_describe_place.title': 'Describe a Place',
-    'topic.ielts_describe_place.desc': 'Describe a location you have visited or would like to visit',
+    'topic.ielts_describe_place.desc':
+      'Describe a location you have visited or would like to visit',
     'topic.ielts_describe_event.title': 'Describe an Event',
     'topic.ielts_describe_event.desc': 'Describe a memorable event or celebration',
     'topic.ielts_describe_object.title': 'Describe an Object',
     'topic.ielts_describe_object.desc': 'Describe an object that is important or meaningful to you',
 
     'topic.business_job_interview.title': 'Job Interview',
-    'topic.business_job_interview.desc': 'Practice common interview questions and professional self-presentation',
+    'topic.business_job_interview.desc':
+      'Practice common interview questions and professional self-presentation',
     'topic.business_meeting.title': 'Office Meeting & Collaboration',
     'topic.business_meeting.desc': 'Participate in meetings, give updates, and discuss projects',
     'topic.business_presentation.title': 'Presentations & Public Speaking',
     'topic.business_presentation.desc': 'Deliver structured presentations and handle Q&A',
     'topic.business_negotiation.title': 'Negotiation & Persuasion',
-    'topic.business_negotiation.desc': 'Negotiate deals, manage disagreements, and persuade stakeholders',
+    'topic.business_negotiation.desc':
+      'Negotiate deals, manage disagreements, and persuade stakeholders',
     'topic.business_networking.title': 'Professional Networking',
-    'topic.business_networking.desc': 'Introduce yourself, build rapport, and exchange information professionally',
+    'topic.business_networking.desc':
+      'Introduce yourself, build rapport, and exchange information professionally',
     'topic.business_performance_review.title': 'Performance Review',
-    'topic.business_performance_review.desc': 'Discuss goals, achievements, and areas for improvement with a manager',
+    'topic.business_performance_review.desc':
+      'Discuss goals, achievements, and areas for improvement with a manager',
     'topic.business_leadership.title': 'Leadership & Management',
-    'topic.business_leadership.desc': 'Discuss leadership styles, team management, and strategic decisions',
+    'topic.business_leadership.desc':
+      'Discuss leadership styles, team management, and strategic decisions',
 
     'topic.daily_greetings.title': 'Greetings & Small Talk',
-    'topic.daily_greetings.desc': 'Start conversations, introduce yourself, and chat about everyday topics',
+    'topic.daily_greetings.desc':
+      'Start conversations, introduce yourself, and chat about everyday topics',
     'topic.daily_shopping.title': 'Shopping & Customer Service',
     'topic.daily_shopping.desc': 'Ask for help, compare products, and handle purchases',
     'topic.daily_healthcare.title': 'Healthcare & Medical',
-    'topic.daily_healthcare.desc': 'Describe symptoms, follow medical advice, and communicate with healthcare staff',
+    'topic.daily_healthcare.desc':
+      'Describe symptoms, follow medical advice, and communicate with healthcare staff',
     'topic.daily_family.title': 'Family & Relationships',
     'topic.daily_family.desc': 'Talk about family members, relationships, and personal life',
     'topic.daily_hobbies.title': 'Hobbies & Free Time',
     'topic.daily_hobbies.desc': 'Describe interests, pastimes, and leisure activities',
     'topic.daily_housing.title': 'Housing & Neighborhood',
-    'topic.daily_housing.desc': 'Describe your home, discuss renting/buying, and talk about your area',
+    'topic.daily_housing.desc':
+      'Describe your home, discuss renting/buying, and talk about your area',
     'topic.daily_cooking.title': 'Food & Cooking at Home',
     'topic.daily_cooking.desc': 'Discuss recipes, cooking methods, and food preferences',
 
     'topic.travel_planning.title': 'Travel Planning & Booking',
-    'topic.travel_planning.desc': 'Plan trips, book tickets and accommodation, and compare travel options',
+    'topic.travel_planning.desc':
+      'Plan trips, book tickets and accommodation, and compare travel options',
     'topic.travel_restaurant.title': 'Restaurants & Dining Out',
-    'topic.travel_restaurant.desc': 'Order food, ask about the menu, and interact with restaurant staff',
+    'topic.travel_restaurant.desc':
+      'Order food, ask about the menu, and interact with restaurant staff',
     'topic.travel_hotel.title': 'Hotel & Accommodation',
     'topic.travel_hotel.desc': 'Check in, make requests, handle complaints, and check out',
     'topic.travel_airport.title': 'Airport & Transportation',
     'topic.travel_airport.desc': 'Navigate airports, buy tickets, and use public transport',
     'topic.travel_sightseeing.title': 'Sightseeing & Tourism',
-    'topic.travel_sightseeing.desc': 'Ask for directions, learn about attractions, and discuss experiences',
+    'topic.travel_sightseeing.desc':
+      'Ask for directions, learn about attractions, and discuss experiences',
     'topic.travel_culture.title': 'Cultural Differences & Customs',
     'topic.travel_culture.desc': 'Discuss traditions, etiquette, and cross-cultural observations',
     'topic.travel_emergency.title': 'Lost & Emergency Situations',
-    'topic.travel_emergency.desc': 'Ask for help when lost, report problems, and handle unexpected situations',
+    'topic.travel_emergency.desc':
+      'Ask for help when lost, report problems, and handle unexpected situations',
 
     'topic.academic_classroom.title': 'Classroom Discussion',
-    'topic.academic_classroom.desc': 'Participate in seminars, ask questions, and debate academic ideas',
+    'topic.academic_classroom.desc':
+      'Participate in seminars, ask questions, and debate academic ideas',
     'topic.academic_research.title': 'Research & Thesis Defense',
     'topic.academic_research.desc': 'Present research findings and respond to critical questions',
     'topic.academic_study_abroad.title': 'Study Abroad Experience',
-    'topic.academic_study_abroad.desc': 'Talk about studying in another country and adapting to a new environment',
+    'topic.academic_study_abroad.desc':
+      'Talk about studying in another country and adapting to a new environment',
     'topic.academic_presentations.title': 'Academic Presentations',
-    'topic.academic_presentations.desc': 'Deliver structured academic talks with clear introduction and conclusion',
+    'topic.academic_presentations.desc':
+      'Deliver structured academic talks with clear introduction and conclusion',
     'topic.academic_campus.title': 'Campus Life & Student Issues',
     'topic.academic_campus.desc': 'Discuss university life, accommodation, and student challenges',
     'topic.academic_online.title': 'Online Learning & EdTech',
-    'topic.academic_online.desc': 'Discuss e-learning platforms, remote study, and digital education trends',
+    'topic.academic_online.desc':
+      'Discuss e-learning platforms, remote study, and digital education trends',
 
     'topic.health_doctor.title': 'Doctor & Hospital Visit',
-    'topic.health_doctor.desc': 'Describe symptoms, understand diagnoses, and follow medical instructions',
+    'topic.health_doctor.desc':
+      'Describe symptoms, understand diagnoses, and follow medical instructions',
     'topic.health_mental.title': 'Mental Health & Wellbeing',
     'topic.health_mental.desc': 'Discuss stress, anxiety, and strategies for emotional wellbeing',
     'topic.health_diet.title': 'Diet & Nutrition Advice',
@@ -290,10 +310,12 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.health_stress.title': 'Stress & Work-Life Balance',
     'topic.health_stress.desc': 'Discuss burnout, time management, and maintaining balance',
     'topic.health_public.title': 'Public Health & Epidemics',
-    'topic.health_public.desc': 'Discuss health policies, disease prevention, and global health issues',
+    'topic.health_public.desc':
+      'Discuss health policies, disease prevention, and global health issues',
 
     'topic.tech_social_media.title': 'Social Media & Internet Culture',
-    'topic.tech_social_media.desc': 'Discuss platforms, online behaviour, and digital communication',
+    'topic.tech_social_media.desc':
+      'Discuss platforms, online behaviour, and digital communication',
     'topic.tech_ai.title': 'Artificial Intelligence & Future',
     'topic.tech_ai.desc': 'Discuss AI trends, automation, and the future of work',
     'topic.tech_gadgets.title': 'Gadgets & Devices',
@@ -301,20 +323,25 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.tech_cybersecurity.title': 'Cybersecurity & Privacy',
     'topic.tech_cybersecurity.desc': 'Discuss online safety, data privacy, and digital threats',
     'topic.tech_ecommerce.title': 'E-commerce & Digital Life',
-    'topic.tech_ecommerce.desc': 'Discuss online shopping, digital payments, and platform economies',
+    'topic.tech_ecommerce.desc':
+      'Discuss online shopping, digital payments, and platform economies',
     'topic.tech_gaming.title': 'Gaming & Virtual Reality',
     'topic.tech_gaming.desc': 'Talk about video games, esports, and immersive digital experiences',
 
     'topic.social_friendship.title': 'Friendship & Social Circles',
-    'topic.social_friendship.desc': 'Talk about making friends, social groups, and maintaining relationships',
+    'topic.social_friendship.desc':
+      'Talk about making friends, social groups, and maintaining relationships',
     'topic.social_dating.title': 'Dating & Romance',
     'topic.social_dating.desc': 'Discuss relationships, dating culture, and personal expectations',
     'topic.social_conflict.title': 'Conflict Resolution',
-    'topic.social_conflict.desc': 'Navigate disagreements, apologise effectively, and find compromise',
+    'topic.social_conflict.desc':
+      'Navigate disagreements, apologise effectively, and find compromise',
     'topic.social_peer_pressure.title': 'Peer Pressure & Boundaries',
-    'topic.social_peer_pressure.desc': 'Discuss setting limits, saying no, and assertive communication',
+    'topic.social_peer_pressure.desc':
+      'Discuss setting limits, saying no, and assertive communication',
     'topic.social_cross_cultural.title': 'Cross-Cultural Friendships',
-    'topic.social_cross_cultural.desc': 'Talk about navigating cultural differences in personal relationships',
+    'topic.social_cross_cultural.desc':
+      'Talk about navigating cultural differences in personal relationships',
     'topic.social_community.title': 'Community & Volunteering',
     'topic.social_community.desc': 'Discuss local community involvement and charitable activities',
 
@@ -323,7 +350,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.env_sustainable.title': 'Sustainable Living',
     'topic.env_sustainable.desc': 'Talk about eco-friendly habits, recycling, and green choices',
     'topic.env_social_issues.title': 'Social Issues & Inequality',
-    'topic.env_social_issues.desc': 'Discuss poverty, discrimination, and systemic social challenges',
+    'topic.env_social_issues.desc':
+      'Discuss poverty, discrimination, and systemic social challenges',
     'topic.env_immigration.title': 'Immigration & Identity',
     'topic.env_immigration.desc': 'Talk about migration, cultural identity, and belonging',
     'topic.env_urban_rural.title': 'Urban vs Rural Life',
@@ -648,20 +676,23 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'auth.changePassword.error.mismatch': 'Mật khẩu mới không khớp!',
     'auth.changePassword.resetTitle': 'Đặt lại mật khẩu',
     'auth.changePassword.resetSubtitle': 'Thiết lập mật khẩu mới cho tài khoản của bạn.',
-    'auth.changePassword.resetInvalidLink': 'Liên kết đặt lại mật khẩu này bị thiếu, không hợp lệ hoặc đã hết hạn.',
+    'auth.changePassword.resetInvalidLink':
+      'Liên kết đặt lại mật khẩu này bị thiếu, không hợp lệ hoặc đã hết hạn.',
     'auth.changePassword.resetRequestNew': 'Yêu cầu liên kết mới',
     'auth.changePassword.backToLogin': 'Quay lại đăng nhập',
     'auth.changePassword.resetSubmit': 'Đặt lại mật khẩu',
     'auth.changePassword.resetSuccess': 'Đặt lại mật khẩu thành công.',
 
     'auth.forgotPassword.title': 'Quên mật khẩu?',
-    'auth.forgotPassword.desc': 'Nhập địa chỉ email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu.',
+    'auth.forgotPassword.desc':
+      'Nhập địa chỉ email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu.',
     'auth.forgotPassword.emailLabel': 'Địa chỉ Email',
     'auth.forgotPassword.submit': 'Gửi link đặt lại',
     'auth.forgotPassword.backToLogin': 'Quay lại đăng nhập',
     'auth.forgotPassword.checkEmail': 'Kiểm tra email của bạn',
     'auth.forgotPassword.sentTo': 'Chúng tôi đã gửi link đặt lại mật khẩu đến',
-    'auth.forgotPassword.checkEmailHint': 'Nếu tài khoản tồn tại, chúng tôi đã gửi một liên kết đặt lại mật khẩu có hiệu lực trong 5 phút.',
+    'auth.forgotPassword.checkEmailHint':
+      'Nếu tài khoản tồn tại, chúng tôi đã gửi một liên kết đặt lại mật khẩu có hiệu lực trong 5 phút.',
     'auth.forgotPassword.tryAgain': 'Không nhận được email? Thử lại',
 
     // Shortcuts cheatsheet
@@ -725,7 +756,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.ielts_part3.title': 'Part 3: Thảo luận trừu tượng',
     'topic.ielts_part3.desc': 'Thảo luận về các ý tưởng và vấn đề trừu tượng liên quan đến Part 2',
     'topic.ielts_describe_person.title': 'Mô tả một người',
-    'topic.ielts_describe_person.desc': 'Mô tả một người quan trọng hoặc thú vị trong cuộc sống của bạn',
+    'topic.ielts_describe_person.desc':
+      'Mô tả một người quan trọng hoặc thú vị trong cuộc sống của bạn',
     'topic.ielts_describe_place.title': 'Mô tả một địa điểm',
     'topic.ielts_describe_place.desc': 'Mô tả một nơi bạn đã đến hoặc muốn ghé thăm',
     'topic.ielts_describe_event.title': 'Mô tả một sự kiện',
@@ -734,26 +766,34 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.ielts_describe_object.desc': 'Mô tả một đồ vật quan trọng hoặc có ý nghĩa đối với bạn',
 
     'topic.business_job_interview.title': 'Phỏng vấn xin việc',
-    'topic.business_job_interview.desc': 'Luyện tập các câu hỏi phỏng vấn thường gặp và cách giới thiệu bản thân chuyên nghiệp',
+    'topic.business_job_interview.desc':
+      'Luyện tập các câu hỏi phỏng vấn thường gặp và cách giới thiệu bản thân chuyên nghiệp',
     'topic.business_meeting.title': 'Họp hành & Cộng tác',
     'topic.business_meeting.desc': 'Tham gia cuộc họp, cập nhật tiến độ và thảo luận dự án',
     'topic.business_presentation.title': 'Thuyết trình chuyên nghiệp',
-    'topic.business_presentation.desc': 'Thực hiện bài thuyết trình có cấu trúc và trả lời câu hỏi Q&A',
+    'topic.business_presentation.desc':
+      'Thực hiện bài thuyết trình có cấu trúc và trả lời câu hỏi Q&A',
     'topic.business_negotiation.title': 'Đàm phán & Thuyết phục',
-    'topic.business_negotiation.desc': 'Thương lượng hợp đồng, xử lý bất đồng và thuyết phục đối tác',
+    'topic.business_negotiation.desc':
+      'Thương lượng hợp đồng, xử lý bất đồng và thuyết phục đối tác',
     'topic.business_networking.title': 'Kết nối chuyên nghiệp',
-    'topic.business_networking.desc': 'Giới thiệu bản thân, xây dựng mối quan hệ và trao đổi thông tin',
+    'topic.business_networking.desc':
+      'Giới thiệu bản thân, xây dựng mối quan hệ và trao đổi thông tin',
     'topic.business_performance_review.title': 'Đánh giá năng lực',
-    'topic.business_performance_review.desc': 'Thảo luận mục tiêu, thành tích và định hướng phát triển với quản lý',
+    'topic.business_performance_review.desc':
+      'Thảo luận mục tiêu, thành tích và định hướng phát triển với quản lý',
     'topic.business_leadership.title': 'Lãnh đạo & Quản lý',
-    'topic.business_leadership.desc': 'Thảo luận về phong cách lãnh đạo, quản lý đội ngũ và quyết định chiến lược',
+    'topic.business_leadership.desc':
+      'Thảo luận về phong cách lãnh đạo, quản lý đội ngũ và quyết định chiến lược',
 
     'topic.daily_greetings.title': 'Chào hỏi & Trò chuyện',
-    'topic.daily_greetings.desc': 'Bắt đầu câu chuyện, giới thiệu bản thân và tán gẫu về các chủ đề hàng ngày',
+    'topic.daily_greetings.desc':
+      'Bắt đầu câu chuyện, giới thiệu bản thân và tán gẫu về các chủ đề hàng ngày',
     'topic.daily_shopping.title': 'Mua sắm & Dịch vụ',
     'topic.daily_shopping.desc': 'Hỏi trợ giúp, so sánh sản phẩm và thực hiện mua sắm',
     'topic.daily_healthcare.title': 'Sức khỏe & Y tế',
-    'topic.daily_healthcare.desc': 'Mô tả triệu chứng, nghe tư vấn y tế và giao tiếp với nhân viên y tế',
+    'topic.daily_healthcare.desc':
+      'Mô tả triệu chứng, nghe tư vấn y tế và giao tiếp với nhân viên y tế',
     'topic.daily_family.title': 'Gia đình & Mối quan hệ',
     'topic.daily_family.desc': 'Trò chuyện về các thành viên trong gia đình và đời sống cá nhân',
     'topic.daily_hobbies.title': 'Sở thích & Giải trí',
@@ -761,7 +801,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.daily_housing.title': 'Nhà ở & Hàng xóm',
     'topic.daily_housing.desc': 'Mô tả ngôi nhà, thảo luận việc thuê/mua nhà và khu vực bạn sống',
     'topic.daily_cooking.title': 'Nấu nướng tại nhà',
-    'topic.daily_cooking.desc': 'Thảo luận về công thức nấu ăn, phương pháp nấu và sở thích ẩm thực',
+    'topic.daily_cooking.desc':
+      'Thảo luận về công thức nấu ăn, phương pháp nấu và sở thích ẩm thực',
 
     'topic.travel_planning.title': 'Lập kế hoạch du lịch',
     'topic.travel_planning.desc': 'Lên lịch trình, đặt vé, phòng và so sánh các lựa chọn di chuyển',
@@ -772,22 +813,28 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.travel_airport.title': 'Sân bay & Di chuyển',
     'topic.travel_airport.desc': 'Làm thủ tục tại sân bay, mua vé và sử dụng phương tiện công cộng',
     'topic.travel_sightseeing.title': 'Tham quan & Du lịch',
-    'topic.travel_sightseeing.desc': 'Hỏi đường, tìm hiểu các điểm tham quan và chia sẻ trải nghiệm',
+    'topic.travel_sightseeing.desc':
+      'Hỏi đường, tìm hiểu các điểm tham quan và chia sẻ trải nghiệm',
     'topic.travel_culture.title': 'Văn hóa & Phong tục',
     'topic.travel_culture.desc': 'Thảo luận về truyền thống, nghi thức và quan sát đa văn hóa',
     'topic.travel_emergency.title': 'Sự cố & Khẩn cấp',
-    'topic.travel_emergency.desc': 'Hỏi trợ giúp khi bị lạc, báo cáo sự cố và xử lý tình huống bất ngờ',
+    'topic.travel_emergency.desc':
+      'Hỏi trợ giúp khi bị lạc, báo cáo sự cố và xử lý tình huống bất ngờ',
 
     'topic.academic_classroom.title': 'Thảo luận lớp học',
-    'topic.academic_classroom.desc': 'Tham gia hội thảo, đặt câu hỏi và tranh luận các ý tưởng học thuật',
+    'topic.academic_classroom.desc':
+      'Tham gia hội thảo, đặt câu hỏi và tranh luận các ý tưởng học thuật',
     'topic.academic_research.title': 'Nghiên cứu & Bảo vệ luận văn',
     'topic.academic_research.desc': 'Trình bày kết quả nghiên cứu và phản biện các câu hỏi hóc búa',
     'topic.academic_study_abroad.title': 'Trải nghiệm du học',
-    'topic.academic_study_abroad.desc': 'Nói về việc học tập tại nước ngoài và thích nghi với môi trường mới',
+    'topic.academic_study_abroad.desc':
+      'Nói về việc học tập tại nước ngoài và thích nghi với môi trường mới',
     'topic.academic_presentations.title': 'Thuyết trình học thuật',
-    'topic.academic_presentations.desc': 'Thực hiện bài nói học thuật có cấu trúc mở đầu và kết thúc rõ ràng',
+    'topic.academic_presentations.desc':
+      'Thực hiện bài nói học thuật có cấu trúc mở đầu và kết thúc rõ ràng',
     'topic.academic_campus.title': 'Đời sống học đường',
-    'topic.academic_campus.desc': 'Thảo luận về cuộc sống đại học, ký túc xá và những thử thách sinh viên',
+    'topic.academic_campus.desc':
+      'Thảo luận về cuộc sống đại học, ký túc xá và những thử thách sinh viên',
     'topic.academic_online.title': 'Học trực tuyến & EdTech',
     'topic.academic_online.desc': 'Thảo luận về các nền tảng học online và xu hướng giáo dục số',
 
@@ -798,11 +845,14 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.health_diet.title': 'Chế độ dinh dưỡng',
     'topic.health_diet.desc': 'Nói về việc ăn uống lành mạnh và các lựa chọn thực phẩm',
     'topic.health_exercise.title': 'Tập luyện & Thể hình',
-    'topic.health_exercise.desc': 'Mô tả thói quen tập thể dục, mục tiêu thể hình và các môn thể thao',
+    'topic.health_exercise.desc':
+      'Mô tả thói quen tập thể dục, mục tiêu thể hình và các môn thể thao',
     'topic.health_stress.title': 'Cân bằng công việc - cuộc sống',
-    'topic.health_stress.desc': 'Thảo luận về tình trạng kiệt sức, quản lý thời gian và giữ cân bằng',
+    'topic.health_stress.desc':
+      'Thảo luận về tình trạng kiệt sức, quản lý thời gian và giữ cân bằng',
     'topic.health_public.title': 'Sức khỏe cộng đồng',
-    'topic.health_public.desc': 'Thảo luận chính sách y tế, phòng chống dịch bệnh và vấn đề sức khỏe toàn cầu',
+    'topic.health_public.desc':
+      'Thảo luận chính sách y tế, phòng chống dịch bệnh và vấn đề sức khỏe toàn cầu',
 
     'topic.tech_social_media.title': 'Mạng xã hội & Internet',
     'topic.tech_social_media.desc': 'Thảo luận về các nền tảng, hành vi online và giao tiếp số',
@@ -811,31 +861,39 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.tech_gadgets.title': 'Thiết bị & Đồ công nghệ',
     'topic.tech_gadgets.desc': 'So sánh sản phẩm, mô tả tính năng và thảo luận công nghệ tiêu dùng',
     'topic.tech_cybersecurity.title': 'An ninh mạng & Quyền riêng tư',
-    'topic.tech_cybersecurity.desc': 'Thảo luận an toàn trực tuyến, bảo mật dữ liệu và các mối đe dọa số',
+    'topic.tech_cybersecurity.desc':
+      'Thảo luận an toàn trực tuyến, bảo mật dữ liệu và các mối đe dọa số',
     'topic.tech_ecommerce.title': 'Thương mại điện tử',
     'topic.tech_ecommerce.desc': 'Thảo luận mua sắm online, thanh toán số và kinh tế nền tảng',
     'topic.tech_gaming.title': 'Trò chơi & Thực tế ảo',
-    'topic.tech_gaming.desc': 'Nói về trò chơi điện tử, esports và trải nghiệm kỹ thuật số nhập vai',
+    'topic.tech_gaming.desc':
+      'Nói về trò chơi điện tử, esports và trải nghiệm kỹ thuật số nhập vai',
 
     'topic.social_friendship.title': 'Tình bạn & Vòng kết nối',
     'topic.social_friendship.desc': 'Nói về việc kết bạn, các nhóm xã hội và duy trì mối quan hệ',
     'topic.social_dating.title': 'Hẹn hò & Lãng mạn',
     'topic.social_dating.desc': 'Thảo luận về các mối quan hệ, văn hóa hẹn hò và kỳ vọng cá nhân',
     'topic.social_conflict.title': 'Giải quyết xung đột',
-    'topic.social_conflict.desc': 'Xử lý các bất đồng, xin lỗi hiệu quả và tìm kiếm giải pháp chung',
+    'topic.social_conflict.desc':
+      'Xử lý các bất đồng, xin lỗi hiệu quả và tìm kiếm giải pháp chung',
     'topic.social_peer_pressure.title': 'Áp lực đồng trang lứa',
-    'topic.social_peer_pressure.desc': 'Thảo luận về việc thiết lập giới hạn và giao tiếp quyết đoán',
+    'topic.social_peer_pressure.desc':
+      'Thảo luận về việc thiết lập giới hạn và giao tiếp quyết đoán',
     'topic.social_cross_cultural.title': 'Tình bạn đa văn hóa',
-    'topic.social_cross_cultural.desc': 'Nói về việc vượt qua rào cản văn hóa trong các mối quan hệ cá nhân',
+    'topic.social_cross_cultural.desc':
+      'Nói về việc vượt qua rào cản văn hóa trong các mối quan hệ cá nhân',
     'topic.social_community.title': 'Cộng đồng & Tình nguyện',
     'topic.social_community.desc': 'Thảo luận về các hoạt động cộng đồng và công việc thiện nguyện',
 
     'topic.env_climate.title': 'Biến đổi khí hậu',
-    'topic.env_climate.desc': 'Thảo luận các vấn đề môi trường, khoa học khí hậu và tác động toàn cầu',
+    'topic.env_climate.desc':
+      'Thảo luận các vấn đề môi trường, khoa học khí hậu và tác động toàn cầu',
     'topic.env_sustainable.title': 'Lối sống bền vững',
-    'topic.env_sustainable.desc': 'Nói về thói quen thân thiện môi trường và các lựa chọn sống xanh',
+    'topic.env_sustainable.desc':
+      'Nói về thói quen thân thiện môi trường và các lựa chọn sống xanh',
     'topic.env_social_issues.title': 'Vấn đề xã hội & Bất bình đẳng',
-    'topic.env_social_issues.desc': 'Thảo luận về nghèo đói, phân biệt đối xử và các thách thức hệ thống',
+    'topic.env_social_issues.desc':
+      'Thảo luận về nghèo đói, phân biệt đối xử và các thách thức hệ thống',
     'topic.env_immigration.title': 'Nhập cư & Bản sắc',
     'topic.env_immigration.desc': 'Nói về di cư, bản sắc văn hóa và sự hòa nhập',
     'topic.env_urban_rural.title': 'Thành thị vs Nông thôn',
@@ -852,7 +910,8 @@ export const TRANSLATIONS: Record<Lang, Dict> = {
     'topic.ent_sports.title': 'Thể thao & Thi đấu',
     'topic.ent_sports.desc': 'Thảo luận về các đội bóng, sự kiện thể thao và tinh thần thi đấu',
     'topic.ent_celebrities.title': 'Người nổi tiếng',
-    'topic.ent_celebrities.desc': 'Thảo luận về những người nổi tiếng, xu hướng và văn hóa đại chúng',
+    'topic.ent_celebrities.desc':
+      'Thảo luận về những người nổi tiếng, xu hướng và văn hóa đại chúng',
     'topic.ent_news.title': 'Tin tức & Thời sự',
     'topic.ent_news.desc': 'Tóm tắt các bản tin và thảo luận về tầm quan trọng của chúng',
 

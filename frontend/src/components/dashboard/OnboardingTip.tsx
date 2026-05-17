@@ -37,11 +37,7 @@ export default function OnboardingTip() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-center w-16 h-16 rounded-3xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 mx-auto mb-4 shadow-xl overflow-hidden">
-          <img
-            src="/audio-waves.png"
-            alt="Logo"
-            className="w-full h-full object-cover p-2"
-          />
+          <img src="/audio-waves.png" alt="Logo" className="w-full h-full object-cover p-2" />
         </div>
         <h2 className="text-xl font-bold text-center text-gray-900 dark:text-slate-100 mb-2">
           {t('onboarding.title')}

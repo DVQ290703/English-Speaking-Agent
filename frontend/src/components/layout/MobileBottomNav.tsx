@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Mic, LayoutDashboard, Library, UserCircle, Settings } from 'lucide-react';
+import { Mic, LayoutDashboard, Library, UserCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../../i18n/useLanguage';
 
@@ -33,7 +33,9 @@ export function MobileBottomNav({ onMenuClick }: MobileBottomNavProps) {
     <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-gray-200 dark:border-slate-800 z-50 px-2 pb-[env(safe-area-inset-bottom,12px)] pt-2 shadow-[0_-4px_16px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-around max-w-lg mx-auto relative">
         {navItems.map((item) => {
-          const isActive = location.pathname.startsWith(item.path.split('/')[1] === 'chat' ? '/chat' : item.path);
+          const isActive = location.pathname.startsWith(
+            item.path.split('/')[1] === 'chat' ? '/chat' : item.path,
+          );
           const Icon = item.icon;
 
           return (
@@ -51,7 +53,9 @@ export function MobileBottomNav({ onMenuClick }: MobileBottomNavProps) {
                   transition={{ type: 'spring', damping: 15, stiffness: 200 }}
                 />
               )}
-              <Icon className={`w-5 h-5 ${isActive ? 'fill-blue-50' : ''} dark:${isActive ? 'fill-blue-500/10' : ''}`} />
+              <Icon
+                className={`w-5 h-5 ${isActive ? 'fill-blue-50' : ''} dark:${isActive ? 'fill-blue-500/10' : ''}`}
+              />
               <span className="text-[10px] font-bold tracking-tight uppercase">{item.label}</span>
             </Link>
           );
