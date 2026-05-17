@@ -14,6 +14,46 @@ from app.services.elevenlabs_tts import ElevenLabsTTS
 from app.services.groq_llm import GroqLLMService
 from app.agents.state import AgentState
 
+def _degraded_coaching_fallback(user_input: str) -> tuple[str, list[str]]:
+    """Return a useful local fallback when upstream LLM calls fail.
+
+    Keeps tutoring continuity instead of exposing infrastructure errors.
+    """
+    text = (user_input or "").strip()
+    if not text:
+        return (
+            "No worries. Please share one short sentence in English, and I will help you improve it.",
+            ["I went to school yesterday.", "I feel nervous about speaking English."],
+        )
+
+    lower = text.lower()
+    corrected = text
+    # Minimal deterministic corrections for very common learner mistakes.
+    corrected = corrected.replace(" i goed ", " i went ")
+    corrected = corrected.replace(" i goed", " i went")
+    corrected = corrected.replace("dont ", "don't ")
+    corrected = corrected.replace("cant ", "can't ")
+
+    if corrected != text:
+        response = (
+            f"Good effort. A more natural sentence is: \"{corrected}\". "
+            "Want to try one more sentence?"
+        )
+    elif "pronounce" in lower or "how to say" in lower:
+        response = (
+            "Great question. Tell me the exact word, and I will give you a simple pronunciation breakdown."
+        )
+    else:
+        response = (
+            "Thanks for sharing. Please add one more detail, and I will help you make it sound more natural."
+        )
+
+    suggestions = [
+        "Can you correct this sentence for me?",
+        "How can I say this more naturally?",
+    ]
+    return response, suggestions
+
 def _sanitize_tool_messages(messages: list) -> list:
     """Ensure all ToolMessages have non-empty string content.
 
@@ -136,7 +176,9 @@ class VoiceAgentPipeline:
 
     def _respond_node(self, state: AgentState) -> AgentState:
         """Generate the assistant response, invoking tools if the LLM requests them."""
-        iterations = state.get("_tool_call_iterations", 3)
+        # Default must be 0 for first-turn responses; using 3 forces tool-mode
+        # and can trigger avoidable rate-limit fallbacks.
+        iterations = state.get("_tool_call_iterations", 0)
         logger.debug("respond_node start input_length=%d tool_iterations=%d", len(state["user_input"]), iterations)
 
         from app.prompts.prompt_builder import build_system_prompt
@@ -201,13 +243,14 @@ class VoiceAgentPipeline:
                 except RateLimitError as exc:
                     span.fail(str(exc))
                     logger.warning("respond_node rate_limited iteration=%d: %s", iterations, exc)
+                    degraded_text, degraded_suggestions = _degraded_coaching_fallback(state["user_input"])
                     return {
                         **state,
-                        "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
+                        "response_text": degraded_text,
                         "messages": [],
                         "_tool_call_iterations": iterations,
                         "grammar_raw": None,
-                        "suggestions": [],
+                        "suggestions": degraded_suggestions,
                     }
                 except BadRequestError as exc:
                     span.fail(str(exc))
@@ -264,13 +307,14 @@ class VoiceAgentPipeline:
                 except RateLimitError as exc:
                     span.fail(str(exc))
                     logger.warning("respond_node rate_limited iteration=%d: %s", iterations, exc)
+                    degraded_text, degraded_suggestions = _degraded_coaching_fallback(state["user_input"])
                     return {
                         **state,
-                        "response_text": "I'm a bit overwhelmed right now. Please try again in a moment.",
+                        "response_text": degraded_text,
                         "messages": [],
                         "_tool_call_iterations": iterations,
                         "grammar_raw": None,
-                        "suggestions": [],
+                        "suggestions": degraded_suggestions,
                     }
                 except Exception as exc:
                     span.fail(str(exc))
@@ -292,7 +336,24 @@ class VoiceAgentPipeline:
                         raw_output = fallback_msg.content or ""
                     except Exception as fallback_exc:
                         logger.error("respond_node fallback_also_failed: %s", fallback_exc)
-                        raw_output = ""
+                        degraded_text, degraded_suggestions = _degraded_coaching_fallback(state["user_input"])
+                        raw_output = degraded_text
+                        response_text = degraded_text
+                        grammar_raw = None
+                        suggestions = degraded_suggestions
+                        return {
+                            **state,
+                            "response_text": response_text,
+                            "raw_output": raw_output,
+                            "history": state.get("history", []) + [
+                                f"User: {state['user_input']}",
+                                f"Assistant: {response_text}",
+                            ],
+                            "grammar_raw": grammar_raw,
+                            "suggestions": suggestions,
+                            "messages": [],
+                            "_tool_call_iterations": iterations,
+                        }
                     response_text, grammar_raw, suggestions = split_combined_output_with_suggestions(
                         raw_output
                     )
