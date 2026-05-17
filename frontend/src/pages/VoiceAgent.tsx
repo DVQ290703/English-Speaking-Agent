@@ -198,9 +198,10 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialState.messages);
   const sessionIdRef = useRef<string | null>(initialState.sessionId);
-  const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
+  const [expandedMsgIds, setExpandedMsgIds] = useState<number[] | null>(null);
+  const selectedMsgId = expandedMsgIds && expandedMsgIds.length > 0 ? expandedMsgIds[expandedMsgIds.length - 1] : null;
   const selectedMsg =
-    expandedMsgId !== null ? (messages.find((m) => m.id === expandedMsgId) ?? null) : null;
+    selectedMsgId !== null ? (messages.find((m) => m.id === selectedMsgId) ?? null) : null;
   // Prefer the most recent user message that contains assessment information
   // (either `scoreDetails` or recorded `mistakes`). This prevents the
   // feedback pane from showing stale or unassessed messages.
@@ -395,8 +396,37 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageCountRef = useRef(messages.length);
+  const lastAgentTextRef = useRef('');
+
   useEffect(() => {
-    scrollToBottom();
+    const isNewMessage = messages.length > lastMessageCountRef.current;
+    lastMessageCountRef.current = messages.length;
+
+    const lastMsg = messages[messages.length - 1];
+    const isAgentMsg = lastMsg?.role === 'agent';
+    
+    let isAgentTextUpdate = false;
+    if (isAgentMsg) {
+      if (lastMsg.text !== lastAgentTextRef.current) {
+         isAgentTextUpdate = true;
+      }
+      lastAgentTextRef.current = lastMsg.text;
+    } else {
+      lastAgentTextRef.current = '';
+    }
+
+    const scrollNode = scrollContainerRef.current;
+    let isNearBottom = true;
+    if (scrollNode) {
+      isNearBottom = scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 150;
+    }
+
+    // Always scroll on new message, or if agent text updates and we are already near bottom
+    if (isNewMessage || (isAgentTextUpdate && isNearBottom)) {
+      scrollToBottom();
+    }
   }, [messages, scrollToBottom]);
 
   const clearTimers = useCallback(() => {
@@ -427,7 +457,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
     setGrammarErrors,
     setGrammarCorrectedSentence,
     setIsGrammarLoading,
-    setExpandedMsgId,
+    setExpandedMsgIds,
     setChatInput,
     setAgentTyping,
     setAgentSpeaking,
@@ -505,7 +535,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       clearTimers();
       const myVersion = ++sessionVersionRef.current;
       setMessages([]);
-      setExpandedMsgId(null);
+      setExpandedMsgIds(null);
       setSummaryDismissed(false);
       clearLocalAudioUrls();
       setGrammarErrors([]);
@@ -550,7 +580,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
       setStatusSync('disconnected');
       setAgentSpeaking(false);
       setAgentTyping(false);
-      setExpandedMsgId(null);
+      setExpandedMsgIds(null);
       clearTimers();
       persistSession();
       // Refresh the sidebar conversation list so the just-ended session
@@ -718,6 +748,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
           if (loaded.length > 0) {
             msgCounterRef.current = loaded.length + 101;
             setMessages(loaded);
+            setExpandedMsgIds([]); // Disable auto-expand when viewing history
           }
         })
         .catch(() => {
@@ -848,6 +879,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
             return {
               ...msg,
               mistakes: nextMistakes,
+              grammarCorrectedSentence: data.corrected_sentence || undefined,
             };
           }),
         );
@@ -1025,7 +1057,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
               grammarCorrectedSentence={grammarCorrectedSentence}
               isGrammarLoading={isGrammarLoading}
               isPronunciationLoading={displayMsg?.assessmentStatus === 'pending'}
-              onShowLatest={() => setExpandedMsgId(null)}
+              onShowLatest={() => setExpandedMsgIds(null)}
               onPlayAudio={(id) => handleReplayMessage(id)}
             />
 
@@ -1056,6 +1088,7 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
 
             {/* Messages area */}
             <div
+              ref={scrollContainerRef}
               data-va="messages"
               className="flex-1 overflow-y-auto min-h-0 px-4 py-4 space-y-4 scrollbar-thin"
             >
@@ -1154,10 +1187,28 @@ export default function VoiceAgent({ currentUser: initialUser = null, onLogout }
                     message={msg}
                     onReplay={replay}
                     expandable={expandable}
-                    expanded={expandedMsgId === msg.id}
+                    isExpanded={
+                      expandedMsgIds === null 
+                        ? (latestUserMsg?.id === msg.id && Array.isArray(msg.mistakes) && msg.mistakes.length > 0)
+                        : expandedMsgIds.includes(msg.id)
+                    }
                     onToggleExpanded={
                       expandable
-                        ? () => setExpandedMsgId((prev) => (prev === msg.id ? null : msg.id))
+                        ? () => setExpandedMsgIds((prev) => {
+                          if (prev === null) {
+                            if (latestUserMsg?.id === msg.id) {
+                              return [];
+                            } else {
+                              return latestUserMsg ? [latestUserMsg.id, msg.id] : [msg.id];
+                            }
+                          } else {
+                            if (prev.includes(msg.id)) {
+                              return prev.filter((id) => id !== msg.id);
+                            } else {
+                              return [...prev, msg.id];
+                            }
+                          }
+                        })
                         : undefined
                     }
                     onSuggestionClick={

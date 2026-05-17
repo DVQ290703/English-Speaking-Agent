@@ -25,7 +25,7 @@ export interface UseSendChatMessageParams {
   setGrammarErrors: React.Dispatch<React.SetStateAction<Mistake[]>>;
   setGrammarCorrectedSentence: React.Dispatch<React.SetStateAction<string>>;
   setIsGrammarLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  setExpandedMsgId: (next: number | null) => void;
+  setExpandedMsgIds: (next: number[] | null) => void;
   setChatInput: (next: string) => void;
   setAgentTyping: (next: boolean) => void;
   setAgentSpeaking: (next: boolean) => void;
@@ -67,7 +67,7 @@ export default function useSendChatMessage({
   setGrammarErrors,
   setGrammarCorrectedSentence,
   setIsGrammarLoading,
-  setExpandedMsgId,
+  setExpandedMsgIds,
   setChatInput,
   setAgentTyping,
   setAgentSpeaking,
@@ -155,6 +155,7 @@ export default function useSendChatMessage({
       setChatInput('');
       inputRef.current?.focus();
       setAgentTyping(true);
+      setExpandedMsgIds(null);
 
       try {
         let userMessageId: string | null = null;
@@ -413,7 +414,6 @@ export default function useSendChatMessage({
               ),
             );
 
-            setExpandedMsgId(null);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             setMessages((prev) =>
@@ -464,7 +464,7 @@ export default function useSendChatMessage({
       setGrammarErrors,
       setGrammarCorrectedSentence,
       setIsGrammarLoading,
-      setExpandedMsgId,
+      setExpandedMsgIds,
       setChatInput,
       setAgentTyping,
       setAgentSpeaking,

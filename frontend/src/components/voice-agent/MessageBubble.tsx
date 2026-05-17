@@ -1,4 +1,5 @@
-import { Bot, Mic, Play, User } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Bot, Mic, Play, User, Volume2 } from 'lucide-react';
 import { useT } from '../../i18n/useLanguage';
 import ReasoningSteps from './ReasoningSteps';
 import type { ToolCallStep } from '../../api/chat';
@@ -34,6 +35,7 @@ export interface Message {
   audioBlob?: Blob;
   scoreDetails?: ScoreDetails;
   mistakes?: Mistake[];
+  grammarCorrectedSentence?: string;
   assessmentStatus?: 'available' | 'unavailable' | 'failed' | 'pending';
   assessmentNote?: string;
   toolSteps?: ToolCallStep[];
@@ -154,11 +156,59 @@ export const PHONEME_TIPS: Record<string, string> = (() => {
   return out;
 })();
 
+// MultiDiffText helper for Grammar Accordion
+function MultiDiffText({ text, targets, type }: { text: string; targets: string[]; type: 'wrong' | 'correct' }) {
+  if (!targets.length || !text) return <>{text}</>;
+
+  const cleanTargets = targets.map(t => t.replace(/^[^\w']+|[^\w']+$/g, '')).filter(Boolean);
+  if (!cleanTargets.length) return <>{text}</>;
+
+  const regexStr = cleanTargets.map(t => {
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const isWordStart = /^[\w']/.test(t);
+    const isWordEnd = /[\w']$/.test(t);
+    return `${isWordStart ? '\\b' : ''}${escaped}${isWordEnd ? '\\b' : ''}`;
+  }).join('|');
+
+  const regex = new RegExp(`(${regexStr})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const isMatch = cleanTargets.some(t => t.toLowerCase() === part.toLowerCase());
+        if (isMatch) {
+          if (type === 'wrong') {
+            return (
+              <span
+                key={i}
+                className="line-through decoration-red-400/60 text-red-600/80 dark:decoration-red-500/40 dark:text-red-400/80 bg-red-50/50 dark:bg-red-900/20 px-0.5 mx-0.5 rounded transition-colors"
+              >
+                {part}
+              </span>
+            );
+          } else {
+            return (
+              <span
+                key={i}
+                className="font-bold text-green-700 dark:text-green-400 bg-green-100/70 dark:bg-green-900/30 px-1 mx-0.5 rounded transition-colors"
+              >
+                {part}
+              </span>
+            );
+          }
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 interface MessageBubbleProps {
   message: Message;
   onReplay?: () => void;
   expandable?: boolean;
-  expanded?: boolean;
+  isExpanded?: boolean;
   onToggleExpanded?: () => void;
   onSuggestionClick?: (text: string) => void;
 }
@@ -205,7 +255,7 @@ function ReplayButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       title={t('bubble.replay.title')}
-      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 dark:border-white/25 dark:bg-white/10 dark:text-white/70 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-500 hover:border-blue-400/35 dark:hover:bg-blue-400/25 dark:hover:text-blue-300 dark:hover:border-blue-400/50"
+      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full border border-black/15 bg-black/4 text-black/35 dark:border-white/20 dark:bg-white/5 dark:text-white/60 cursor-pointer shrink-0 p-0 transition-all duration-150 hover:bg-blue-400/20 hover:text-blue-600 hover:border-blue-400/35 dark:hover:bg-blue-400/20 dark:hover:text-blue-400 dark:hover:border-blue-400/40"
     >
       <Play className="w-2 h-2 fill-current" />
     </button>
@@ -216,11 +266,22 @@ export default function MessageBubble({
   message,
   onReplay,
   expandable,
-  expanded,
+  isExpanded = false,
   onToggleExpanded,
   onSuggestionClick,
 }: MessageBubbleProps) {
   const t = useT();
+
+  const playWordAudio = (e: React.MouseEvent, word: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (window.speechSynthesis) {
+      const utterance = new SpeechSynthesisUtterance(word);
+      utterance.lang = 'en-US';
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
   const isAgent = message.role === 'agent';
   const tsDate =
     message.timestamp instanceof Date
@@ -232,31 +293,200 @@ export default function MessageBubble({
   });
   const canSelect = !isAgent && expandable && !message.typing;
 
+  // Build a synthetic corrected sentence for the UI diff view
+  const grammarCorrectedSentence = useMemo(() => {
+    if (message.grammarCorrectedSentence) return message.grammarCorrectedSentence;
+    let corrected = message.text;
+    const grammarMistakes = message.mistakes?.filter(m => m.type === 'Grammar' || m.type === 'Word choice') || [];
+    grammarMistakes.forEach(m => {
+      const cleanWrong = m.wrong?.replace(/^[^\w']+|[^\w']+$/g, '');
+      if (cleanWrong && m.correct) {
+        const escaped = cleanWrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+        corrected = corrected.replace(regex, m.correct);
+      }
+    });
+    return corrected;
+  }, [message.text, message.mistakes, message.grammarCorrectedSentence]);
+
+  const renderExpandedDetails = () => {
+    if (!message.mistakes || message.mistakes.length === 0) return null;
+
+    const pronErrors = message.mistakes.filter(m => m.type === 'Pronunciation');
+    const gramErrors = message.mistakes.filter(m => m.type === 'Grammar' || m.type === 'Word choice');
+
+    return (
+      <div
+        className="flex flex-col gap-4 p-3 mt-1.5 bg-white dark:bg-[#1A1A1A] rounded-2xl border border-gray-200/60 dark:border-neutral-700/60 cursor-default text-left shadow-sm min-w-[280px] sm:min-w-[320px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {pronErrors.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h5 className="text-[11px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-500/80">
+              Pronunciation Issues
+            </h5>
+            {pronErrors.map((mistake, idx) => (
+              <div key={idx} className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-orange-50/50 dark:bg-[#151515] border border-orange-100/50 dark:border-neutral-800 shadow-sm transition-colors">
+                <div className="flex flex-col justify-center items-start border-r border-orange-200/50 dark:border-neutral-800 pr-3">
+                  <span className="text-xl font-bold text-gray-900 dark:text-[#EAEAEA] mb-1">{mistake.wrong}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-orange-600 dark:text-orange-400/80 bg-orange-100/50 dark:bg-orange-900/30 px-2 py-0.5 rounded transition-colors">
+                      /{mistake.correct || mistake.wrong}/
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => playWordAudio(e, mistake.correct || mistake.wrong)}
+                      className="w-7 h-7 rounded-full flex items-center justify-center bg-white dark:bg-neutral-800 shadow-sm text-orange-500 hover:bg-orange-100 dark:hover:bg-neutral-700 transition-colors border border-gray-100 dark:border-neutral-700 cursor-pointer"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex flex-col justify-center pl-1">
+                  {mistake.phonemes && mistake.phonemes.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {mistake.phonemes.map((p, pidx) => (
+                        <span key={pidx} className={`text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${p.accuracy_score < 80 ? 'bg-red-100/70 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-100/70 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
+                          {p.phoneme} {p.accuracy_score}%
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1">Score: {message.scoreDetails?.pronunciation || '< 90'}</span>
+                  )}
+                  {mistake.note && (
+                    <span className="text-[11px] text-gray-600 dark:text-neutral-400 leading-snug">{mistake.note}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {gramErrors.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h5 className="text-[11px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400/80">
+              Grammar & Word Choice
+            </h5>
+            <div className="flex flex-col gap-2 p-3 rounded-xl bg-violet-50/30 dark:bg-[#151515] border border-violet-100/50 dark:border-neutral-800 shadow-sm transition-colors">
+              <div className="p-2.5 rounded-lg bg-green-50/50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/20 transition-colors">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-green-600/70 dark:text-green-500/70 block mb-1">Corrected Sentence</span>
+                <p className="text-sm text-gray-800 dark:text-[#EAEAEA] leading-relaxed">
+                  <MultiDiffText text={grammarCorrectedSentence} targets={gramErrors.map(g => g.correct)} type="correct" />
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5 mt-1">
+                {gramErrors.map((mistake, idx) => (
+                  mistake.note && (
+                    <div key={idx} className="p-2.5 rounded-lg bg-violet-100/40 dark:bg-violet-900/20 border border-violet-200/40 dark:border-violet-800/30 transition-colors">
+                      <p className="text-xs text-violet-800 dark:text-violet-300/90 leading-relaxed">
+                        <span className="font-bold mr-1.5 opacity-80">{mistake.correct}:</span>{mistake.note}
+                      </p>
+                    </div>
+                  )
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderTextWithErrors = () => {
+    if (isAgent || !message.mistakes || message.mistakes.length === 0) {
+      return message.text;
+    }
+
+    const mistakes = message.mistakes.map((m, i) => ({ ...m, originalIndex: i }));
+    const sortedMistakes = [...mistakes].sort((a, b) => b.wrong.length - a.wrong.length);
+
+    let result: React.ReactNode[] = [message.text];
+
+    sortedMistakes.forEach((mistake) => {
+      const cleanWrong = mistake.wrong.replace(/^[^\w']+|[^\w']+$/g, '');
+      if (!cleanWrong) return;
+
+      let matched = false;
+      const newResult: React.ReactNode[] = [];
+
+      result.forEach((chunk) => {
+        if (typeof chunk === 'string') {
+          const escaped = cleanWrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const isWordStart = /^[\w']/.test(cleanWrong);
+          const isWordEnd = /[\w']$/.test(cleanWrong);
+          const regexStr = `${isWordStart ? '\\b' : ''}${escaped}${isWordEnd ? '\\b' : ''}`;
+          const regex = new RegExp(`(${regexStr})`, 'gi');
+
+          const parts = chunk.split(regex);
+          parts.forEach((part, i) => {
+            if (part.toLowerCase() === cleanWrong.toLowerCase()) {
+              matched = true;
+              const isPronunciation = mistake.type === 'Pronunciation';
+
+              const baseClass = "transition-all duration-200 rounded px-[2px] mx-[-2px] font-semibold";
+              const underlineClass = isPronunciation
+                ? "underline decoration-wavy decoration-orange-500 dark:decoration-orange-400/80 underline-offset-4 text-orange-700 dark:text-orange-300"
+                : "underline decoration-dashed decoration-violet-500 dark:decoration-violet-400/80 underline-offset-4 text-violet-700 dark:text-violet-300";
+
+              newResult.push(
+                <span
+                  key={`${mistake.originalIndex}-${i}`}
+                  className={`${baseClass} ${underlineClass} ${!isExpanded ? 'hover:bg-gray-100 dark:hover:bg-white/10' : ''}`}
+                >
+                  {part}
+                </span>
+              );
+            } else if (part) {
+              newResult.push(part);
+            }
+          });
+        } else {
+          newResult.push(chunk);
+        }
+      });
+
+      if (!matched) {
+        newResult.push(
+          <span
+            key={`fallback-${mistake.originalIndex}`}
+            className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10.5px] font-bold bg-orange-100 text-orange-700 border border-orange-200"
+          >
+            ! {mistake.wrong}
+          </span>
+        );
+      }
+
+      result = newResult;
+    });
+
+    return result;
+  };
+
   return (
     <div
       className={`flex gap-2.5 ${isAgent ? 'flex-row' : 'flex-row-reverse'} items-end`}
       style={{ animation: 'fadeSlideIn 0.3s ease-out' }}
     >
       <div
-        className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center mb-0.5 ${
-          isAgent
-            ? 'bg-blue-100 border-2 border-blue-300'
-            : 'bg-violet-100 border-2 border-violet-300'
-        }`}
+        className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center mb-0.5 ${isAgent
+          ? 'bg-blue-100 border-2 border-blue-300 dark:bg-[#1A1A1A] dark:border-[#333]'
+          : 'bg-violet-100 border-2 border-violet-300 dark:bg-[#1A1A1A] dark:border-[#333]'
+          }`}
       >
         {isAgent ? (
-          <Bot className="w-3.5 h-3.5 text-blue-600" />
+          <Bot className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
         ) : (
-          <User className="w-3.5 h-3.5 text-purple-600" />
+          <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
         )}
       </div>
 
       <div className={`max-w-[75%] flex flex-col gap-1 ${isAgent ? 'items-start' : 'items-end'}`}>
         <div className={`flex items-center gap-1.5 ${isAgent ? '' : 'flex-row-reverse'}`}>
-          <span className="text-[10px] font-medium text-gray-600">
+          <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400">
             {isAgent ? t('common.agent') : t('common.you')}
           </span>
-          <span className="text-[10px] text-gray-400">{timeStr}</span>
+          <span className="text-[10px] text-gray-400 dark:text-gray-500">{timeStr}</span>
           {!message.typing && onReplay && <ReplayButton onClick={onReplay} />}
           {!message.typing &&
             !isAgent &&
@@ -269,42 +499,50 @@ export default function MessageBubble({
           type="button"
           onClick={canSelect ? onToggleExpanded : undefined}
           disabled={!canSelect}
-          aria-pressed={canSelect ? Boolean(expanded) : undefined}
-          title={canSelect ? (expanded ? t('bubble.deselect') : t('bubble.select')) : undefined}
-          className={`text-left px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap relative transition-all ${
-            isAgent
-              ? 'bg-blue-50 border border-blue-300 text-gray-900 rounded-tl-sm cursor-default'
-              : `bg-violet-50 border text-gray-900 rounded-tr-sm ${
-                  canSelect
-                    ? expanded
-                      ? 'border-violet-500 ring-2 ring-violet-300/50 bg-violet-100 cursor-pointer'
-                      : 'border-violet-300 hover:border-violet-400 hover:bg-violet-100/70 cursor-pointer'
-                    : 'border-violet-300 cursor-default'
-                }`
-          }`}
+          aria-pressed={canSelect ? Boolean(isExpanded) : undefined}
+          className={`text-left px-3.5 py-2.5 rounded-2xl text-[15px] leading-relaxed whitespace-pre-wrap relative transition-all shadow-sm ${isAgent
+            ? 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm cursor-default dark:bg-[#121212] dark:border-[#222222] dark:text-[#EAEAEA]'
+            : `bg-violet-50/50 border text-gray-800 rounded-tr-sm dark:bg-[#1A1A1A] dark:text-[#EAEAEA] ${canSelect
+              ? isExpanded
+                ? 'border-violet-300 ring-4 ring-violet-500/10 bg-violet-50 cursor-pointer dark:bg-[#1E1A24] dark:border-violet-500/40 dark:ring-violet-500/10'
+                : 'border-violet-200 hover:border-violet-300 hover:bg-violet-50/80 cursor-pointer dark:border-[#2A2A2A] dark:hover:border-violet-700/50 dark:hover:bg-[#1E1A24]'
+              : 'border-violet-200 cursor-default dark:border-[#2A2A2A]'
+            }`
+            }`}
         >
-          {message.typing ? (
-            <TypingIndicator />
-          ) : message.text ? (
-            message.text
-          ) : !isAgent && message.userAudioUrl ? (
-            <span className="flex items-center gap-1.5 text-gray-400 text-xs">
-              <Mic className="w-3 h-3 animate-pulse" />
-              <span>Sending</span>
-              <span className="flex items-center gap-0.5">
-                {[0, 150, 300].map((delay) => (
-                  <span
-                    key={delay}
-                    className="w-1 h-1 rounded-full bg-gray-400 inline-block"
-                    style={{ animation: `dotPulse 1.2s ease-in-out ${delay}ms infinite` }}
-                  />
-                ))}
+          <div className="w-full">
+            {message.typing ? (
+              <TypingIndicator />
+            ) : message.text ? (
+              renderTextWithErrors()
+            ) : !isAgent && message.userAudioUrl ? (
+              <span className="flex items-center gap-1.5 text-gray-400 text-xs">
+                <Mic className="w-3 h-3 animate-pulse" />
+                <span>Sending</span>
+                <span className="flex items-center gap-0.5">
+                  {[0, 150, 300].map((delay) => (
+                    <span
+                      key={delay}
+                      className="w-1 h-1 rounded-full bg-gray-400 inline-block"
+                      style={{ animation: `dotPulse 1.2s ease-in-out ${delay}ms infinite` }}
+                    />
+                  ))}
+                </span>
               </span>
-            </span>
-          ) : (
-            message.text
-          )}
+            ) : (
+              message.text
+            )}
+          </div>
+
         </button>
+
+        <div 
+          className={`grid w-full transform-gpu will-change-[grid-template-rows,opacity,margin] transition-[grid-template-rows,opacity,margin-top] duration-400 ease-[cubic-bezier(0.2,1,0.2,1)] ${isExpanded && canSelect ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0 mt-0'}`}
+        >
+          <div className="overflow-hidden min-h-0 w-full flex justify-end">
+            {canSelect && renderExpandedDetails()}
+          </div>
+        </div>
         {isAgent && !message.typing && (message.toolSteps?.length ?? 0) > 0 && (
           <ReasoningSteps steps={message.toolSteps!} />
         )}
@@ -315,7 +553,7 @@ export default function MessageBubble({
                 key={i}
                 type="button"
                 onClick={() => onSuggestionClick(s)}
-                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-white text-blue-600 hover:bg-blue-50 hover:border-blue-400 transition-colors dark:bg-[#161616] dark:border-[#333] dark:text-blue-400 dark:hover:bg-[#1E1E1E] dark:hover:border-[#444]"
               >
                 {s}
               </button>
