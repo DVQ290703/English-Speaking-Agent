@@ -41,10 +41,9 @@ export default function ChangePasswordPage({ mode = 'change' }: ChangePasswordPa
     setShowPasswords((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
-  const updateField =
-    (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [field]: event.target.value }));
-    };
+  const updateField = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -172,9 +171,15 @@ export default function ChangePasswordPage({ mode = 'change' }: ChangePasswordPa
                           type="button"
                           onClick={() => toggleVisibility('old')}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
-                          aria-label={showPasswords.old ? 'Hide current password' : 'Show current password'}
+                          aria-label={
+                            showPasswords.old ? 'Hide current password' : 'Show current password'
+                          }
                         >
-                          {showPasswords.old ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showPasswords.old ? (
+                            <EyeOff className="w-4 h-4" />
+                          ) : (
+                            <Eye className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -205,7 +210,11 @@ export default function ChangePasswordPage({ mode = 'change' }: ChangePasswordPa
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
                       aria-label={showPasswords.new ? 'Hide new password' : 'Show new password'}
                     >
-                      {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPasswords.new ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -229,9 +238,17 @@ export default function ChangePasswordPage({ mode = 'change' }: ChangePasswordPa
                       type="button"
                       onClick={() => toggleVisibility('confirm')}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
-                      aria-label={showPasswords.confirm ? 'Hide password confirmation' : 'Show password confirmation'}
+                      aria-label={
+                        showPasswords.confirm
+                          ? 'Hide password confirmation'
+                          : 'Show password confirmation'
+                      }
                     >
-                      {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPasswords.confirm ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>

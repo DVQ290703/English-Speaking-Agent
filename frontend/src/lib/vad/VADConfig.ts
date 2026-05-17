@@ -42,7 +42,7 @@ export const VAD_CONFIG = {
    * Widen slightly to catch more speech patterns.
    */
   zcrSpeechMin: 0.05, // was 0.10 → catches low-frequency voiced speech
-  zcrSpeechMax: 0.50, // was 0.45 → slightly wider band
+  zcrSpeechMax: 0.5, // was 0.45 → slightly wider band
 
   /**
    * Minimum speech frame ratio to pass quality gate.

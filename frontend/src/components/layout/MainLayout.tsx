@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, Outlet, useLocation } from 'react-router-dom';
-import { LogOut, Mic, Library, HelpCircle, Menu, Key, Globe, Sun, Moon } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { LogOut, Mic, Library, Menu, Key, Globe, Sun, Moon } from 'lucide-react';
+
 import { toast } from 'sonner';
 
 import { useLanguage } from '../../i18n/useLanguage';
@@ -9,7 +9,7 @@ import LanguageToggle from '../../i18n/LanguageToggle';
 import ThemeToggle from '../../theme/ThemeToggle';
 import { useDarkMode } from '../../theme/useDarkMode';
 import { useAuth, User } from '../../auth/AuthContext';
-import { useShortcutsToggle } from '../ui/ShortcutsModal';
+
 import { MobileBottomNav } from './MobileBottomNav';
 import { MobileDrawer } from './MobileDrawer';
 
@@ -41,7 +41,10 @@ export function MainLayout() {
   const displayName = profile?.display_name || profile?.email || t('dash.fallbackName');
 
   return (
-    <div ref={constraintsRef} className="h-[100dvh] flex flex-col bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100 overflow-hidden">
+    <div
+      ref={constraintsRef}
+      className="h-[100dvh] flex flex-col bg-[#f5f7fa] dark:bg-slate-950 text-gray-900 dark:text-slate-100 overflow-hidden"
+    >
       <header className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-2.5 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-6">
           {location.pathname === '/chat' && (
@@ -72,7 +75,7 @@ export function MainLayout() {
             <LanguageToggle />
             <ThemeToggle dark={dark} onToggle={toggleDark} />
           </div>
-          
+
           <div className="relative">
             {profile ? (
               <button
@@ -152,7 +155,9 @@ export function MainLayout() {
                     <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 flex items-center justify-center">
                       <Key className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-medium">{lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}</span>
+                    <span className="font-medium">
+                      {lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}
+                    </span>
                   </button>
                   <button
                     onClick={() => {
@@ -210,7 +215,9 @@ export function MainLayout() {
                   <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                     <Globe className="w-4 h-4" />
                   </div>
-                  <span className="text-sm font-bold text-gray-700 dark:text-slate-200">{t('lang.toggle.title')}</span>
+                  <span className="text-sm font-bold text-gray-700 dark:text-slate-200">
+                    {t('lang.toggle.title')}
+                  </span>
                 </div>
                 <LanguageToggle />
               </div>
@@ -245,7 +252,9 @@ export function MainLayout() {
               <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center">
                 <Key className="w-4 h-4" />
               </div>
-              <span className="text-sm font-bold">{lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}</span>
+              <span className="text-sm font-bold">
+                {lang === 'vi' ? 'Đổi mật khẩu' : 'Change password'}
+              </span>
             </button>
             <button
               onClick={() => {

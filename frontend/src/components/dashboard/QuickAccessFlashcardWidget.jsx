@@ -1,10 +1,9 @@
 import { useListDecks } from '@/hooks/use-flashcard-api';
-import { useT } from '@/i18n/useLanguage';
+
 import { Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function QuickAccessFlashcardWidget() {
-  const t = useT();
   const navigate = useNavigate();
   const { data: decks } = useListDecks();
 
@@ -24,11 +23,11 @@ export default function QuickAccessFlashcardWidget() {
         >
           {/* Background Highlight */}
           <div className="absolute inset-0 bg-linear-to-br from-blue-50/50 to-transparent dark:from-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-          
+
           <div className="relative flex items-center justify-center text-blue-600 dark:text-cyan-400 group-hover:scale-110 group-hover:brightness-110 transition-all duration-300">
             <Layers className="w-5 h-5" />
           </div>
-          
+
           <div className="relative text-left flex flex-col justify-center min-w-[100px]">
             <div className="text-[10px] font-bold text-blue-500 dark:text-cyan-500/80 uppercase tracking-wider leading-none mb-1">
               {isVi ? 'THẺ GHI NHỚ' : 'FLASHCARDS'}
@@ -67,6 +66,6 @@ export default function QuickAccessFlashcardWidget() {
   );
 }
 
-// Simple helper for localization within the component if needed, 
+// Simple helper for localization within the component if needed,
 // though we usually use i18n keys.
 const isVi = document.documentElement.lang === 'vi';

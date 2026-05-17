@@ -1,9 +1,11 @@
 import { API_BASE_URL, ENDPOINTS } from './config';
+import { handleUnauthorized } from './authFetch';
 
 async function parseAuthResponse(response, fallbackMessage) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    handleUnauthorized(response);
     throw new Error(data.detail || data.message || fallbackMessage);
   }
 

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { assessPronunciation, chatRespond } from '../api/chat';
 import { getAuthSession } from '../auth/tokenStorage';
-import { LANGUAGE_CODES, type Accent, type Gender, type Language } from '../components/voice-agent/constants';
+import {
+  LANGUAGE_CODES,
+  type Accent,
+  type Gender,
+  type Language,
+} from '../components/voice-agent/constants';
 import type { Message, Mistake } from '../components/voice-agent/MessageBubble';
 
 export interface UseSendChatMessageParams {
@@ -25,7 +30,7 @@ export interface UseSendChatMessageParams {
   setGrammarErrors: React.Dispatch<React.SetStateAction<Mistake[]>>;
   setGrammarCorrectedSentence: React.Dispatch<React.SetStateAction<string>>;
   setIsGrammarLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  setExpandedMsgId: (next: number | null) => void;
+  setExpandedMsgIds: (next: number[] | null) => void;
   setChatInput: (next: string) => void;
   setAgentTyping: (next: boolean) => void;
   setAgentSpeaking: (next: boolean) => void;
@@ -67,7 +72,7 @@ export default function useSendChatMessage({
   setGrammarErrors,
   setGrammarCorrectedSentence,
   setIsGrammarLoading,
-  setExpandedMsgId,
+  setExpandedMsgIds,
   setChatInput,
   setAgentTyping,
   setAgentSpeaking,
@@ -155,6 +160,7 @@ export default function useSendChatMessage({
       setChatInput('');
       inputRef.current?.focus();
       setAgentTyping(true);
+      setExpandedMsgIds(null);
 
       try {
         let userMessageId: string | null = null;
@@ -188,22 +194,22 @@ export default function useSendChatMessage({
               const raw = item as Record<string, unknown>;
               const wrong = String(
                 item.wrong ??
-                item.original_text ??
-                item.original ??
-                raw.original ??
-                raw.text ??
-                raw.error_text ??
-                raw.incorrect ??
-                '',
+                  item.original_text ??
+                  item.original ??
+                  raw.original ??
+                  raw.text ??
+                  raw.error_text ??
+                  raw.incorrect ??
+                  '',
               ).trim();
               const correct = String(
                 item.correct ??
-                item.corrected_text ??
-                item.corrected ??
-                raw.corrected ??
-                raw.suggestion ??
-                raw.fix ??
-                '',
+                  item.corrected_text ??
+                  item.corrected ??
+                  raw.corrected ??
+                  raw.suggestion ??
+                  raw.fix ??
+                  '',
               ).trim();
               const note = String(
                 item.note ?? item.explanation ?? raw.reason ?? raw.detail ?? raw.message ?? '',
@@ -257,10 +263,10 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === typingId
                   ? {
-                    ...message,
-                    text: "Sorry, I couldn't get a response. Please try again.",
-                    typing: false,
-                  }
+                      ...message,
+                      text: "Sorry, I couldn't get a response. Please try again.",
+                      typing: false,
+                    }
                   : message,
               ),
             );
@@ -282,23 +288,23 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === userId
                   ? {
-                    ...message,
-                    backendMessageId: userMessageId ?? message.backendMessageId,
-                    // Keep the local blob URL (created before the API call).
-                    // MinIO presigned URLs use the internal Docker hostname and
-                    // are unreachable from the browser.
-                    userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
-                  }
+                      ...message,
+                      backendMessageId: userMessageId ?? message.backendMessageId,
+                      // Keep the local blob URL (created before the API call).
+                      // MinIO presigned URLs use the internal Docker hostname and
+                      // are unreachable from the browser.
+                      userAudioUrl: message.userAudioUrl || data.user_audio_url || undefined,
+                    }
                   : message.id === typingId
                     ? {
-                      ...message,
-                      text: responseText,
-                      typing: false,
-                      audioUrl: playedUrl,
-                      minioUrl: data.assistant_audio_url || undefined,
-                      toolSteps: data.tool_steps ?? [],
-                      suggestions: data.suggestions ?? [],
-                    }
+                        ...message,
+                        text: responseText,
+                        typing: false,
+                        audioUrl: playedUrl,
+                        minioUrl: data.assistant_audio_url || undefined,
+                        toolSteps: data.tool_steps ?? [],
+                        suggestions: data.suggestions ?? [],
+                      }
                     : message,
               ),
             );
@@ -365,8 +371,8 @@ export default function useSendChatMessage({
               const phonemeNote =
                 lowPhonemes.length > 0
                   ? ` Phonemes: ${lowPhonemes
-                    .map((p) => `${p.phoneme} ${p.accuracy_score}%`)
-                    .join(', ')}`
+                      .map((p) => `${p.phoneme} ${p.accuracy_score}%`)
+                      .join(', ')}`
                   : '';
 
               if (err && err !== 'None') {
@@ -400,20 +406,18 @@ export default function useSendChatMessage({
               prev.map((message) =>
                 message.id === userId
                   ? {
-                    ...message,
-                    scoreDetails,
-                    mistakes: [
-                      ...mistakes,
-                      ...((message.mistakes ?? []).filter((m) => m.type === 'Grammar') ?? []),
-                    ],
-                    score: overall,
-                    assessmentStatus: 'available',
-                  }
+                      ...message,
+                      scoreDetails,
+                      mistakes: [
+                        ...mistakes,
+                        ...((message.mistakes ?? []).filter((m) => m.type === 'Grammar') ?? []),
+                      ],
+                      score: overall,
+                      assessmentStatus: 'available',
+                    }
                   : message,
               ),
             );
-
-            setExpandedMsgId(null);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             setMessages((prev) =>
@@ -431,10 +435,10 @@ export default function useSendChatMessage({
           prev.map((message) =>
             message.id === typingId
               ? {
-                ...message,
-                text: `Agent error: ${errorMessage}`,
-                typing: false,
-              }
+                  ...message,
+                  text: `Agent error: ${errorMessage}`,
+                  typing: false,
+                }
               : message,
           ),
         );
@@ -464,7 +468,7 @@ export default function useSendChatMessage({
       setGrammarErrors,
       setGrammarCorrectedSentence,
       setIsGrammarLoading,
-      setExpandedMsgId,
+      setExpandedMsgIds,
       setChatInput,
       setAgentTyping,
       setAgentSpeaking,

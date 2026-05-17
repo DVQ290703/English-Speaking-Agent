@@ -1,4 +1,5 @@
 import { API_BASE_URL, ENDPOINTS } from './config';
+import { handleUnauthorized } from './authFetch';
 
 function authHeaders(token) {
   return { Authorization: `Bearer ${token}` };
@@ -8,7 +9,10 @@ async function request(url, options = {}) {
   const res = await fetch(`${API_BASE_URL}${url}`, options);
   if (res.status === 204) return null;
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || `Request failed: ${res.status}`);
+  if (!res.ok) {
+    handleUnauthorized(res);
+    throw new Error(data.detail || `Request failed: ${res.status}`);
+  }
   return data;
 }
 

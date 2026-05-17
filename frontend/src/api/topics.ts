@@ -1,4 +1,5 @@
 import { API_BASE_URL, ENDPOINTS } from './config';
+import { handleUnauthorized } from './authFetch';
 
 export type ApiTopic = {
   code: string;
@@ -19,6 +20,10 @@ export async function fetchTopicCategories(token?: string): Promise<ApiCategory[
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE_URL}${ENDPOINTS.topics.categories}`, { headers });
-  if (!res.ok) throw new Error(`Topics API error ${res.status}`);
+  if (!res.ok) {
+    handleUnauthorized(res);
+    throw new Error(`Topics API error ${res.status}`);
+  }
+
   return (await res.json()) as ApiCategory[];
 }

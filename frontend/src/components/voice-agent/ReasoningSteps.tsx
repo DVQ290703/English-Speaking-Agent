@@ -84,7 +84,7 @@ export default function ReasoningSteps({ steps, defaultOpen = false }: Reasoning
                     >
                       {step.status === 'failed'
                         ? (step.error ?? 'Error')
-                        : (step.result_label || step.output_summary || '—')}
+                        : step.result_label || step.output_summary || '—'}
                     </span>
                   </div>
                 </div>

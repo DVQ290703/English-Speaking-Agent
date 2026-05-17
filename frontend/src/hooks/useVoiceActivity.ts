@@ -139,7 +139,7 @@ async function createAudioFrameBridge(
           });
         },
       };
-    } catch (err) {
+    } catch (_err) {
       if (shouldAbort() || (ctx.state as string) === 'closed') {
         return noOpBridge;
       }
@@ -272,7 +272,7 @@ export default function useVoiceActivity(
     lastLoggedStateRef.current = 'calibrating';
     debugRef.current = DEFAULT_VAD_DEBUG;
     setInternalSpeaking(false);
-    let frameCount = 0;
+    const _frameCount = 0;
 
     const teardown = () => {
       teardownProcessor?.();
@@ -399,7 +399,7 @@ export default function useVoiceActivity(
           processor: bridge.processor,
         };
         teardownProcessor = bridge.cleanup;
-      } catch (err) {
+      } catch (_err) {
         // console.error('[VAD] Failed to initialize voice activity detector', err);
         teardown();
       }

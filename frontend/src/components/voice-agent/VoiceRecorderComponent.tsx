@@ -44,15 +44,11 @@ export default function VoiceRecorderComponent({
 }: VoiceRecorderComponentProps) {
   const t = useT();
 
-  const {
-    status,
-    recordingTime,
-    visualizerData,
-    error,
-    start,
-    stop,
-    cancel,
-  } = useVoiceRecorder({ selectedMicId, onSend: onSendRecording, autoSend: true });
+  const { status, recordingTime, visualizerData, error, start, stop, cancel } = useVoiceRecorder({
+    selectedMicId,
+    onSend: onSendRecording,
+    autoSend: true,
+  });
 
   const isRecording = status === 'recording';
   const isExpandedState = status === 'done';
@@ -61,7 +57,10 @@ export default function VoiceRecorderComponent({
   if (!isConnected) {
     if (!isAuthenticated) return null;
     return (
-      <div data-va="input" className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa] dark:bg-slate-900/50 dark:border-slate-800">
+      <div
+        data-va="input"
+        className="border-t border-gray-200 px-3 py-3 bg-[#f5f7fa] dark:bg-slate-900/50 dark:border-slate-800"
+      >
         <div className="flex items-center justify-center py-2 text-xs text-gray-400 dark:text-slate-500">
           {t('va.input.connectHint')}
         </div>
@@ -70,8 +69,10 @@ export default function VoiceRecorderComponent({
   }
 
   return (
-    <div data-va="input" className="border-t border-gray-200 dark:border-slate-800 bg-[#f5f7fa] dark:bg-slate-950">
-
+    <div
+      data-va="input"
+      className="border-t border-gray-200 dark:border-slate-800 bg-[#f5f7fa] dark:bg-slate-950"
+    >
       {/* ── Error banner ── */}
       {error && (
         <div className="mx-3 mt-3 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">

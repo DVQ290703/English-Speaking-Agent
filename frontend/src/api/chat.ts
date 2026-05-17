@@ -1,4 +1,5 @@
 import { API_BASE_URL, ENDPOINTS } from './config';
+import { handleUnauthorized } from './authFetch';
 
 export interface ChatRespondParams {
   token: string;
@@ -56,7 +57,7 @@ export interface GrammarFeedbackPayload {
   overall_score?: number;
 }
 
-function extensionFromMimeType(mimeType: string): string {
+function _extensionFromMimeType(mimeType: string): string {
   const mime = (mimeType || '').toLowerCase();
   if (mime.includes('webm')) return 'webm';
   if (mime.includes('ogg')) return 'ogg';
@@ -139,6 +140,7 @@ export async function chatRespond({
     const data = await response.json();
 
     if (!response.ok) {
+      handleUnauthorized(response);
       throw new Error((data as { detail?: string }).detail || 'Chat request failed');
     }
 
@@ -166,6 +168,7 @@ export async function fetchGrammarFeedback(
 
   const data = await response.json();
   if (!response.ok) {
+    handleUnauthorized(response);
     throw new Error((data as { detail?: string }).detail || 'Grammar feedback request failed');
   }
 
@@ -280,11 +283,11 @@ export async function transcribeAudio(token: string, audioBlob: Blob): Promise<s
   });
   const data = await response.json();
   if (!response.ok) {
+    handleUnauthorized(response);
     throw new Error((data as { detail?: string }).detail || 'Transcription failed');
   }
   return (data as { text?: string }).text ?? '';
 }
-
 
 export async function assessPronunciation({
   token,
@@ -320,6 +323,7 @@ export async function assessPronunciation({
   const data = await response.json();
 
   if (!response.ok) {
+    handleUnauthorized(response);
     throw new Error((data as { detail?: string }).detail || 'Assessment request failed');
   }
 
