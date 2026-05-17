@@ -1,6 +1,6 @@
-# Backend Test Suite Documentation
+﻿# Backend Test Suite Documentation
 
-> Project: AI Speaking Coach (A20-App-014)  
+> Project: AI LinguAI (A20-App-014)  
 > Framework: `pytest`  
 > Scope: backend unit and route tests
 
@@ -220,3 +220,4 @@ Reason:
 - `tests/test_security/test_security.py`
 - `tests/test_ai_services/test_ai_services.py`
 - `tests/test_services/test_azure_assessment.py`
+
