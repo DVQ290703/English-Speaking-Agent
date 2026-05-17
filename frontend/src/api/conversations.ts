@@ -1,5 +1,6 @@
 // frontend/src/api/conversations.ts
 import { API_BASE_URL, ENDPOINTS } from './config';
+import { handleUnauthorized } from './authFetch';
 
 export interface ConversationSummary {
   id: string;
@@ -82,6 +83,7 @@ async function apiFetch<T>(path: string, token: string, options?: RequestInit): 
     },
   });
   if (!resp.ok) {
+    handleUnauthorized(resp);
     const body = await resp.json().catch(() => ({}));
     throw new Error((body as { detail?: string }).detail || `Request failed: ${resp.status}`);
   }
