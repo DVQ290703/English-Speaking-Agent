@@ -28,11 +28,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+norecursedirs = ["_tmp", "pytest_temp_work", ".pytest_tmp", ".pytest_temp_work"]
 addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
     "--no-header",
+    "--basetemp=pytest_temp_work",
     "-p",
     "no:cacheprovider",
 ]

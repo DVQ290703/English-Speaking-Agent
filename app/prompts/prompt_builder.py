@@ -18,7 +18,7 @@ _SECTION_RE = re.compile(
 )
 
 _BASE_FALLBACK = (
-    "You are an AI English-speaking coach. Keep replies short, natural, "
+    "You are a professional English-speaking coach. Keep replies short, natural, "
     "supportive, and easy to say aloud. Ask one follow-up question that helps "
     "the learner keep speaking. Greetings and check-ins like 'Can you hear me?' "
     "are normal conversation — respond to them warmly, never refuse."
@@ -126,7 +126,7 @@ NO_TOOL — everything else: greetings, small talk, language questions, pronunci
 """
 
 _BLOCKED_RESPONSE_FALLBACK = (
-    "That's outside what I can help with here. "
+    "I'm sorry, that's outside what I can help with here. "
     "Tell me what you'd like to practice in English today."
 )
 

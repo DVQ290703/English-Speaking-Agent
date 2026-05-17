@@ -14,6 +14,10 @@ Goals:
 - predictable route behavior through mocked DB cursors
 - fast feedback for auth, API, schema, and service logic
 
+Latest full-suite status (local):
+
+- `536 passed, 0 skipped, 0 failed` (pytest over `tests/`)
+
 ## 2. Current Test Modules
 
 | Module | File | Test Count |
@@ -38,11 +42,16 @@ The following command groups were verified against the current codebase:
 ```bash
 python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
 python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
+python -m pytest tests/ -q
 ```
 
-These cover 147 passing tests in the current local environment.
+Current full-suite result in this environment:
 
-The remaining Azure-specific module is expected to run when Azure Speech SDK is installed:
+- 536 passed
+- 0 skipped
+- 0 failed
+
+Azure-specific module can also be run directly when needed:
 
 ```bash
 python -m pytest tests/test_services/test_azure_assessment.py -q
@@ -141,6 +150,10 @@ python -m pytest tests/ -v
 ```bash
 python -m pytest tests/ -q
 ```
+
+Expected current summary:
+
+- `536 passed, 0 skipped`
 
 ### One module
 

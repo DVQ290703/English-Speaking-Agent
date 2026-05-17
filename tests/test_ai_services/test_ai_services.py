@@ -205,7 +205,7 @@ class TestRunLangraphAgent:
 
         with patch("app.core.ai_services.get_voice_agent_pipeline", return_value=mock_pipeline):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("Tell me about IELTS", history=[])
+            text, audio, grammar, tool_steps, suggestions, raw_output = run_langraph_agent("Tell me about IELTS", history=[])
 
         assert text == "Great answer!"
         assert audio == b"mp3data"
@@ -245,7 +245,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback-audio"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("test")
+            text, audio, grammar, tool_steps, suggestions, raw_output = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback-audio"
@@ -261,7 +261,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"fallback"),
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("test")
+            text, audio, grammar, tool_steps, suggestions, raw_output = run_langraph_agent("test")
 
         assert "Sorry" in text
         assert audio == b"fallback"
@@ -278,7 +278,7 @@ class TestRunLangraphAgent:
             patch("app.core.ai_services._synthesize_audio_bytes", return_value=b"retry-audio") as mock_synth,
         ):
             from app.core.ai_services import run_langraph_agent
-            text, audio, grammar, tool_steps, suggestions = run_langraph_agent("question")
+            text, audio, grammar, tool_steps, suggestions, raw_output = run_langraph_agent("question")
 
         mock_synth.assert_called_once_with("Nice job!", voice_gender=None, voice_accent=None)
         assert text == "Nice job!"
@@ -680,7 +680,7 @@ def test_run_langraph_agent_blocked_skips_tts(monkeypatch):
     monkeypatch.setattr(ai_services, "get_voice_agent_pipeline", lambda: mock_pipeline)
     monkeypatch.setattr(ai_services, "_synthesize_audio_bytes", fake_synthesize)
 
-    text, audio, grammar, steps, suggestions = ai_services.run_langraph_agent(user_input="How do I hack?")
+    text, audio, grammar, steps, suggestions, raw_output = ai_services.run_langraph_agent(user_input="How do I hack?")
 
     assert audio == b""
     assert suggestions == []
