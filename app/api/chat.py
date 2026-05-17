@@ -51,6 +51,37 @@ _GUARDRAIL_HTTP_STATUS: dict[str, int] = {
     "TOPIC_BLOCKED": status.HTTP_400_BAD_REQUEST,
 }
 
+_DEGRADED_FALLBACK_PATTERNS = (
+    "i'm a bit overwhelmed right now",
+    "i am a bit overwhelmed right now",
+)
+
+
+def _degraded_coaching_reply(user_input: str) -> tuple[str, list[str]]:
+    text = (user_input or "").strip()
+    if not text:
+        return (
+            "No worries. Send one short sentence in English, and I will help you improve it.",
+            ["I went to school yesterday.", "I feel nervous when I speak English."],
+        )
+
+    corrected = text
+    corrected = corrected.replace(" i goed ", " i went ")
+    corrected = corrected.replace(" i goed", " i went")
+    corrected = corrected.replace("dont ", "don't ")
+    corrected = corrected.replace("cant ", "can't ")
+
+    if corrected != text:
+        return (
+            f"Good effort. A more natural sentence is: \"{corrected}\". Want to try one more?",
+            ["Can you correct this sentence?", "How can I say this more naturally?"],
+        )
+
+    return (
+        "Thanks for sharing. Add one more detail, and I will help you make it sound natural and confident.",
+        ["Can you give me one follow-up question?", "How can I improve this sentence?"],
+    )
+
 
 def _fetch_visible_history(cur, conv_id: str, limit: int = 20) -> list[dict]:
     """
@@ -326,7 +357,7 @@ def chat_respond(
         len(user_input),
         len(history_lines),
     )
-    response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions, raw_output = run_langraph_agent(
+    agent_result = run_langraph_agent(
         user_input=user_input,
         history=history_lines,
         voice_gender=voice_gender,
@@ -335,6 +366,23 @@ def chat_respond(
         topic=topic,
         user_id=user_id,
     )
+    if len(agent_result) == 6:
+        response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions, raw_output = agent_result
+    else:
+        response_text, response_audio_bytes, grammar_raw, tool_steps, suggestions = agent_result
+        raw_output = response_text
+    lower_response = (response_text or "").strip().lower()
+    if any(pattern in lower_response for pattern in _DEGRADED_FALLBACK_PATTERNS):
+        logger.warning("Replacing degraded fallback response with local coaching fallback")
+        response_text, suggestions = _degraded_coaching_reply(user_input)
+        grammar_raw = None
+        tool_steps = []
+        response_audio_bytes = _synthesize_audio_bytes(
+            response_text,
+            voice_gender=voice_gender,
+            voice_accent=voice_accent,
+        )
+        raw_output = response_text
     grammar_data = parse_annotated_grammar(grammar_raw, user_input)
 
     # ── Guardrails: Output ─────────────────────────────────────────────────

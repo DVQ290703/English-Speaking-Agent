@@ -1,158 +1,148 @@
-# A20-App-014
+﻿# AI LinguAI (A20-App-014)
 
-Setup and run guide for the current AI Speaking Coach project.
+Nền tảng luyện nói tiếng Anh tích hợp AI theo hướng sản phẩm thực tế: hội thoại theo chủ đề, phản hồi ngữ pháp, chấm phát âm chi tiết, theo dõi tiến bộ và vòng lặp ôn tập bằng flashcard.
 
-## Prerequisites
+## 1. Mục tiêu dự án
 
-- Python 3.10+
-- `uv`
-- Node.js 18+
+- Giúp người học luyện nói đều đặn trong môi trường mô phỏng thực tế.
+- Trả phản hồi nhanh, rõ ràng, có thể áp dụng ngay.
+- Theo dõi tiến bộ theo phiên và theo thời gian.
+- Tập trung vào trải nghiệm liền mạch: từ nói -> nhận feedback -> ôn tập.
+
+## 2. Tính năng chính
+
+### 2.1 Luyện hội thoại AI (Text + Audio)
+- Chat theo chủ đề (IELTS, daily, business, ...).
+- Gửi text hoặc ghi âm trực tiếp.
+- STT tự động khi người dùng gửi audio.
+- AI phản hồi bằng text và giọng nói (TTS).
+
+### 2.2 Feedback ngữ pháp
+- Highlight lỗi theo từng đoạn chữ.
+- Trả câu sửa gợi ý, phân loại lỗi, giải thích ngắn.
+- Lưu theo message để xem lại khi mở lại lịch sử.
+
+### 2.3 Chấm phát âm chuyên sâu
+- Tích hợp Azure Pronunciation Assessment.
+- Điểm thành phần: overall, accuracy, fluency, completeness, prosody.
+- Drill-down tới word/syllable/phoneme.
+
+### 2.4 Dashboard tiến bộ
+- Tổng số phiên, thời lượng luyện, streak.
+- Biểu đồ xu hướng điểm và quy đổi dạng band.
+- Gợi ý hướng cải thiện theo điểm yếu.
+
+### 2.5 Flashcard learning loop
+- CRUD deck/card.
+- Upload media (image/audio) cho từng mặt thẻ.
+- Ôn tập theo thuật toán SM-2 (spaced repetition).
+
+### 2.6 Bảo mật và guardrails
+- JWT auth, password policy mạnh, OAuth.
+- Input/output guardrails (rate limit, injection filter, redaction).
+- Audit logging và trace observability.
+
+## 3. Kiến trúc tổng quan
+
+### 3.1 Frontend
+- React + Vite + TypeScript + Tailwind
+- Các màn hình chính:
+- `/chat`: Voice Agent
+- `/dashboard`: tiến bộ học tập
+- `/flashcards/*`: quản lý và học flashcard
+
+### 3.2 Backend
+- FastAPI, REST API dưới `/api`
+- Pipeline AI (LangGraph): preflight -> respond/tool -> TTS
+- Service tích hợp:
+- Groq (STT + LLM)
+- ElevenLabs (TTS)
+- Azure Speech (assessment)
+
+### 3.3 Data & Storage
+- PostgreSQL: auth, conversation, grammar, pronunciation, flashcard
+- MinIO: audio messages, flashcard media
+- Redis: rate limiting
+
+### 3.4 Observability
+- Prometheus + Grafana (metrics)
+- Elasticsearch + Kibana + Vector (logs)
+
+## 4. Cấu trúc dịch vụ (Docker Compose)
+
+Stack local gồm:
+- `voice_agent_backend`
+- `voice_agent_frontend`
+- `voice_agent_postgres`
+- `voice_agent_redis`
+- `voice_agent_minio`
+- `voice_agent_pgadmin`
+- `voice_agent_prometheus`
+- `voice_agent_grafana`
+- `voice_agent_elasticsearch`
+- `voice_agent_kibana`
+- `voice_agent_vector`
+
+## 5. Yêu cầu môi trường
+
 - Docker Desktop
+- Python 3.10+
+- Node.js 18+
 - Git
+- (Khuyến nghị) `uv` để quản lý môi trường Python
 
-## 1. Clone the repo
+## 6. Hướng dẫn cài đặt và chạy
+
+### 6.1 Clone mã nguồn
 
 ```bash
 git clone <your-repo-url>
-cd A20-App-014
+cd A20-App-014-me
 ```
 
-## 2. Python environment
-
-Create the virtual environment:
-
-```bash
-uv venv
-```
-
-PowerShell:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-Git Bash:
-
-```bash
-source .venv/Scripts/activate
-```
-
-Install dependencies:
-
-```bash
-uv pip install -r requirements.txt
-uv pip install -r requirements-test.txt
-```
-
-## 3. Environment variables
-
-Create `.env` from `.env.example`.
-
-PowerShell:
+### 6.2 Tạo file môi trường
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Git Bash:
-
-```bash
-cp .env.example .env
-```
-
-Required values for local development:
-
-- `APP_ENV`
+Biến quan trọng cần cấu hình:
 - `JWT_SECRET_KEY`
-- `POSTGRES_DB`
-- `POSTGRES_USER`
-- `POSTGRES_PASSWORD`
-- `MINIO_ACCESS_KEY`
-- `MINIO_SECRET_KEY`
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`
 - `GROQ_API_KEY`
 - `ELEVENLABS_API_KEY`
-- `ELEVENLABS_VOICE_ID`
-- `ELEVENLABS_VOICE_ID_male`
-- `ELEVENLABS_VOICE_ID_female`
-- `ELEVENLABS_MODEL_ID`
 - `VITE_API_BASE_URL`
 
-Optional if you use pronunciation assessment:
-
+Biến tùy chọn cho pronunciation:
 - `AZURE_SPEECH_KEY`
-- `AZURE_SPEECH_REGION`
+- `AZURE_SERVICE_REGION` (hoặc `AZURE_SPEECH_REGION`)
 
-Security notes:
-
-- use a strong `JWT_SECRET_KEY` with at least 32 characters
-- avoid default credentials for PostgreSQL and MinIO outside local development
-- Docker Compose maps `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` into the MinIO container automatically
-
-## 4. Start the backend stack
+### 6.3 Chạy toàn bộ stack bằng Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-Check status:
+Kiểm tra dịch vụ:
 
 ```bash
 docker compose ps
 ```
 
-Expected services:
-
-- `voice_agent_backend`
-- `voice_agent_postgres`
-- `voice_agent_pgadmin`
-- `voice_agent_minio`
-
-## 5. Seed PostgreSQL data
-
-PowerShell:
-
-```powershell
-Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U admin -d voice_agent
-```
-
-Git Bash:
-
-```bash
-docker exec -i voice_agent_postgres psql -U admin -d voice_agent < db_schema/seed.sql
-```
-
-Seeded demo users:
-
-- `alice@example.com / Password123!`
-- `bob@example.com / Password123!`
-- `charlie@example.com / Password123!`
-
-Note:
-
-- these seeded passwords exist for local demo data only
-- new registrations through the API now require a stronger password policy: at least 12 characters with uppercase, lowercase, digit, and symbol
-
-## 6. Verify the backend
-
-Health check:
+### 6.4 Health check backend
 
 ```bash
 curl http://localhost:8000/health
 ```
 
-Expected:
+Kết quả mong đợi:
 
 ```json
 {"status":"ok"}
 ```
 
-Database quick check:
-
-```bash
-docker exec -it voice_agent_postgres psql -U admin -d voice_agent -c "SELECT email, length(password_hash) FROM users ORDER BY email;"
-```
-
-## 7. Run the frontend locally
+### 6.5 Chạy frontend ở chế độ dev (tùy chọn)
 
 ```bash
 cd frontend
@@ -160,124 +150,99 @@ npm install
 npm run dev
 ```
 
-Frontend URL:
+URL: `http://localhost:5173`
 
-- `http://localhost:5173`
+## 7. API chính
 
-Production build:
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/chat/respond`
+- `POST /api/chat/transcribe`
+- `POST /api/assess`
+- `GET /api/conversations`
+- `GET /api/conversations/{id}/messages-with-scores`
+- `GET /api/topics/get_categories_topics`
+- `GET|POST|PATCH|DELETE /api/flashcards/*`
+
+## 8. Kiểm thử
+
+Ví dụ chạy nhanh một số nhóm test backend:
 
 ```bash
-npm run build
-npm run preview
-```
-
-## 8. Run tests
-
-Main backend test commands:
-
-PowerShell:
-
-```powershell
-python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
+python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py -q
 python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
 ```
 
-Git Bash:
+## 9. Gợi ý vận hành
 
-```bash
-python -m pytest tests/test_security/test_security.py tests/test_api/test_routes.py tests/test_api/test_user_data_flow.py -q
-python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_services.py -q
-```
+- Nếu thay đổi schema, reset volume DB trước khi seed lại.
+- Với môi trường production/staging, bắt buộc dùng secret mạnh và endpoint storage/public URL đúng domain.
+- Theo dõi metrics và logs trước khi mở traffic thật.
 
-Current test layout contains:
+## 10. Thông tin dự án / Demo
 
-- security tests
-- API route tests
-- schema tests
-- AI service tests
-- user data flow tests
-- Azure assessment tests
+### 10.1 Ảnh minh họa hệ thống
 
-Important:
+#### A. Luồng chính của hệ thống
 
-- the Azure assessment test module requires `azure-cognitiveservices-speech`
-- in a stripped local environment, that module may fail to collect until the package is installed
+1. Luồng hoạt động end-to-end của AI LinguAI
 
-Detailed guide:
+![Luồng hoạt động chính của AI LinguAI](docs/screeshot/main_Flow.png)
 
-- [`document/Backend_Test_Suite_Documentation.md`](document/Backend_Test_Suite_Documentation.md)
+#### B. Hạ tầng triển khai
 
-## 9. API reference
+2. Cụm Kubernetes trên Google Cloud
 
-See:
+![Cụm Kubernetes trên Google Cloud](docs/screeshot/google_cloud_cluster.png)
 
-- [`document/API.md`](document/API.md)
+3. Cơ sở dữ liệu production trên Google Cloud
 
-The current backend exposes:
+![Cơ sở dữ liệu production trên Google Cloud](docs/screeshot/google_cloud_db_prod.png)
 
-- `/health`
-- `/api/auth/register`
-- `/api/auth/login`
-- `/api/auth/me`
-- `/api/chat/respond`
-- `/api/assess`
-- `/api/conversations`
-- `/api/conversations/{conversation_id}/messages`
+4. Quản trị Kubernetes bằng Rancher
 
-## 10. Useful Docker commands
+![Quản trị Kubernetes bằng Rancher](docs/screeshot/manager_rancher_k8s.png)
 
-Start or rebuild:
+#### C. CI/CD và Registry
 
-```bash
-docker compose up -d --build
-```
+5. Pipeline CI/CD tổng thể
 
-View logs:
+![Pipeline CI/CD tổng thể](docs/screeshot/CICD_Pipeline.png)
 
-```bash
-docker compose logs -f backend
-docker compose logs -f postgres
-```
+6. Pipeline CI/CD trên GitLab
 
-Stop services:
+![Pipeline CI/CD trên GitLab](docs/screeshot/cicd_gitlab.png)
 
-```bash
-docker compose down
-```
+7. Harbor container registry
 
-Reset database volume and reseed:
+![Harbor container registry](docs/screeshot/harbor_registry.png)
 
-PowerShell:
+#### D. Quan sát hệ thống
 
-```powershell
-docker compose down -v
-docker compose up -d --build
-Get-Content .\db_schema\seed.sql | docker exec -i voice_agent_postgres psql -U admin -d voice_agent
-```
+8. Logging pipeline (thu thập và đẩy log)
 
-Git Bash:
+![Logging pipeline](docs/screeshot/Logging_Pipeline.png)
 
-```bash
-docker compose down -v
-docker compose up -d --build
-docker exec -i voice_agent_postgres psql -U admin -d voice_agent < db_schema/seed.sql
-```
+9. Monitoring pipeline (metrics và giám sát)
 
-## 11. Optional pgAdmin
+![Monitoring pipeline](docs/screeshot/Monitoring_Pipeline.png)
 
-- URL: `http://localhost:5050`
-- Email: `admin@local.dev`
-- Password: value from `PGADMIN_DEFAULT_PASSWORD`
-- DB host inside Docker network: `postgres`
+10. Log monitoring trên Kibana
 
-## 12. Optional MinIO console
+![Log monitoring trên Kibana](docs/screeshot/kibana_log.png)
 
-- API endpoint: `http://localhost:9000`
-- Console: `http://localhost:9001`
-- Root user: value from `MINIO_ACCESS_KEY`
-- Root password: value from `MINIO_SECRET_KEY`
+11. Trace/LLM monitoring trên LangSmith
 
-Note:
+![Trace và LLM monitoring trên LangSmith](docs/screeshot/langsmith_mornitoring.png)
 
-- backend-generated presigned URLs may use Docker-internal hostnames depending on environment variables
-- validate browser reachability in your deployment before treating MinIO URLs as a direct frontend playback source
+#### E. Lưu trữ object
+
+12. MinIO Object Storage
+
+![MinIO Object Storage](docs/screeshot/minio_obect.png)
+
+### 10.2 Video demo
+
+- Xem video demo: [docs/demo/demo.mp4](docs/demo/demo.mp4)
+- Nếu GitHub không phát trực tiếp trong tab preview, hãy click vào link trên để mở hoặc tải file video.

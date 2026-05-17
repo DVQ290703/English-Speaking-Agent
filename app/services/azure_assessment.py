@@ -6,11 +6,16 @@ import json
 import os
 
 from app.core.logger import logger
+from app.core.settings import AZURE_SPEECH_KEY, AZURE_SERVICE_REGION
+from app.core.telemetry import span_context
 
 try:
     import azure.cognitiveservices.speech as speechsdk
-except ModuleNotFoundError:
+except ImportError:
     speechsdk = None
+except Exception:
+    logger.exception("Unexpected error importing azure.cognitiveservices.speech")
+    raise
 
 
 class AzureAssessmentService:
@@ -29,12 +34,16 @@ class AzureAssessmentService:
         return ""
 
     def __init__(self, language: str = "en-US"):
-        self._key = self._first_env_value("AZURE_SPEECH_KEY", "AZURE_SUBSCRIPTION_ID")
-        self._region = self._first_env_value("AZURE_SPEECH_REGION", "AZURE_SERVICE_REGION")
+        self._key = AZURE_SPEECH_KEY
+        self._region = AZURE_SERVICE_REGION
         if not self._key:
-            raise ValueError("AZURE_SPEECH_KEY is missing. Set it in your environment or .env file.")
+            raise ValueError(
+                "Azure speech key is not configured. Set AZURE_SPEECH_KEY (preferred) or AZURE_SUBSCRIPTION_ID (legacy) in your environment or .env file."
+            )
         if not self._region:
-            raise ValueError("AZURE_SPEECH_REGION is missing. Set it in your environment or .env file.")
+            raise ValueError(
+                "Azure service region is not configured. Set AZURE_SERVICE_REGION (or AZURE_SPEECH_REGION) in your environment or .env file."
+            )
         self.default_language = language
         logger.info("AzureAssessmentService ready language=%s region=%s", language, self._region)
 
@@ -100,12 +109,14 @@ class AzureAssessmentService:
             )
             pronunciation_config.apply_to(recognizer)
 
-            try:
-                result = recognizer.recognize_once()
-            finally:
-                del recognizer
-                del audio_config
-                del speech_config
+            with span_context("azure.assess", kind="api") as span:
+                span.set(model="azure-pronunciation", mode=mode, locale=locale, audio_bytes=len(audio_bytes))
+                try:
+                    result = recognizer.recognize_once()
+                finally:
+                    del recognizer
+                    del audio_config
+                    del speech_config
         finally:
             del stream
 
@@ -117,7 +128,16 @@ class AzureAssessmentService:
                 raise RuntimeError("Azure returned an empty NBest list")
             display_text = data.get("DisplayText", "")
             logger.info("AzureAssessment done mode=%s display_text_length=%d", mode, len(display_text))
-            return {"mode": mode, "display_text": display_text, **nbest[0]}
+            return {
+                "mode": mode,
+                "display_text": display_text,
+                # Top-level metadata (not in NBest)
+                "recognition_status": data.get("RecognitionStatus"),
+                "offset_ticks": data.get("Offset"),
+                "duration_ticks": data.get("Duration"),
+                "snr": data.get("SNR"),
+                **nbest[0],
+            }
 
         if result.reason == speechsdk.ResultReason.NoMatch:
             logger.warning("AzureAssessment NoMatch locale=%s", locale)

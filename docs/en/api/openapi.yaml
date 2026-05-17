@@ -1,0 +1,2457 @@
+openapi: 3.1.0
+info:
+  title: AI Speaking Coach API
+  description: REST API for the IELTS Speaking Assistant. Provides voice-based conversation
+    practice, pronunciation assessment, grammar feedback, and spaced-repetition flashcards.
+    All endpoints except `/health` require a Bearer JWT obtained via POST /api/auth/login.
+  version: 1.0.0
+paths:
+  /metrics:
+    get:
+      summary: Metrics
+      description: Endpoint that serves Prometheus metrics.
+      operationId: metrics_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /health:
+    get:
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Login
+      description: Authenticate with email/password; return a JWT and user profile.
+        Raises 401 on bad credentials.
+      operationId: login_api_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/forgot-password:
+    post:
+      tags:
+      - auth
+      summary: Forgot Password
+      description: Generate a password reset token for local-password accounts and
+        return a generic response.
+      operationId: forgot_password_api_auth_forgot_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/me:
+    get:
+      tags:
+      - auth
+      summary: Me
+      description: Return the profile of the currently authenticated user. Raises
+        401 if token is invalid or user is inactive.
+      operationId: me_api_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOut'
+      security:
+      - HTTPBearer: []
+  /api/auth/register:
+    post:
+      tags:
+      - auth
+      summary: Register
+      description: Register a new account and return a JWT. Raises 400 if the email
+        is taken or the password fails policy.
+      operationId: register_api_auth_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/reset-password:
+    post:
+      tags:
+      - auth
+      summary: Reset Password
+      description: Reset a user's password using a one-time token.
+      operationId: reset_password_api_auth_reset_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/change-password:
+    post:
+      tags:
+      - auth
+      summary: Change Password
+      description: Change the authenticated user's password after verifying their
+        current password.
+      operationId: change_password_api_auth_change_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/auth/oauth/login/{provider}:
+    get:
+      tags:
+      - oauth
+      summary: Oauth Login
+      operationId: oauth_login_api_auth_oauth_login__provider__get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/auth/oauth/{provider}/callback:
+    get:
+      tags:
+      - oauth
+      summary: Oauth Callback
+      operationId: oauth_callback_api_auth_oauth__provider__callback_get
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      - name: code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Code
+      - name: state
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/chat/transcribe:
+    post:
+      tags:
+      - chat
+      summary: Transcribe an uploaded audio file to text (STT only, no LLM)
+      description: 'Lightweight STT-only endpoint: transcribes audio via Groq Whisper.
+
+        No LLM, no TTS, no database writes — optimised for low-latency transcription.'
+      operationId: transcribe_audio_only_api_chat_transcribe_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_transcribe_audio_only_api_chat_transcribe_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/chat/respond:
+    post:
+      tags:
+      - chat
+      summary: Send a message and receive an AI response with optional TTS audio
+      description: 'Send a message (text or audio) and get an AI coach reply with
+        TTS audio.
+
+
+        Audio input is transcribed via STT when no text is provided. Input and output
+
+        pass through guardrails. A new conversation is created if conversation_id
+        is
+
+        omitted; category is matched to a topics row to enforce the 5-session limit.
+
+        Returns the reply text, inline or URL-referenced MP3, and a grammar summary.'
+      operationId: chat_respond_api_chat_respond_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_chat_respond_api_chat_respond_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/assess:
+    post:
+      tags:
+      - assessment
+      summary: Assess Pronunciation
+      description: 'Score pronunciation via Azure. Scripted mode (with reference_text)
+        gives word/phoneme error detail;
+
+        unscripted mode freely recognizes speech. Result is persisted and linked to
+        message_id when provided.'
+      operationId: assess_pronunciation_api_assess_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_assess_pronunciation_api_assess_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssessmentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/conversations:
+    get:
+      tags:
+      - conversations
+      summary: List Conversations
+      operationId: list_conversations_api_conversations_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+      security:
+      - HTTPBearer: []
+  /api/conversations/for-topic:
+    get:
+      tags:
+      - conversations
+      summary: Get Conversations For Topic
+      description: Return up to 5 non-deleted conversations for a topic, latest-first,
+        with session numbers and limit flag.
+      operationId: get_conversations_for_topic_api_conversations_for_topic_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: topic_code
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Topic Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForTopicResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/conversations/stats:
+    get:
+      tags:
+      - conversations
+      summary: Get Conversation Stats
+      description: Return per-conversation stats (scores, duration, message count)
+        for the dashboard, latest 200.
+      operationId: get_conversation_stats_api_conversations_stats_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationStatsResponse'
+      security:
+      - HTTPBearer: []
+  /api/conversations/{conversation_id}/clear:
+    post:
+      tags:
+      - conversations
+      summary: Clear Conversation History
+      description: Hide all prior messages by setting cleared_at = NOW(). Data is
+        retained; returns 204.
+      operationId: clear_conversation_history_api_conversations__conversation_id__clear_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/conversations/{conversation_id}:
+    delete:
+      tags:
+      - conversations
+      summary: Delete Conversation
+      description: Soft-delete a conversation (sets deleted_at). Frees up the per-topic
+        session slot; data is retained.
+      operationId: delete_conversation_api_conversations__conversation_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - conversations
+      summary: Update Conversation
+      description: 'Mark a conversation as finished by setting ended_at = NOW().
+
+        This enables duration calculation for dashboard statistics.'
+      operationId: update_conversation_api_conversations__conversation_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Conversation Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/conversations/{conversation_id}/messages-with-scores:
+    get:
+      tags:
+      - conversations
+      summary: Get Conversation Messages With Scores
+      description: Return visible messages with embedded pronunciation scores and
+        word/phoneme breakdowns.
+      operationId: get_conversation_messages_with_scores_api_conversations__conversation_id__messages_with_scores_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationWithScoresResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/audio/{storage_key}:
+    get:
+      tags:
+      - audio
+      summary: Stream a stored audio file from MinIO (requires auth, 1-hour cache)
+      description: 'Stable audio proxy — streams a MinIO object to the client.
+
+        Uses a stable URL (not a presigned URL) so the browser can cache the response.
+
+        Auth is required.'
+      operationId: stream_audio_api_audio__storage_key__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: storage_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Storage Key
+      responses:
+        '200':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/grammar/detail_grammar_fb/{message_id}:
+    get:
+      tags:
+      - grammar
+      summary: Get Grammar Detail
+      description: Return grammar errors, corrections, and overall score for a user
+        message. Raises 404 if not found or not owned.
+      operationId: get_grammar_detail_api_grammar_detail_grammar_fb__message_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrammarDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/topics/get_categories_topics:
+    get:
+      tags:
+      - topics
+      summary: List Categories
+      description: Return all active categories with their active topics, ordered
+        by sort_order.
+      operationId: list_categories_api_topics_get_categories_topics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CategoryWithTopicsOut'
+                type: array
+                title: Response List Categories Api Topics Get Categories Topics Get
+  /api/flashcards/decks:
+    get:
+      tags:
+      - flashcards
+      summary: List Decks
+      description: Return all active decks for the current user with card count and
+        due count.
+      operationId: list_decks_api_flashcards_decks_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DeckOut'
+                type: array
+                title: Response List Decks Api Flashcards Decks Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - flashcards
+      summary: Create Deck
+      description: Create a new flashcard deck for the current user.
+      operationId: create_deck_api_flashcards_decks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/flashcards/decks/{deck_id}:
+    get:
+      tags:
+      - flashcards
+      summary: Get Deck
+      description: Fetch a single deck by ID with live card and due counts.
+      operationId: get_deck_api_flashcards_decks__deck_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - flashcards
+      summary: Update Deck
+      description: Partially update a deck's name or description. Omitted fields are
+        unchanged.
+      operationId: update_deck_api_flashcards_decks__deck_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - flashcards
+      summary: Delete Deck
+      description: Soft-delete a deck. All its cards are effectively hidden but not
+        purged.
+      operationId: delete_deck_api_flashcards_decks__deck_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/cards/search:
+    get:
+      tags:
+      - flashcards
+      summary: Search Cards
+      description: Search cards by keyword (ILIKE on front/back text) and/or tag.
+        Returns up to 50 results.
+      operationId: search_cards_api_flashcards_cards_search_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: tag
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+      - name: deck_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deck Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardOut'
+                title: Response Search Cards Api Flashcards Cards Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/decks/{deck_id}/cards:
+    get:
+      tags:
+      - flashcards
+      summary: List Cards
+      description: List active cards in a deck, ordered by creation date descending.
+        Supports pagination.
+      operationId: list_cards_api_flashcards_decks__deck_id__cards_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardOut'
+                title: Response List Cards Api Flashcards Decks  Deck Id  Cards Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - flashcards
+      summary: Create Card
+      description: Create a card with text fields only. Use create_card_with_media
+        to attach files.
+      operationId: create_card_api_flashcards_decks__deck_id__cards_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/decks/{deck_id}/cards/with-media:
+    post:
+      tags:
+      - flashcards
+      summary: Create Card With Media
+      description: "Create a card with optional media attachments in a single multipart\
+        \ request.\n\nSend as multipart/form-data:\n- front_text, back_text, tags[]\
+        \ — card fields\n- files[], sides[], media_types[] — parallel arrays, one\
+        \ entry per file\n  - sides[i]: \"front\" | \"back\"\n  - media_types[i]:\
+        \ \"image\" | \"audio\"\n\nFile bytes are validated and read before the DB\
+        \ transaction opens to avoid\nholding a connection during slow I/O. All inserts\
+        \ (card + media) are atomic."
+      operationId: create_card_with_media_api_flashcards_decks__deck_id__cards_with_media_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_create_card_with_media_api_flashcards_decks__deck_id__cards_with_media_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/cards/{card_id}:
+    get:
+      tags:
+      - flashcards
+      summary: Get Card
+      description: Fetch a single card by ID, including all attached media with presigned
+        URLs.
+      operationId: get_card_api_flashcards_cards__card_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Card Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - flashcards
+      summary: Update Card
+      description: Partially update a card's front text, back text, or tags. Omitted
+        fields are unchanged.
+      operationId: update_card_api_flashcards_cards__card_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Card Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - flashcards
+      summary: Delete Card
+      description: Soft-delete a card. Its review schedule is preserved but the card
+        is excluded from all queries.
+      operationId: delete_card_api_flashcards_cards__card_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Card Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/reviews/due:
+    get:
+      tags:
+      - flashcards
+      summary: Get Due Cards
+      description: Return cards due for review today, ordered by due date ascending.
+        Optionally filtered by deck.
+      operationId: get_due_cards_api_flashcards_reviews_due_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deck Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DueCardOut'
+                title: Response Get Due Cards Api Flashcards Reviews Due Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/reviews/{card_id}:
+    post:
+      tags:
+      - flashcards
+      summary: Submit Review
+      description: 'Submit a review rating for a card. Applies the SM-2 algorithm
+        and persists the new schedule.
+
+
+        Idempotent: re-submitting on the same day overwrites the previous rating.'
+      operationId: submit_review_api_flashcards_reviews__card_id__post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Card Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSubmit'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewStateOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/decks/{deck_id}/stats:
+    get:
+      tags:
+      - flashcards
+      summary: Get Deck Stats
+      description: 'Return aggregate stats for a deck: total cards, due today, learned,
+        and 30-day retention rate.'
+      operationId: get_deck_stats_api_flashcards_decks__deck_id__stats_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: deck_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deck Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckStatsOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/cards/{card_id}/media:
+    post:
+      tags:
+      - flashcards
+      summary: Upload Card Media
+      description: Upload a single image or audio file and attach it to a card side
+        (front or back).
+      operationId: upload_card_media_api_flashcards_cards__card_id__media_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: card_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Card Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_card_media_api_flashcards_cards__card_id__media_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/flashcards/media/{media_id}:
+    delete:
+      tags:
+      - flashcards
+      summary: Delete Card Media
+      description: Delete a media item and remove its file from storage. Verifies
+        ownership via the parent card.
+      operationId: delete_card_media_api_flashcards_media__media_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: media_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Media Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AssessmentResponse:
+      properties:
+        assessment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assessment Id
+        mode:
+          type: string
+          enum:
+          - scripted
+          - unscripted
+          title: Mode
+        recognized_text:
+          type: string
+          title: Recognized Text
+        pron_score:
+          type: number
+          title: Pron Score
+        accuracy_score:
+          type: number
+          title: Accuracy Score
+        fluency_score:
+          type: number
+          title: Fluency Score
+        completeness_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Completeness Score
+        prosody_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Prosody Score
+        words:
+          items:
+            $ref: '#/components/schemas/WordResult'
+          type: array
+          title: Words
+      type: object
+      required:
+      - mode
+      - recognized_text
+      - pron_score
+      - accuracy_score
+      - fluency_score
+      - completeness_score
+      - prosody_score
+      - words
+      title: AssessmentResponse
+    Body_assess_pronunciation_api_assess_post:
+      properties:
+        audio_file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Audio File
+        reference_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference Text
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+        message_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message Id
+      type: object
+      required:
+      - audio_file
+      title: Body_assess_pronunciation_api_assess_post
+    Body_chat_respond_api_chat_respond_post:
+      properties:
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        topic:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Topic
+        voice_gender:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Voice Gender
+        voice_accent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Voice Accent
+        audio_file:
+          anyOf:
+          - type: string
+            contentMediaType: application/octet-stream
+          - type: 'null'
+          title: Audio File
+        conversation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Conversation Id
+      type: object
+      title: Body_chat_respond_api_chat_respond_post
+    Body_create_card_with_media_api_flashcards_decks__deck_id__cards_with_media_post:
+      properties:
+        front_text:
+          type: string
+          title: Front Text
+        back_text:
+          type: string
+          title: Back Text
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+          default: []
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+          default: []
+        sides:
+          items:
+            type: string
+          type: array
+          title: Sides
+          default: []
+        media_types:
+          items:
+            type: string
+          type: array
+          title: Media Types
+          default: []
+      type: object
+      required:
+      - front_text
+      - back_text
+      title: Body_create_card_with_media_api_flashcards_decks__deck_id__cards_with_media_post
+    Body_transcribe_audio_only_api_chat_transcribe_post:
+      properties:
+        audio_file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: Audio File
+      type: object
+      required:
+      - audio_file
+      title: Body_transcribe_audio_only_api_chat_transcribe_post
+    Body_upload_card_media_api_flashcards_cards__card_id__media_post:
+      properties:
+        side:
+          type: string
+          title: Side
+        media_type:
+          type: string
+          title: Media Type
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+      type: object
+      required:
+      - side
+      - media_type
+      - file
+      title: Body_upload_card_media_api_flashcards_cards__card_id__media_post
+    CardCreate:
+      properties:
+        front_text:
+          type: string
+          title: Front Text
+        back_text:
+          type: string
+          title: Back Text
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+          default: []
+      type: object
+      required:
+      - front_text
+      - back_text
+      title: CardCreate
+    CardOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        deck_id:
+          type: string
+          title: Deck Id
+        front_text:
+          type: string
+          title: Front Text
+        back_text:
+          type: string
+          title: Back Text
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        media:
+          items:
+            $ref: '#/components/schemas/MediaOut'
+          type: array
+          title: Media
+          default: []
+      type: object
+      required:
+      - id
+      - deck_id
+      - front_text
+      - back_text
+      - tags
+      - created_at
+      title: CardOut
+    CardUpdate:
+      properties:
+        front_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Front Text
+        back_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Back Text
+        tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tags
+      type: object
+      title: CardUpdate
+    CategoryWithTopicsOut:
+      properties:
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+        sort_order:
+          type: integer
+          title: Sort Order
+        topics:
+          items:
+            $ref: '#/components/schemas/TopicOut'
+          type: array
+          title: Topics
+      type: object
+      required:
+      - code
+      - title
+      - sort_order
+      - topics
+      title: CategoryWithTopicsOut
+    ChangePasswordRequest:
+      properties:
+        current_password:
+          type: string
+          title: Current Password
+        new_password:
+          type: string
+          title: New Password
+      type: object
+      required:
+      - current_password
+      - new_password
+      title: ChangePasswordRequest
+    ChatResponse:
+      properties:
+        user_input:
+          type: string
+          title: User Input
+        response_text:
+          type: string
+          title: Response Text
+        audio_base64:
+          type: string
+          title: Audio Base64
+          default: ''
+        audio_mime:
+          type: string
+          title: Audio Mime
+          default: audio/mpeg
+        user_audio_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Audio Url
+        assistant_audio_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assistant Audio Url
+        conversation_id:
+          type: string
+          title: Conversation Id
+        user_message_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Message Id
+        grammar_summary:
+          $ref: '#/components/schemas/GrammarSummary'
+        grammar_detail:
+          anyOf:
+          - $ref: '#/components/schemas/GrammarDetailResponse'
+          - type: 'null'
+        tool_steps:
+          items:
+            $ref: '#/components/schemas/ToolCallStep'
+          type: array
+          title: Tool Steps
+        suggestions:
+          items:
+            type: string
+          type: array
+          title: Suggestions
+      type: object
+      required:
+      - user_input
+      - response_text
+      - conversation_id
+      title: ChatResponse
+    ConversationListResponse:
+      properties:
+        conversations:
+          items:
+            $ref: '#/components/schemas/ConversationOut'
+          type: array
+          title: Conversations
+      type: object
+      required:
+      - conversations
+      title: ConversationListResponse
+    ConversationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        status:
+          type: string
+          title: Status
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+        topic_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Topic Id
+        topic_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Topic Code
+        cleared_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cleared At
+      type: object
+      required:
+      - id
+      - title
+      - status
+      - started_at
+      - ended_at
+      - topic_id
+      title: ConversationOut
+    ConversationScoresOut:
+      properties:
+        pronunciation:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Pronunciation
+        fluency:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Fluency
+        accuracy:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accuracy
+      type: object
+      title: ConversationScoresOut
+    ConversationStatOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        topic:
+          type: string
+          title: Topic
+        topic_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Topic Code
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        duration_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Duration Ms
+        avg_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Avg Score
+        user_message_count:
+          type: integer
+          title: User Message Count
+          default: 0
+        scores:
+          anyOf:
+          - $ref: '#/components/schemas/ConversationScoresOut'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - topic
+      - started_at
+      title: ConversationStatOut
+    ConversationStatsResponse:
+      properties:
+        sessions:
+          items:
+            $ref: '#/components/schemas/ConversationStatOut'
+          type: array
+          title: Sessions
+      type: object
+      required:
+      - sessions
+      title: ConversationStatsResponse
+    ConversationWithScoresResponse:
+      properties:
+        conversation_id:
+          type: string
+          title: Conversation Id
+        messages:
+          items:
+            $ref: '#/components/schemas/MessageWithScoreOut'
+          type: array
+          title: Messages
+      type: object
+      required:
+      - conversation_id
+      - messages
+      title: ConversationWithScoresResponse
+    DeckCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      type: object
+      required:
+      - name
+      title: DeckCreate
+    DeckOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        card_count:
+          type: integer
+          title: Card Count
+        due_count:
+          type: integer
+          title: Due Count
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - card_count
+      - due_count
+      - created_at
+      title: DeckOut
+    DeckStatsOut:
+      properties:
+        total_cards:
+          type: integer
+          title: Total Cards
+        due_today:
+          type: integer
+          title: Due Today
+        learned:
+          type: integer
+          title: Learned
+        retention_rate:
+          type: number
+          title: Retention Rate
+      type: object
+      required:
+      - total_cards
+      - due_today
+      - learned
+      - retention_rate
+      title: DeckStatsOut
+    DeckUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+      type: object
+      title: DeckUpdate
+    DueCardOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        front_text:
+          type: string
+          title: Front Text
+        back_text:
+          type: string
+          title: Back Text
+        deck_name:
+          type: string
+          title: Deck Name
+        due_date:
+          type: string
+          format: date
+          title: Due Date
+        media:
+          items:
+            $ref: '#/components/schemas/MediaOut'
+          type: array
+          title: Media
+          default: []
+      type: object
+      required:
+      - id
+      - front_text
+      - back_text
+      - deck_name
+      - due_date
+      title: DueCardOut
+    ForTopicConversationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        status:
+          type: string
+          title: Status
+        session_number:
+          type: integer
+          title: Session Number
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - title
+      - status
+      - session_number
+      - started_at
+      - updated_at
+      title: ForTopicConversationOut
+    ForTopicResponse:
+      properties:
+        topic_code:
+          type: string
+          title: Topic Code
+        topic_title:
+          type: string
+          title: Topic Title
+        conversations:
+          items:
+            $ref: '#/components/schemas/ForTopicConversationOut'
+          type: array
+          title: Conversations
+        total:
+          type: integer
+          title: Total
+        limit_reached:
+          type: boolean
+          title: Limit Reached
+      type: object
+      required:
+      - topic_code
+      - topic_title
+      - conversations
+      - total
+      - limit_reached
+      title: ForTopicResponse
+    ForgotPasswordRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+      type: object
+      required:
+      - email
+      title: ForgotPasswordRequest
+    ForgotPasswordResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+        preview_reset_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Preview Reset Url
+      type: object
+      required:
+      - message
+      title: ForgotPasswordResponse
+    GrammarDetailResponse:
+      properties:
+        message_id:
+          type: string
+          title: Message Id
+        user_input:
+          type: string
+          title: User Input
+        errors:
+          items:
+            $ref: '#/components/schemas/GrammarErrorDetail'
+          type: array
+          title: Errors
+        corrected_sentence:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Corrected Sentence
+        overall_score:
+          type: integer
+          title: Overall Score
+      type: object
+      required:
+      - message_id
+      - user_input
+      - errors
+      - corrected_sentence
+      - overall_score
+      title: GrammarDetailResponse
+    GrammarErrorDetail:
+      properties:
+        id:
+          type: integer
+          title: Id
+        original:
+          type: string
+          title: Original
+        corrected:
+          type: string
+          title: Corrected
+        start_char:
+          type: integer
+          title: Start Char
+        end_char:
+          type: integer
+          title: End Char
+        category:
+          type: string
+          title: Category
+        severity:
+          type: string
+          title: Severity
+        explanation:
+          type: string
+          title: Explanation
+        rule:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rule
+        example:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Example
+      type: object
+      required:
+      - id
+      - original
+      - corrected
+      - start_char
+      - end_char
+      - category
+      - severity
+      - explanation
+      title: GrammarErrorDetail
+    GrammarSpan:
+      properties:
+        original:
+          type: string
+          title: Original
+        corrected:
+          type: string
+          title: Corrected
+        start_char:
+          type: integer
+          title: Start Char
+        end_char:
+          type: integer
+          title: End Char
+      type: object
+      required:
+      - original
+      - corrected
+      - start_char
+      - end_char
+      title: GrammarSpan
+    GrammarSummary:
+      properties:
+        error_count:
+          type: integer
+          title: Error Count
+        has_errors:
+          type: boolean
+          title: Has Errors
+        flagged_spans:
+          items:
+            $ref: '#/components/schemas/GrammarSpan'
+          type: array
+          title: Flagged Spans
+      type: object
+      required:
+      - error_count
+      - has_errors
+      - flagged_spans
+      title: GrammarSummary
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    LoginResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+        expires_in:
+          type: integer
+          title: Expires In
+        user:
+          $ref: '#/components/schemas/UserOut'
+      type: object
+      required:
+      - access_token
+      - expires_in
+      - user
+      title: LoginResponse
+    MediaOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        side:
+          type: string
+          title: Side
+        media_type:
+          type: string
+          title: Media Type
+        public_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Public Url
+        mime_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mime Type
+      type: object
+      required:
+      - id
+      - side
+      - media_type
+      - public_url
+      - mime_type
+      title: MediaOut
+    MessageResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: MessageResponse
+    MessageScoreOut:
+      properties:
+        overall_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Overall Score
+        accuracy_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accuracy Score
+        fluency_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Fluency Score
+        completeness_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Completeness Score
+        prosody_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Prosody Score
+        words:
+          items:
+            $ref: '#/components/schemas/WordDetail'
+          type: array
+          title: Words
+          default: []
+      type: object
+      title: MessageScoreOut
+    MessageWithScoreOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        role:
+          type: string
+          title: Role
+        input_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Input Mode
+        text_content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text Content
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        suggestions:
+          items:
+            type: string
+          type: array
+          title: Suggestions
+        audio_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Audio Url
+        assistant_audio_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assistant Audio Url
+        score:
+          anyOf:
+          - $ref: '#/components/schemas/MessageScoreOut'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - role
+      - created_at
+      title: MessageWithScoreOut
+    PhonemeDetail:
+      properties:
+        phoneme:
+          type: string
+          title: Phoneme
+        accuracy_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accuracy Score
+      type: object
+      required:
+      - phoneme
+      title: PhonemeDetail
+    PhonemeResult:
+      properties:
+        phoneme:
+          type: string
+          title: Phoneme
+        accuracy_score:
+          type: number
+          title: Accuracy Score
+      type: object
+      required:
+      - phoneme
+      - accuracy_score
+      title: PhonemeResult
+    RegisterRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        english_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: English Level
+      type: object
+      required:
+      - email
+      - password
+      title: RegisterRequest
+    ResetPasswordRequest:
+      properties:
+        token:
+          type: string
+          title: Token
+        new_password:
+          type: string
+          title: New Password
+      type: object
+      required:
+      - token
+      - new_password
+      title: ResetPasswordRequest
+    ReviewStateOut:
+      properties:
+        card_id:
+          type: string
+          title: Card Id
+        due_date:
+          type: string
+          format: date
+          title: Due Date
+        interval_days:
+          type: integer
+          title: Interval Days
+        ease_factor:
+          type: number
+          title: Ease Factor
+        repetitions:
+          type: integer
+          title: Repetitions
+      type: object
+      required:
+      - card_id
+      - due_date
+      - interval_days
+      - ease_factor
+      - repetitions
+      title: ReviewStateOut
+    ReviewSubmit:
+      properties:
+        rating:
+          type: string
+          enum:
+          - again
+          - hard
+          - good
+          - easy
+          title: Rating
+      type: object
+      required:
+      - rating
+      title: ReviewSubmit
+    SyllableResult:
+      properties:
+        syllable:
+          type: string
+          title: Syllable
+        accuracy_score:
+          type: number
+          title: Accuracy Score
+      type: object
+      required:
+      - syllable
+      - accuracy_score
+      title: SyllableResult
+    ToolCallStep:
+      properties:
+        tool_name:
+          type: string
+          title: Tool Name
+        input_summary:
+          type: string
+          title: Input Summary
+        output_summary:
+          type: string
+          title: Output Summary
+        result_label:
+          type: string
+          title: Result Label
+          default: ''
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        status:
+          type: string
+          enum:
+          - completed
+          - failed
+          title: Status
+          default: completed
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - tool_name
+      - input_summary
+      - output_summary
+      title: ToolCallStep
+    TopicOut:
+      properties:
+        code:
+          type: string
+          title: Code
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        difficulty_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Difficulty Level
+        sort_order:
+          type: integer
+          title: Sort Order
+      type: object
+      required:
+      - code
+      - title
+      - description
+      - difficulty_level
+      - sort_order
+      title: TopicOut
+    UserOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        email:
+          type: string
+          title: Email
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        english_level:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: English Level
+      type: object
+      required:
+      - id
+      - email
+      - display_name
+      - english_level
+      title: UserOut
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    WordDetail:
+      properties:
+        word_index:
+          type: integer
+          title: Word Index
+        word:
+          type: string
+          title: Word
+        accuracy_score:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accuracy Score
+        error_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Type
+        start_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Start Ms
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        phonemes:
+          items:
+            $ref: '#/components/schemas/PhonemeDetail'
+          type: array
+          title: Phonemes
+          default: []
+      type: object
+      required:
+      - word_index
+      - word
+      title: WordDetail
+    WordResult:
+      properties:
+        word:
+          type: string
+          title: Word
+        accuracy_score:
+          type: number
+          title: Accuracy Score
+        error_type:
+          type: string
+          enum:
+          - None
+          - Omission
+          - Insertion
+          - Mispronunciation
+          - UnexpectedBreak
+          - MissingBreak
+          - Monotone
+          title: Error Type
+        syllables:
+          items:
+            $ref: '#/components/schemas/SyllableResult'
+          type: array
+          title: Syllables
+        phonemes:
+          items:
+            $ref: '#/components/schemas/PhonemeResult'
+          type: array
+          title: Phonemes
+      type: object
+      required:
+      - word
+      - accuracy_score
+      - error_type
+      - syllables
+      - phonemes
+      title: WordResult
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

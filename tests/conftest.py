@@ -19,6 +19,30 @@ sys.modules.setdefault("minio.error", _minio_error_stub)
 
 import pytest
 from fastapi.testclient import TestClient
+import _pytest.pathlib as _pytest_pathlib
+
+# Work around intermittent Windows ACL issues on pytest temp folders.
+# Without this, tmp_path-based tests can crash the entire session during cleanup.
+_orig_cleanup_dead_symlinks = _pytest_pathlib.cleanup_dead_symlinks
+_orig_rm_rf = _pytest_pathlib.rm_rf
+
+
+def _safe_cleanup_dead_symlinks(root):
+    try:
+        return _orig_cleanup_dead_symlinks(root)
+    except PermissionError:
+        return None
+
+
+def _safe_rm_rf(path):
+    try:
+        return _orig_rm_rf(path)
+    except PermissionError:
+        return None
+
+
+_pytest_pathlib.cleanup_dead_symlinks = _safe_cleanup_dead_symlinks
+_pytest_pathlib.rm_rf = _safe_rm_rf
 
 # ── Patch external services BEFORE importing app ──────────────────────────────
 # Prevents real DB/MinIO/AI connections during import-time initialization.
@@ -31,6 +55,10 @@ os.environ.setdefault("MINIO_ACCESS_KEY", "minioadmin")
 os.environ.setdefault("MINIO_SECRET_KEY", "minio-test-secret-2026")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("ELEVENLABS_API_KEY", "test-el-key")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-2026")
+os.environ.setdefault("APP_BASE_URL", "http://localhost:8000")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:5173")
 
 
 # ---------------------------------------------------------------------------

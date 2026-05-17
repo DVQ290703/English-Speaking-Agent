@@ -12,7 +12,9 @@ All external services (DB, MinIO, LLM, TTS, STT) are mocked.
 """
 
 import base64
+import hashlib
 import io
+import json
 import os
 import sys
 import tempfile
@@ -53,6 +55,7 @@ with (
     from app.main import app
 
 from app.core.security import create_access_token, hash_password
+from app.services.email_service import PasswordResetEmailDeliveryError
 
 
 # ===========================================================================
@@ -85,6 +88,10 @@ def _make_conn(fetchone_side_effect=(), fetchall_value=None, fetchone_by_sql=Non
     )
 
 
+def _sql_calls(cursor) -> list[str]:
+    return [" ".join(call.args[0].lower().split()) for call in cursor.execute.call_args_list]
+
+
 @contextmanager
 def _client(conn=None):
     """
@@ -96,9 +103,38 @@ def _client(conn=None):
     else:
         real_conn, cursor = conn
 
-    with patch("app.api.routes.get_connection", return_value=real_conn):
+    with (
+        patch("app.api.auth.get_connection", return_value=real_conn),
+        patch("app.api.chat.get_connection", return_value=real_conn),
+        patch("app.api.conversations.get_connection", return_value=real_conn),
+    ):
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c, cursor
+
+
+@contextmanager
+def _transactional_client(conn=None):
+    if conn is None:
+        real_conn, cursor = _make_conn()
+    else:
+        real_conn, cursor = conn
+
+    @contextmanager
+    def fake_get_connection():
+        try:
+            yield real_conn
+            real_conn.commit()
+        except Exception:
+            real_conn.rollback()
+            raise
+
+    with (
+        patch("app.api.auth.get_connection", fake_get_connection),
+        patch("app.api.chat.get_connection", fake_get_connection),
+        patch("app.api.conversations.get_connection", fake_get_connection),
+    ):
+        with TestClient(app, raise_server_exceptions=False) as c:
+            yield c, cursor, real_conn
 
 
 # ===========================================================================
@@ -226,6 +262,287 @@ class TestRegister:
 
 
 # ===========================================================================
+# POST /api/auth/forgot-password
+# ===========================================================================
+
+class TestForgotPassword:
+    _user_id = _new_uuid()
+    _email = "recover@example.com"
+
+    def test_existing_local_password_account_sends_email_and_returns_preview_link_in_development(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        with (
+            patch("app.api.auth.APP_ENV", "development"),
+            patch("app.api.auth.FRONTEND_URL", "http://localhost:5173"),
+            patch("app.api.auth.EMAIL_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, cursor, real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["preview_reset_url"].startswith("http://localhost:5173/reset-password?token=")
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["to_email"] == self._email
+        assert mock_send.call_args.kwargs["reset_url"] == body["preview_reset_url"]
+        assert mock_send.call_args.kwargs["expires_minutes"] == 5
+        sql_calls = _sql_calls(cursor)
+        assert any("update password_reset_tokens set revoked_at = now()" in sql for sql in sql_calls)
+        assert any("insert into password_reset_tokens" in sql for sql in sql_calls)
+
+        revoke_call = next(
+            sql_call
+            for sql_call in cursor.execute.call_args_list
+            if "update password_reset_tokens set revoked_at = now()" in " ".join(sql_call.args[0].lower().split())
+        )
+        assert revoke_call.args[1] == (self._user_id,)
+
+        insert_call = next(
+            sql_call
+            for sql_call in cursor.execute.call_args_list
+            if "insert into password_reset_tokens" in " ".join(sql_call.args[0].lower().split())
+        )
+        assert cursor.execute.call_args_list.index(revoke_call) < cursor.execute.call_args_list.index(insert_call)
+        expires_at = insert_call.args[1][2]
+        seconds_until_expiry = (expires_at - datetime.now(timezone.utc)).total_seconds()
+        assert 240 <= seconds_until_expiry <= 300
+        real_conn.rollback.assert_not_called()
+
+    def test_existing_local_password_account_hides_preview_link_in_production(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        with (
+            patch("app.api.auth.APP_ENV", "production"),
+            patch("app.api.auth.FRONTEND_URL", "https://app.englishspeakingagent.com"),
+            patch("app.api.auth.EMAIL_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, _, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        assert r.json()["preview_reset_url"] is None
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["reset_url"].startswith(
+            "https://app.englishspeakingagent.com/reset-password?token="
+        )
+
+    def test_existing_local_password_account_hides_preview_link_in_staging(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        with (
+            patch("app.api.auth.APP_ENV", "staging"),
+            patch("app.api.auth.FRONTEND_URL", "https://staging.englishspeakingagent.com"),
+            patch("app.api.auth.EMAIL_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, _cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        assert r.json()["preview_reset_url"] is None
+        mock_send.assert_called_once()
+        assert mock_send.call_args.kwargs["reset_url"].startswith(
+            "https://staging.englishspeakingagent.com/reset-password?token="
+        )
+
+    def test_unknown_email_returns_200_and_does_not_send_email(self):
+        conn = _make_conn(fetchone_by_sql={"from users": None})
+        with (
+            patch("app.api.auth.EMAIL_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": "ghost@example.com"})
+
+        assert r.status_code == 200
+        assert r.json()["preview_reset_url"] is None
+        mock_send.assert_not_called()
+        assert not any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+
+    def test_one_character_local_part_is_masked_in_logs(self):
+        conn = _make_conn(fetchone_by_sql={"from users": None})
+        with patch("app.api.auth.logger.info") as mock_info:
+            with _transactional_client(conn) as (c, _cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": "a@example.com"})
+
+        assert r.status_code == 200
+        mock_info.assert_any_call("Forgot password request email=%s", "*@example.com")
+        assert "a@example.com" not in str(mock_info.call_args_list)
+
+    def test_oauth_only_account_returns_200_and_does_not_send_email(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, False)})
+        with (
+            patch("app.api.auth.EMAIL_ENABLED", True),
+            patch("app.api.auth.send_password_reset_email") as mock_send,
+        ):
+            with _transactional_client(conn) as (c, cursor, _real_conn):
+                r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        assert r.json()["preview_reset_url"] is None
+        mock_send.assert_not_called()
+        assert not any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+
+    def test_delivery_failure_rolls_back_and_still_returns_generic_success(self):
+        conn = _make_conn(fetchone_by_sql={"from users": (self._user_id, True)})
+        def failing_send_password_reset_email(**_kwargs):
+            assert any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+            raise PasswordResetEmailDeliveryError("smtp unavailable")
+
+        with (
+            patch("app.api.auth.APP_ENV", "development"),
+            patch("app.api.auth.EMAIL_ENABLED", True),
+        ):
+            with _transactional_client(conn) as (c, cursor, real_conn):
+                with patch(
+                    "app.api.auth.send_password_reset_email",
+                    side_effect=failing_send_password_reset_email,
+                ):
+                    r = c.post("/api/auth/forgot-password", json={"email": self._email})
+
+        assert r.status_code == 200
+        assert r.json() == {
+            "message": "If the account exists, a reset link has been generated.",
+            "preview_reset_url": None,
+        }
+        assert any("insert into password_reset_tokens" in sql for sql in _sql_calls(cursor))
+        real_conn.rollback.assert_called_once()
+        real_conn.commit.assert_not_called()
+
+
+# ===========================================================================
+# POST /api/auth/reset-password
+# ===========================================================================
+
+class TestResetPassword:
+    _user_id = _new_uuid()
+    _token_id = _new_uuid()
+    _token = "reset-token-123"
+    _new_password = "BrandNewPass1!AB"
+
+    def _conn(self):
+        token_hash = hashlib.sha256(self._token.encode("utf-8")).hexdigest()
+        return _make_conn(
+            fetchone_by_sql={
+                "from password_reset_tokens": (self._token_id, self._user_id),
+                token_hash: (self._token_id, self._user_id),
+            }
+        )
+
+    def test_reset_password_happy_path_updates_password_and_marks_token_used(self):
+        with _client(self._conn()) as (c, cursor):
+            r = c.post(
+                "/api/auth/reset-password",
+                json={"token": self._token, "new_password": self._new_password},
+            )
+
+        assert r.status_code == 200
+        sql_calls = _sql_calls(cursor)
+        assert any("update users set password_hash" in sql for sql in sql_calls)
+        assert any("update password_reset_tokens set used_at = now()" in sql for sql in sql_calls)
+
+        update_user_call = next(
+            call for call in cursor.execute.call_args_list if "update users set password_hash" in " ".join(call.args[0].lower().split())
+        )
+        hashed_password = update_user_call.args[1][0]
+        assert hashed_password != self._new_password
+        assert hashed_password.startswith("$2")
+
+    def test_reset_password_invalid_token_returns_400(self):
+        conn = _make_conn(fetchone_by_sql={"from password_reset_tokens": None})
+        with _client(conn) as (c, _):
+            r = c.post(
+                "/api/auth/reset-password",
+                json={"token": "bad-token", "new_password": self._new_password},
+            )
+
+        assert r.status_code == 400
+        assert "invalid or expired" in r.json()["detail"].lower()
+
+    def test_reset_password_weak_password_returns_400(self):
+        with _client() as (c, _):
+            r = c.post(
+                "/api/auth/reset-password",
+                json={"token": self._token, "new_password": "short"},
+            )
+
+        assert r.status_code == 400
+
+
+# ===========================================================================
+# POST /api/auth/change-password
+# ===========================================================================
+
+class TestChangePassword:
+    _user_id = _new_uuid()
+    _email = "secure@example.com"
+    _current_password = "CurrentPass1!AB"
+    _new_password = "UpdatedPass1!AB"
+
+    def _headers(self):
+        return _make_bearer(self._user_id, self._email)
+
+    def _ok_conn(self):
+        pw_hash = hash_password(self._current_password)
+        return _make_conn(fetchone_by_sql={"select password_hash": (pw_hash,)})
+
+    def test_change_password_happy_path_updates_hash(self):
+        with _client(self._ok_conn()) as (c, cursor):
+            r = c.post(
+                "/api/auth/change-password",
+                headers=self._headers(),
+                json={"current_password": self._current_password, "new_password": self._new_password},
+            )
+
+        assert r.status_code == 200
+        sql_calls = _sql_calls(cursor)
+        assert any("update users set password_hash" in sql for sql in sql_calls)
+        assert any("update password_reset_tokens set revoked_at = now()" in sql for sql in sql_calls)
+
+    def test_change_password_wrong_current_password_returns_401(self):
+        with _client(self._ok_conn()) as (c, _):
+            r = c.post(
+                "/api/auth/change-password",
+                headers=self._headers(),
+                json={"current_password": "WrongPass1!AB", "new_password": self._new_password},
+            )
+
+        assert r.status_code == 401
+        assert "current password" in r.json()["detail"].lower()
+
+    def test_change_password_rejects_same_password(self):
+        with _client(self._ok_conn()) as (c, _):
+            r = c.post(
+                "/api/auth/change-password",
+                headers=self._headers(),
+                json={"current_password": self._current_password, "new_password": self._current_password},
+            )
+
+        assert r.status_code == 400
+        assert "different" in r.json()["detail"].lower()
+
+    def test_change_password_oauth_only_account_returns_400(self):
+        conn = _make_conn(fetchone_by_sql={"select password_hash": (None,)})
+        with _client(conn) as (c, _):
+            r = c.post(
+                "/api/auth/change-password",
+                headers=self._headers(),
+                json={"current_password": self._current_password, "new_password": self._new_password},
+            )
+
+        assert r.status_code == 400
+
+    def test_change_password_requires_auth(self):
+        with _client() as (c, _):
+            r = c.post(
+                "/api/auth/change-password",
+                json={"current_password": self._current_password, "new_password": self._new_password},
+            )
+
+        assert r.status_code in (401, 403)
+
+
+# ===========================================================================
 # GET /api/auth/me
 # ===========================================================================
 
@@ -295,11 +612,9 @@ class TestChatRespond:
     def test_chat_respond_text_happy_path(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Great job!", b"mp3data")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/audio.mp3"),
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"mp3data", None, [], [])),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -320,11 +635,9 @@ class TestChatRespond:
             }
         )
         with (
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Reply!", b"audiodata")),
-            patch("app.api.routes.store_user_audio", return_value=None),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/url"),
+            patch("app.api.chat.run_langraph_agent", return_value=("Reply!", b"audiodata", None, [], [])),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
         ):
             with _client(fresh_conn) as (c, _):
                 r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
@@ -334,12 +647,10 @@ class TestChatRespond:
     def test_chat_respond_audio_mode_calls_stt(self):
         with (
             _client(self._new_conv_conn()) as (c, _),
-            patch("app.api.routes.transcribe_audio", return_value="I said hello") as mock_stt,
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("Nice!", b"mp3")),
-            patch("app.api.routes.store_user_audio", return_value=("key", "audio/webm")),
-            patch("app.api.routes._upload"),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/url"),
+            patch("app.api.chat.transcribe_audio", return_value="I said hello") as mock_stt,
+            patch("app.api.chat.run_langraph_agent", return_value=("Nice!", b"mp3", None, [], [])),
+            patch("app.api.chat.store_user_audio", return_value=("key", "audio/webm")),
+            patch("app.api.chat._upload"),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -385,8 +696,7 @@ class TestChatRespond:
         conn = _make_conn(fetchone_side_effect=[None])
         with (
             _client(conn) as (c, _),
-            patch("app.api.routes.normalize_history", return_value=[]),
-            patch("app.api.routes.run_langraph_agent", return_value=("reply", b"")),
+            patch("app.api.chat.run_langraph_agent", return_value=("reply", b"", None, [], [])),
         ):
             r = c.post(
                 "/api/chat/respond",
@@ -394,6 +704,115 @@ class TestChatRespond:
                 headers=self._headers(),
             )
         assert r.status_code == 404
+
+    def test_chat_respond_returns_and_stores_suggestions(self):
+        suggestions = [
+            "I usually practice after work.",
+            "What should I focus on next?",
+            "In my experience, short daily practice works best.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, cursor):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"] == suggestions
+
+        assistant_insert = [
+            call for call in cursor.execute.call_args_list
+            if "insert into messages" in " ".join(call.args[0].lower().split())
+            and "'assistant'" in call.args[0].lower()
+        ][0]
+        assert assistant_insert.args[1][-1] == json.dumps(suggestions)
+
+    def test_chat_respond_redacts_pii_from_suggestions(self):
+        suggestions = [
+            "Email me at learner@example.com.",
+            "What should I practice next?",
+            "In my experience, repetition helps.",
+        ]
+        fresh_conn = _make_conn(
+            fetchone_by_sql={
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+        with (
+            patch("app.api.chat.run_langraph_agent", return_value=("Great job!", b"", None, [], suggestions)),
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            with _client(fresh_conn) as (c, _):
+                r = c.post("/api/chat/respond", data={"text": "Hello"}, headers=self._headers())
+
+        assert r.status_code == 200
+        assert r.json()["suggestions"][0] == "Email me at [EMAIL REDACTED]."
+
+
+# ===========================================================================
+# POST /api/chat/respond — voice_accent forwarding
+# ===========================================================================
+
+class TestChatRespondVoiceAccent:
+    _user_id = _new_uuid()
+    _conv_id = _new_uuid()
+    _email = "grace@example.com"
+
+    def _headers(self):
+        return _make_bearer(self._user_id, self._email)
+
+    def _new_conv_conn(self):
+        return _make_conn(
+            fetchone_by_sql={
+                "from topics where code": None,
+                "insert into conversations": (self._conv_id,),
+                "max(turn_number)": (1,),
+            }
+        )
+
+    def test_voice_accent_is_forwarded_to_run_langraph_agent(self):
+        with (
+            _client(self._new_conv_conn()) as (c, _),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [], [])) as mock_agent,
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            r = c.post(
+                "/api/chat/respond",
+                data={"text": "Hello", "voice_accent": "uk"},
+                headers=self._headers(),
+            )
+        assert r.status_code == 200
+        mock_agent.assert_called_once()
+        _, kwargs = mock_agent.call_args
+        assert kwargs["voice_accent"] == "uk"
+
+    def test_missing_voice_accent_passes_none_to_run_langraph_agent(self):
+        with (
+            _client(self._new_conv_conn()) as (c, _),
+            patch("app.api.chat.run_langraph_agent", return_value=("Good!", b"mp3data", None, [], [])) as mock_agent,
+            patch("app.api.chat.store_user_audio", return_value=None),
+            patch("app.api.chat._upload"),
+        ):
+            r = c.post(
+                "/api/chat/respond",
+                data={"text": "Hello"},
+                headers=self._headers(),
+            )
+        assert r.status_code == 200
+        mock_agent.assert_called_once()
+        _, kwargs = mock_agent.call_args
+        assert kwargs["voice_accent"] is None
 
 
 # ===========================================================================
@@ -410,7 +829,7 @@ class TestListConversations:
 
     def test_list_conversations_happy_path(self):
         now = datetime.now(timezone.utc)
-        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None)])
+        conn = _make_conn(fetchall_value=[(self._conv_id, "IELTS Part 1", "active", now, None, None, None, None)])
         with _client(conn) as (c, _):
             r = c.get("/api/conversations", headers=self._headers())
         assert r.status_code == 200
@@ -438,7 +857,7 @@ class TestListConversations:
 
 
 # ===========================================================================
-# GET /api/conversations/{id}/messages
+# GET /api/conversations/{id}/messages-with-scores
 # ===========================================================================
 
 class TestGetConversationMessages:
@@ -455,12 +874,12 @@ class TestGetConversationMessages:
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
             fetchall_value=[
-                (self._msg_id, "user", "text", "Hello AI", now, None),
-                (_new_uuid(), "assistant", "text", "Hello human!", now, None),
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, [], None, None, None, None, None, None, None, None),
             ],
         )
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         body = r.json()
         assert body["conversation_id"] == self._conv_id
@@ -470,56 +889,73 @@ class TestGetConversationMessages:
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, "audio/key/path.mp3")],
+            fetchall_value=[(self._msg_id, "user", "audio", "transcript", now, [], "audio/key/path.mp3", None, None, None, None, None, None, None)],
         )
-        with (
-            _client(conn) as (c, _),
-            patch("app.api.routes.get_presigned_url", return_value="http://minio/presigned"),
-        ):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
-        assert r.json()["messages"][0]["audio_url"] == "http://minio/presigned"
+        assert r.json()["messages"][0]["audio_url"] == "/api/audio/audio/key/path.mp3"
 
     def test_get_messages_no_audio_url_when_storage_key_is_null(self):
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, None)],
+            fetchall_value=[(self._msg_id, "assistant", "text", "Hello!", now, [], None, None, None, None, None, None, None, None)],
         )
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
         assert r.json()["messages"][0]["audio_url"] is None
 
-    def test_get_messages_presign_failure_does_not_propagate(self):
+    def test_get_messages_assistant_audio_url_generated_when_storage_key_present(self):
         now = datetime.now(timezone.utc)
         conn = _make_conn(
             fetchone_side_effect=[(self._conv_id,)],
-            fetchall_value=[(self._msg_id, "user", "audio", "text", now, "bad/key")],
+            fetchall_value=[(self._msg_id, "assistant", "text", "text", now, [], None, "assistant/key.mp3", None, None, None, None, None, None)],
         )
-        with (
-            _client(conn) as (c, _),
-            patch("app.api.routes.get_presigned_url", side_effect=RuntimeError("MinIO down")),
-        ):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 200
-        assert r.json()["messages"][0]["audio_url"] is None
+        assert r.json()["messages"][0]["assistant_audio_url"] == "/api/audio/assistant/key.mp3"
+
+    def test_get_messages_returns_assistant_suggestions(self):
+        now = datetime.now(timezone.utc)
+        suggestions = [
+            "I usually practice in the morning.",
+            "What routine works best for you?",
+            "In my experience, consistency matters most.",
+        ]
+        conn = _make_conn(
+            fetchone_side_effect=[(self._conv_id,)],
+            fetchall_value=[
+                (self._msg_id, "user", "text", "Hello AI", now, [], None, None, None, None, None, None, None, None),
+                (_new_uuid(), "assistant", "text", "Hello human!", now, suggestions, None, None, None, None, None, None, None, None),
+            ],
+        )
+
+        with _client(conn) as (c, _):
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
+
+        assert r.status_code == 200
+        body = r.json()
+        assert body["messages"][0]["suggestions"] == []
+        assert body["messages"][1]["suggestions"] == suggestions
 
     def test_get_messages_no_auth_returns_401(self):
         """HTTPBearer raises 401/403 when the Authorization header is missing."""
         with _client() as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages")
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores")
         assert r.status_code in (401, 403)
 
     def test_get_messages_invalid_uuid_returns_400(self):
         with _client() as (c, _):
-            r = c.get("/api/conversations/not-a-uuid/messages", headers=self._headers())
+            r = c.get("/api/conversations/not-a-uuid/messages-with-scores", headers=self._headers())
         assert r.status_code == 400
 
     def test_get_messages_conversation_not_found_returns_404(self):
         conn = _make_conn(fetchone_side_effect=[None])
         with _client(conn) as (c, _):
-            r = c.get(f"/api/conversations/{self._conv_id}/messages", headers=self._headers())
+            r = c.get(f"/api/conversations/{self._conv_id}/messages-with-scores", headers=self._headers())
         assert r.status_code == 404
 
 
@@ -539,11 +975,13 @@ class TestHealthCheck:
             r = c.get("/health")
         assert r.headers["X-Content-Type-Options"] == "nosniff"
         assert r.headers["X-Frame-Options"] == "DENY"
-        assert r.headers["Cache-Control"] == "no-store"
+        # /health is not a sensitive endpoint; Cache-Control: no-store is only
+        # applied to /api/auth/ and /api/chat/ paths.
+        assert r.headers.get("cache-control") != "no-store"
 
 
 def test_read_and_close_upload_closes_temp_file():
-    from app.api.routes import _read_and_close_upload
+    from app.api._audio import _read_and_close_upload
 
     upload_backing_file = tempfile.SpooledTemporaryFile()
     upload_backing_file.write(_fake_webm_bytes())
@@ -620,7 +1058,7 @@ class TestAssessRoute:
         assert resp.status_code == 413
 
     def test_unscripted_assess_returns_200(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result("unscripted")
             resp = client.post(
                 "/api/assess",
@@ -639,7 +1077,7 @@ class TestAssessRoute:
         assert data["words"][0]["word"] == "hello"
 
     def test_scripted_assess_returns_completeness_score(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result(
                 "scripted", include_completeness=True
             )
@@ -655,7 +1093,7 @@ class TestAssessRoute:
         assert data["completeness_score"] == 100.0
 
     def test_assess_passes_reference_text_to_service(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result("scripted", include_completeness=True)
             client.post(
                 "/api/assess",
@@ -667,7 +1105,7 @@ class TestAssessRoute:
         assert call_kwargs.kwargs["reference_text"] == "Good morning"
 
     def test_assess_passes_language_override_to_service(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = self._mock_result()
             client.post(
                 "/api/assess",
@@ -679,7 +1117,7 @@ class TestAssessRoute:
         assert call_kwargs.kwargs["language"] == "en-GB"
 
     def test_azure_runtime_error_returns_502(self, client, auth_headers):
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.side_effect = RuntimeError("Speech not recognized.")
             resp = client.post(
                 "/api/assess",
@@ -703,7 +1141,7 @@ class TestAssessRoute:
                 }
             ],
         }
-        with patch("app.api.routes.get_assessment_service") as mock_get:
+        with patch("app.api.assess.get_assessment_service") as mock_get:
             mock_get.return_value.assess.return_value = mock_result
             resp = client.post(
                 "/api/assess",
