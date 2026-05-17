@@ -244,28 +244,7 @@ python -m pytest tests/test_api/test_schemas.py tests/test_ai_services/test_ai_s
 
 ### 10.2 Video demo
 
-<div align="center">
+- Xem video demo: [docs/demo/demo.mp4](docs/demo/demo.mp4)
+- Nếu GitHub không phát trực tiếp trong tab preview, hãy click vào link trên để mở hoặc tải file video.
 
-  <br/>
-  <video 
-    src="docs/demo/demo.mp4" 
-    controls 
-    width="90%"
-    style="
-    border-radius: 18px;
-    overflow: hidden;
-    border: 1px solid #30363d;
-    box-shadow: 0 10px 35px rgba(0,0,0,0.35);">
-  </video>
-  <br/>
-  <br/>
-  <sub style="
-    font-size: 19px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    text-transform: uppercase;">
-  🎥 Video demo web LinguAI
-  </sub>
-  <br/>
-  <br/>
-</div>
+
