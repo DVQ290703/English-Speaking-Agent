@@ -57,6 +57,11 @@ ENV PATH="/venv/bin:$PATH" \
 # Pre-compile app source so each module's .pyc exists before first import.
 RUN python -m compileall -q app/
 
+# The runtime user is non-root, so create the log directory before dropping
+# privileges. Render does not mount ./logs like docker-compose does locally.
+RUN mkdir -p /app/logs \
+    && chown -R app:app /app/logs
+
 EXPOSE 8000
 
 USER app
